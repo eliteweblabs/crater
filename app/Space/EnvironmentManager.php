@@ -87,34 +87,44 @@ class EnvironmentManager
             //     ];
             // }
 
-            // Check if users table exists
-            if (\Schema::hasTable('users')) {
-                // Check if users table is empty (might be from failed previous installation)
-                $userCount = \DB::table('users')->count();
+            // Check if this is a completed installation
+            if (\Schema::hasTable('settings')) {
+                $profileComplete = \DB::table('settings')
+                    ->where('option', 'profile_complete')
+                    ->value('value');
                 
-                if ($userCount === 0) {
-                    // Users table exists but is empty - auto-clear it and other Laravel tables
-                    \DB::statement('SET FOREIGN_KEY_CHECKS=0');
-                    \DB::statement('DROP TABLE IF EXISTS users');
-                    \DB::statement('DROP TABLE IF EXISTS migrations');
-                    \DB::statement('DROP TABLE IF EXISTS password_resets');
-                    \DB::statement('DROP TABLE IF EXISTS failed_jobs');
-                    \DB::statement('DROP TABLE IF EXISTS personal_access_tokens');
-                    
-                    // Drop any other tables that might exist
-                    $tables = \DB::select('SHOW TABLES');
-                    $tableName = 'Tables_in_' . config('database.connections.mysql.database');
-                    foreach ($tables as $table) {
-                        $name = $table->$tableName;
-                        \DB::statement("DROP TABLE IF EXISTS `{$name}`");
-                    }
-                    \DB::statement('SET FOREIGN_KEY_CHECKS=1');
-                } else {
-                    // Users table has data - database is not empty
+                if ($profileComplete === 'COMPLETED') {
+                    // Fully installed - don't allow reinstall through web UI
                     return [
                         'error' => 'database_should_be_empty',
                     ];
                 }
+                // Partial installation - allow continuing
+                \Log::info('EnvironmentManager: Partial installation detected, allowing continue');
+            }
+            
+            // Check if users table exists with data but no completed installation
+            // This handles partial installations (e.g., AUTO_SETUP failed partway)
+            if (\Schema::hasTable('users')) {
+                $userCount = \DB::table('users')->count();
+                
+                if ($userCount === 0) {
+                    // Users table exists but is empty - auto-clear all tables
+                    \Log::info('EnvironmentManager: Empty users table, clearing database');
+                    \DB::statement('SET FOREIGN_KEY_CHECKS=0');
+                    $tables = \DB::select('SHOW TABLES');
+                    $dbName = config('database.connections.mysql.database');
+                    $tableName = 'Tables_in_' . $dbName;
+                    foreach ($tables as $table) {
+                        if (isset($table->$tableName)) {
+                            $name = $table->$tableName;
+                            \DB::statement("DROP TABLE IF EXISTS `{$name}`");
+                        }
+                    }
+                    \DB::statement('SET FOREIGN_KEY_CHECKS=1');
+                }
+                // If users exist but profile_complete != COMPLETED, allow continuing
+                // This is a partial installation
             }
         } catch (Exception $e) {
             return [
