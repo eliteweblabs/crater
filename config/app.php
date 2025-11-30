@@ -169,7 +169,8 @@ return [
         Crater\Providers\RouteServiceProvider::class,
         Crater\Providers\DropboxServiceProvider::class,
         Crater\Providers\ViewServiceProvider::class,
-        Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider::class,
+        // IdeHelper is a dev-only package, commented out for production
+        // Barryvdh\LaravelIdeHelper\IdeHelperServiceProvider::class,
     ],
 
     /*
