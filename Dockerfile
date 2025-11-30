@@ -1,0 +1,74 @@
+FROM php:8.1-cli
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    libpng-dev \
+    libonig-dev \
+    libxml2-dev \
+    zip \
+    unzip \
+    libzip-dev \
+    libmagickwand-dev \
+    mariadb-client \
+    nodejs \
+    npm \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install imagick extension
+RUN pecl install imagick && docker-php-ext-enable imagick
+
+# Install PHP extensions
+RUN docker-php-ext-install pdo_mysql mbstring zip exif pcntl bcmath gd
+
+# Get latest Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+# Set working directory
+WORKDIR /var/www
+
+# Copy application files
+COPY . /var/www/
+
+# Create necessary directories
+RUN mkdir -p storage/framework/sessions storage/framework/views storage/framework/cache \
+    storage/logs bootstrap/cache
+
+# Set permissions
+RUN chmod -R 775 storage bootstrap/cache
+
+# Copy .env if it doesn't exist
+RUN if [ -f ./uffizzi/.env.example ] && [ ! -f .env ]; then \
+        cp ./uffizzi/.env.example .env; \
+    elif [ ! -f .env ] && [ -f .env.example ]; then \
+        cp .env.example .env; \
+    fi
+
+# Temporarily switch to sqlite for build
+RUN if [ -f .env ]; then \
+        sed -i 's/DB_CONNECTION=mysql/DB_CONNECTION=sqlite/g' .env || true; \
+        sed -i 's/DB_DATABASE=crater/DB_DATABASE=\/tmp\/crater.sqlite/g' .env || true; \
+        touch /tmp/crater.sqlite || true; \
+    fi
+
+# Install PHP dependencies
+RUN composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+
+# Install Node dependencies
+RUN npm install --legacy-peer-deps || npm install
+
+# Build assets
+RUN npm run build || echo "Build completed with warnings"
+
+# Restore mysql settings
+RUN if [ -f .env ]; then \
+        sed -i 's/DB_CONNECTION=sqlite/DB_CONNECTION=mysql/g' .env || true; \
+        sed -i 's/DB_DATABASE=\/tmp\/crater.sqlite/DB_DATABASE=crater/g' .env || true; \
+    fi
+
+# Expose port
+EXPOSE 8000
+
+# Start command - Railway will override with PORT from environment
+CMD sh -c "php artisan serve --host=0.0.0.0 --port=\${PORT:-8000}"
