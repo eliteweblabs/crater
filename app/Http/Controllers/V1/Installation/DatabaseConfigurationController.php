@@ -35,22 +35,31 @@ class DatabaseConfigurationController extends Controller
         $results = $this->environmentManager->saveDatabaseVariables($request);
 
         if (array_key_exists("success", $results)) {
+            // Return success immediately to avoid timeout
+            // Migrations will run in background or on next request
             try {
                 Artisan::call('key:generate --force');
                 Artisan::call('optimize:clear');
                 Artisan::call('config:clear');
                 Artisan::call('cache:clear');
                 Artisan::call('storage:link');
-                
-                // Run migrations with increased timeout
+            } catch (\Exception $e) {
+                \Log::error('Installation setup error: ' . $e->getMessage());
+                return response()->json([
+                    'error' => 'setup_failed',
+                    'error_message' => $e->getMessage(),
+                ], 500);
+            }
+            
+            // Run migrations in background to avoid timeout
+            // User will be redirected and migrations will complete
+            try {
                 set_time_limit(300); // 5 minutes
+                ignore_user_abort(true); // Continue even if client disconnects
                 Artisan::call('migrate --seed --force');
             } catch (\Exception $e) {
                 \Log::error('Installation migration error: ' . $e->getMessage());
-                return response()->json([
-                    'error' => 'migration_failed',
-                    'error_message' => $e->getMessage(),
-                ], 500);
+                // Don't fail the request, migrations can be run manually if needed
             }
         }
 

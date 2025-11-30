@@ -8,6 +8,9 @@ PORT=${PORT:-8000}
 # Ensure PORT is treated as integer
 PORT=$((PORT))
 
+# Debug: Log the port being used
+echo "Starting Laravel server on port: $PORT"
+
 # Start Laravel server
 exec php artisan serve --host=0.0.0.0 --port=$PORT
 
