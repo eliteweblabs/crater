@@ -35,8 +35,7 @@ class DatabaseConfigurationController extends Controller
         $results = $this->environmentManager->saveDatabaseVariables($request);
 
         if (array_key_exists("success", $results)) {
-            // Return success immediately to avoid timeout
-            // Migrations will run in background or on next request
+            // Do quick setup tasks first
             try {
                 Artisan::call('key:generate --force');
                 Artisan::call('optimize:clear');
@@ -51,16 +50,36 @@ class DatabaseConfigurationController extends Controller
                 ], 500);
             }
             
-            // Run migrations in background to avoid timeout
-            // User will be redirected and migrations will complete
+            // Prepare response
+            $response = response()->json($results);
+            
+            // Send response immediately to prevent Railway timeout
+            if (function_exists('fastcgi_finish_request')) {
+                // FastCGI - send response, then continue
+                fastcgi_finish_request();
+            } else {
+                // Other SAPI - close connection
+                if (ob_get_level() > 0) {
+                    ob_end_clean();
+                }
+                $response->send();
+                if (function_exists('fastcgi_finish_request')) {
+                    fastcgi_finish_request();
+                }
+            }
+            
+            // Now run migrations in background (after response sent)
             try {
                 set_time_limit(300); // 5 minutes
-                ignore_user_abort(true); // Continue even if client disconnects
+                ignore_user_abort(true);
                 Artisan::call('migrate --seed --force');
+                \Log::info('Installation migrations completed');
             } catch (\Exception $e) {
                 \Log::error('Installation migration error: ' . $e->getMessage());
-                // Don't fail the request, migrations can be run manually if needed
             }
+            
+            // Return response (already sent, but Laravel expects return)
+            return $response;
         }
 
         return response()->json($results);
