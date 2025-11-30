@@ -96,5 +96,5 @@ USER crater-user
 # Expose port
 EXPOSE 8000
 
-# Start command (will be overridden by Railway)
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+# Start command - use shell form to allow variable expansion and integer casting
+CMD php artisan serve --host=0.0.0.0 --port=$((${PORT:-8000}))
