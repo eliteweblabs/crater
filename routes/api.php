@@ -162,6 +162,39 @@ Route::prefix('/v1')->group(function () {
     Route::get('/countries', CountriesController::class);
 
 
+    // Health Check
+    //----------------------------------
+
+    Route::get('/health', function () {
+        $status = [
+            'status' => 'ok',
+            'timestamp' => now()->toISOString(),
+            'php_version' => PHP_VERSION,
+            'database_created_file' => \Storage::disk('local')->has('database_created'),
+        ];
+
+        try {
+            $status['database_connection'] = \DB::connection()->getPdo() ? true : false;
+            $status['users_table'] = \Schema::hasTable('users');
+            $status['settings_table'] = \Schema::hasTable('settings');
+            
+            if ($status['users_table']) {
+                $status['users_count'] = \DB::table('users')->count();
+            }
+            
+            if ($status['settings_table']) {
+                $status['profile_complete'] = \DB::table('settings')
+                    ->where('option', 'profile_complete')
+                    ->value('value');
+            }
+        } catch (\Exception $e) {
+            $status['database_error'] = $e->getMessage();
+        }
+
+        return response()->json($status);
+    });
+
+
     // Onboarding
     //----------------------------------
 
