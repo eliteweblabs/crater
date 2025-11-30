@@ -15,8 +15,18 @@ use Illuminate\Support\Str;
 function get_company_setting($key, $company_id)
 {
     if (\Storage::disk('local')->has('database_created')) {
-        return CompanySetting::getSetting($key, $company_id);
+        try {
+            // Check if company_settings table exists before querying
+            if (\Schema::hasTable('company_settings')) {
+                return CompanySetting::getSetting($key, $company_id);
+            }
+        } catch (\Exception $e) {
+            // Database might not be ready yet
+            \Log::debug('get_company_setting: Database not ready - ' . $e->getMessage());
+            return null;
+        }
     }
+    return null;
 }
 
 /**
@@ -28,8 +38,18 @@ function get_company_setting($key, $company_id)
 function get_app_setting($key)
 {
     if (\Storage::disk('local')->has('database_created')) {
-        return Setting::getSetting($key);
+        try {
+            // Check if settings table exists before querying
+            if (\Schema::hasTable('settings')) {
+                return Setting::getSetting($key);
+            }
+        } catch (\Exception $e) {
+            // Database might not be ready yet
+            \Log::debug('get_app_setting: Database not ready - ' . $e->getMessage());
+            return null;
+        }
     }
+    return null;
 }
 
 /**
