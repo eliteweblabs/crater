@@ -35,51 +35,21 @@ class DatabaseConfigurationController extends Controller
         $results = $this->environmentManager->saveDatabaseVariables($request);
 
         if (array_key_exists("success", $results)) {
-            // Do quick setup tasks first
+            // Do quick setup tasks first (before .env causes server restart)
             try {
                 Artisan::call('key:generate --force');
-                Artisan::call('optimize:clear');
-                Artisan::call('config:clear');
-                Artisan::call('cache:clear');
                 Artisan::call('storage:link');
             } catch (\Exception $e) {
                 \Log::error('Installation setup error: ' . $e->getMessage());
-                return response()->json([
-                    'error' => 'setup_failed',
-                    'error_message' => $e->getMessage(),
-                ], 500);
+                // Continue anyway - these can be run later
             }
             
-            // Prepare response
-            $response = response()->json($results);
+            // NOTE: We don't run migrations here because:
+            // 1. PHP dev server restarts when .env is modified
+            // 2. This kills any running migrations
+            // 3. Migrations will run on the next request (in OnboardingWizardController)
             
-            // Send response immediately to prevent Railway timeout
-            if (function_exists('fastcgi_finish_request')) {
-                // FastCGI - send response, then continue
-                fastcgi_finish_request();
-            } else {
-                // Other SAPI - close connection
-                if (ob_get_level() > 0) {
-                    ob_end_clean();
-                }
-                $response->send();
-                if (function_exists('fastcgi_finish_request')) {
-                    fastcgi_finish_request();
-                }
-            }
-            
-            // Now run migrations in background (after response sent)
-            try {
-                set_time_limit(300); // 5 minutes
-                ignore_user_abort(true);
-                Artisan::call('migrate --seed --force');
-                \Log::info('Installation migrations completed');
-            } catch (\Exception $e) {
-                \Log::error('Installation migration error: ' . $e->getMessage());
-            }
-            
-            // Return response (already sent, but Laravel expects return)
-            return $response;
+            return response()->json($results);
         }
 
         return response()->json($results);
