@@ -39,25 +39,42 @@ COPY ./uffizzi/.env.example /var/www/.env
 # Set working directory
 WORKDIR /var/www
 
-RUN chown -R crater-user:crater-user ./
-RUN chmod -R 775 composer.json composer.lock \\ 
-        composer.lock storage/framework/ \
-        storage/logs/ bootstrap/cache/ /home/crater-user/.composer
-RUN chown -R $(whoami):$(whoami) /var/log/
-RUN chmod -R 775 /var/log
+# Fix permissions - run as root first
+RUN chown -R crater-user:crater-user /var/www
+RUN chmod -R 775 /var/www/composer.json /var/www/composer.lock \
+    /var/www/storage/framework/ \
+    /var/www/storage/logs/ \
+    /var/www/bootstrap/cache/ \
+    /home/crater-user/.composer
+RUN chmod -R 775 /var/log || true
 
 # Cleanup manually generated build files
 RUN rm -rf /var/www/public/build
-RUN npm config set unsafe-perm true
-# Frontend bulding
-RUN sed -i 's/DB_CONNECTION=mysql/DB_CONNECTION=sqlite/g' /var/www/.env
-RUN sed -i 's/DB_DATABASE=crater/DB_DATABASE=\/tmp\/crater.sqlite/g' /var/www/.env
-RUN touch /tmp/crater.sqlite
-RUN composer install --no-interaction --prefer-dist
-RUN npm i -f
-RUN npm install --save-dev sass
-RUN export NODE_OPTIONS="--max-old-space-size=4096" && /usr/bin/npx vite build --target=es2020
-RUN sed -i 's/DB_CONNECTION=sqlite/DB_CONNECTION=mysql/g' /var/www/.env
-RUN sed -i 's/DB_DATABASE=\/tmp\/crater.sqlite/DB_DATABASE=crater/g' /var/www/.env
 
+# Configure npm for root user (needed during build)
+RUN npm config set unsafe-perm true
+
+# Frontend building - temporarily switch to sqlite for build
+RUN sed -i 's/DB_CONNECTION=mysql/DB_CONNECTION=sqlite/g' /var/www/.env || true
+RUN sed -i 's/DB_DATABASE=crater/DB_DATABASE=\/tmp\/crater.sqlite/g' /var/www/.env || true
+RUN touch /tmp/crater.sqlite || true
+
+# Install dependencies and build
+RUN composer install --no-interaction --prefer-dist --no-dev --optimize-autoloader
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+RUN npm install --save-dev sass --legacy-peer-deps || true
+RUN NODE_OPTIONS="--max-old-space-size=4096" npx vite build --target=es2020 || \
+    NODE_OPTIONS="--max-old-space-size=4096" /usr/bin/npx vite build --target=es2020
+
+# Restore mysql settings
+RUN sed -i 's/DB_CONNECTION=sqlite/DB_CONNECTION=mysql/g' /var/www/.env || true
+RUN sed -i 's/DB_DATABASE=\/tmp\/crater.sqlite/DB_DATABASE=crater/g' /var/www/.env || true
+
+# Switch to non-root user for runtime
 USER crater-user
+
+# Expose port
+EXPOSE 8000
+
+# Start command (will be overridden by Railway)
+CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
