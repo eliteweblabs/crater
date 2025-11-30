@@ -1,3 +1,3 @@
-# Railway uses Nixpacks - see railway.json
-# This Dockerfile is disabled for Railway deployment
-# To use Docker locally, rename Dockerfile.railway-backup to Dockerfile
+# This file has been removed to force Railway to use Nixpacks
+# See Dockerfile.railway-backup for the original Dockerfile
+# Railway will automatically use Nixpacks when no Dockerfile is present
