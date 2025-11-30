@@ -18,8 +18,19 @@ class AppServiceProvider extends ServiceProvider
         Paginator::useBootstrapThree();
         $this->loadJsonTranslationsFrom(resource_path('scripts/locales'));
 
-        if (\Storage::disk('local')->has('database_created') && Schema::hasTable('abilities')) {
-            $this->addMenus();
+        // Only try to add menus if database is ready
+        if (!\Storage::disk('local')->has('database_created')) {
+            return;
+        }
+
+        try {
+            if (Schema::hasTable('abilities')) {
+                $this->addMenus();
+            }
+        } catch (\Exception $e) {
+            // Database connection failed - this can happen right after
+            // .env is updated and server restarts but migrations haven't run
+            \Log::debug('AppServiceProvider: Database not ready - ' . $e->getMessage());
         }
     }
 
