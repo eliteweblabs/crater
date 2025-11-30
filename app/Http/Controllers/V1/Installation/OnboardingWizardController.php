@@ -34,7 +34,7 @@ class OnboardingWizardController extends Controller
 
             // Use direct DB query for faster response (avoid model overhead)
             $profileComplete = \DB::table('settings')
-                ->where('key', 'profile_complete')
+                ->where('option', 'profile_complete')
                 ->value('value');
 
             return response()->json([

@@ -32,7 +32,7 @@ class RedirectIfInstalled
             // Try to get profile_complete setting with timeout protection
             // Use DB::table directly to avoid model overhead
             $profileComplete = \DB::table('settings')
-                ->where('key', 'profile_complete')
+                ->where('option', 'profile_complete')
                 ->value('value');
 
             if ($profileComplete === 'COMPLETED') {
