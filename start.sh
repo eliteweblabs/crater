@@ -18,6 +18,12 @@ echo "============================================"
 if [ "$AUTO_SETUP" = "true" ] || [ "$AUTO_SETUP" = "1" ]; then
     echo "AUTO_SETUP enabled - checking if setup is needed..."
     
+    # Force setup if requested (useful for fixing partial installations)
+    if [ "$FORCE_SETUP" = "true" ] || [ "$FORCE_SETUP" = "1" ]; then
+        echo "FORCE_SETUP enabled - removing marker file..."
+        rm -f storage/app/database_created
+    fi
+    
     # Check if already set up by looking for the marker file
     if [ ! -f "storage/app/database_created" ]; then
         echo "Running automatic setup..."
