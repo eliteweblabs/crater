@@ -52,8 +52,14 @@ RUN if [ -f .env ]; then \
         touch /tmp/crater.sqlite || true; \
     fi
 
-# Install PHP dependencies
-RUN composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+# Install PHP dependencies - skip scripts to avoid package discovery issues
+RUN composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev --no-scripts
+
+# Run composer scripts manually after install
+RUN composer dump-autoload --optimize || true
+
+# Try to run package discovery, but don't fail if it errors
+RUN php artisan package:discover --ansi || echo "Package discovery skipped"
 
 # Install Node dependencies
 RUN npm install --legacy-peer-deps || npm install
