@@ -16,29 +16,38 @@ class OnboardingWizardController extends Controller
      */
     public function getStep(Request $request)
     {
-        if (! \Storage::disk('local')->has('database_created')) {
+        // Quick response if database not created yet
+        if (!\Storage::disk('local')->has('database_created')) {
             return response()->json([
                 'profile_complete' => 0,
             ]);
         }
 
         try {
-            // Check if settings table exists before querying
-            if (\Schema::hasTable('settings')) {
-                $profileComplete = Setting::getSetting('profile_complete');
+            // Quick check: does settings table exist?
+            if (!\Schema::hasTable('settings')) {
+                // Settings table doesn't exist, migrations still running
                 return response()->json([
-                    'profile_complete' => $profileComplete ?: 0,
+                    'profile_complete' => 0,
                 ]);
             }
+
+            // Use direct DB query for faster response (avoid model overhead)
+            $profileComplete = \DB::table('settings')
+                ->where('key', 'profile_complete')
+                ->value('value');
+
+            return response()->json([
+                'profile_complete' => $profileComplete ?: 0,
+            ]);
         } catch (\Exception $e) {
             // Database might not be ready yet (migrations still running)
             \Log::debug('OnboardingWizard getStep: Database not ready - ' . $e->getMessage());
+            // Return step 0 on any error
+            return response()->json([
+                'profile_complete' => 0,
+            ]);
         }
-
-        // Default to step 0 if database not ready
-        return response()->json([
-            'profile_complete' => 0,
-        ]);
     }
 
     public function updateStep(Request $request)
