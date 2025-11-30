@@ -87,10 +87,34 @@ class EnvironmentManager
             //     ];
             // }
 
+            // Check if users table exists
             if (\Schema::hasTable('users')) {
-                return [
-                    'error' => 'database_should_be_empty',
-                ];
+                // Check if users table is empty (might be from failed previous installation)
+                $userCount = \DB::table('users')->count();
+                
+                if ($userCount === 0) {
+                    // Users table exists but is empty - auto-clear it and other Laravel tables
+                    \DB::statement('SET FOREIGN_KEY_CHECKS=0');
+                    \DB::statement('DROP TABLE IF EXISTS users');
+                    \DB::statement('DROP TABLE IF EXISTS migrations');
+                    \DB::statement('DROP TABLE IF EXISTS password_resets');
+                    \DB::statement('DROP TABLE IF EXISTS failed_jobs');
+                    \DB::statement('DROP TABLE IF EXISTS personal_access_tokens');
+                    
+                    // Drop any other tables that might exist
+                    $tables = \DB::select('SHOW TABLES');
+                    $tableName = 'Tables_in_' . config('database.connections.mysql.database');
+                    foreach ($tables as $table) {
+                        $name = $table->$tableName;
+                        \DB::statement("DROP TABLE IF EXISTS `{$name}`");
+                    }
+                    \DB::statement('SET FOREIGN_KEY_CHECKS=1');
+                } else {
+                    // Users table has data - database is not empty
+                    return [
+                        'error' => 'database_should_be_empty',
+                    ];
+                }
             }
         } catch (Exception $e) {
             return [
