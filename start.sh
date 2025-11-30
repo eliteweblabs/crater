@@ -1,63 +1,73 @@
 #!/bin/bash
 # Railway start script for Crater
-# Ensures PORT is properly handled as integer
 
 set -e
 
-# Set PORT from environment or default to 8000
 PORT=${PORT:-8000}
-
-# Ensure PORT is treated as integer
 PORT=$((PORT))
 
 echo "============================================"
 echo "Crater Startup Script"
 echo "============================================"
 
-# Check if AUTO_SETUP is enabled
+# Quick database fix - directly mark as installed if tables exist
 if [ "$AUTO_SETUP" = "true" ] || [ "$AUTO_SETUP" = "1" ]; then
-    echo "AUTO_SETUP enabled - checking if setup is needed..."
+    echo "AUTO_SETUP enabled..."
     
-    # Force setup if requested (useful for fixing partial installations)
-    if [ "$FORCE_SETUP" = "true" ] || [ "$FORCE_SETUP" = "1" ]; then
-        echo "FORCE_SETUP enabled - removing marker file..."
-        rm -f storage/app/database_created
-    fi
-    
-    # Check if already set up by looking for the marker file
-    if [ ! -f "storage/app/database_created" ]; then
-        echo "Running automatic setup..."
-        
-        # Set defaults from environment variables
-        ADMIN_EMAIL="${ADMIN_EMAIL:-admin@crater.app}"
-        ADMIN_PASSWORD="${ADMIN_PASSWORD:-password123}"
-        ADMIN_NAME="${ADMIN_NAME:-Admin}"
-        COMPANY_NAME="${COMPANY_NAME:-My Company}"
-        
-        # Run the setup command
-        php artisan crater:setup \
-            --email="$ADMIN_EMAIL" \
-            --password="$ADMIN_PASSWORD" \
-            --name="$ADMIN_NAME" \
-            --company="$COMPANY_NAME" \
-            --force || echo "Setup encountered issues but continuing..."
-        
-        echo "Auto-setup completed!"
-    else
-        echo "Crater already installed, skipping auto-setup"
-    fi
+    # Try to complete setup via tinker (more reliable than artisan command)
+    php artisan tinker --execute="
+        try {
+            // Run migrations if needed
+            if (!Schema::hasTable('users')) {
+                Artisan::call('migrate', ['--seed' => true, '--force' => true]);
+                echo 'Migrations completed\n';
+            }
+            
+            // Check/create user
+            \$user = \Crater\Models\User::where('role', 'super admin')->first();
+            if (!\$user) {
+                \$user = \Crater\Models\User::create([
+                    'email' => env('ADMIN_EMAIL', 'admin@crater.app'),
+                    'name' => env('ADMIN_NAME', 'Admin'),
+                    'role' => 'super admin',
+                    'password' => env('ADMIN_PASSWORD', 'password123'),
+                ]);
+                echo 'User created\n';
+            }
+            
+            // Check/create company
+            \$company = \Crater\Models\Company::first();
+            if (!\$company) {
+                \$company = \Crater\Models\Company::create([
+                    'name' => env('COMPANY_NAME', 'My Company'),
+                    'owner_id' => \$user->id,
+                    'slug' => Str::slug(env('COMPANY_NAME', 'My Company')),
+                ]);
+                \$company->unique_hash = \Vinkla\Hashids\Facades\Hashids::connection(\Crater\Models\Company::class)->encode(\$company->id);
+                \$company->save();
+                \$company->setupDefaultData();
+                \$user->companies()->attach(\$company->id);
+                Bouncer::scope()->to(\$company->id);
+                \$user->assign('super admin');
+                echo 'Company created\n';
+            }
+            
+            // Mark as complete
+            \Crater\Models\Setting::setSetting('profile_complete', 'COMPLETED');
+            Storage::disk('local')->put('database_created', 'database_created');
+            echo 'Installation marked complete\n';
+        } catch (Exception \$e) {
+            echo 'Setup error: ' . \$e->getMessage() . '\n';
+        }
+    " 2>/dev/null || echo "Tinker setup completed with warnings"
 fi
 
-# Always try to run pending migrations
-echo "Checking for pending migrations..."
-php artisan migrate --force 2>/dev/null || echo "Migration check completed"
-
-# Clear config cache to pick up any .env changes
+# Clear caches
 php artisan config:clear 2>/dev/null || true
+php artisan cache:clear 2>/dev/null || true
 
 echo "Starting Laravel server on port: $PORT"
 echo "============================================"
 
-# Start Laravel server
 exec php artisan serve --host=0.0.0.0 --port=$PORT
 
