@@ -21,7 +21,20 @@ class InstallationMiddleware
         }
 
         if (\Storage::disk('local')->has('database_created')) {
-            if (Setting::getSetting('profile_complete') !== 'COMPLETED') {
+            try {
+                // Check if settings table exists before querying
+                if (\Schema::hasTable('settings')) {
+                    $profileComplete = Setting::getSetting('profile_complete');
+                    if ($profileComplete !== 'COMPLETED') {
+                        return redirect('/installation');
+                    }
+                } else {
+                    // Settings table doesn't exist yet, still installing
+                    return redirect('/installation');
+                }
+            } catch (\Exception $e) {
+                // Database might not be ready yet, continue installation
+                \Log::debug('InstallationMiddleware: Database not ready - ' . $e->getMessage());
                 return redirect('/installation');
             }
         }
