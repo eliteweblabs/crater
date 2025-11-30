@@ -40,7 +40,7 @@ COPY ./uffizzi/.env.example /var/www/.env
 WORKDIR /var/www
 
 RUN chown -R crater-user:crater-user ./
-RUN chmod -R 775 composer.json composer.lock \ 
+RUN chmod -R 775 composer.json composer.lock \\ 
         composer.lock storage/framework/ \
         storage/logs/ bootstrap/cache/ /home/crater-user/.composer
 RUN chown -R $(whoami):$(whoami) /var/log/
@@ -48,7 +48,6 @@ RUN chmod -R 775 /var/log
 
 # Cleanup manually generated build files
 RUN rm -rf /var/www/public/build
-RUN npm config set user 0
 RUN npm config set unsafe-perm true
 # Frontend bulding
 RUN sed -i 's/DB_CONNECTION=mysql/DB_CONNECTION=sqlite/g' /var/www/.env
