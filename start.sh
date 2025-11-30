@@ -41,20 +41,20 @@ if [ "$AUTO_SETUP" = "true" ] || [ "$AUTO_SETUP" = "1" ]; then
                 \$company = \Crater\Models\Company::create([
                     'name' => env('COMPANY_NAME', 'My Company'),
                     'owner_id' => \$user->id,
-                    'slug' => Str::slug(env('COMPANY_NAME', 'My Company')),
+                    'slug' => \Illuminate\Support\Str::slug(env('COMPANY_NAME', 'My Company')),
                 ]);
                 \$company->unique_hash = \Vinkla\Hashids\Facades\Hashids::connection(\Crater\Models\Company::class)->encode(\$company->id);
                 \$company->save();
                 \$company->setupDefaultData();
                 \$user->companies()->attach(\$company->id);
-                Bouncer::scope()->to(\$company->id);
+                \Silber\Bouncer\BouncerFacade::scope()->to(\$company->id);
                 \$user->assign('super admin');
                 echo 'Company created\n';
             }
             
             // Mark as complete
             \Crater\Models\Setting::setSetting('profile_complete', 'COMPLETED');
-            Storage::disk('local')->put('database_created', 'database_created');
+            \Illuminate\Support\Facades\Storage::disk('local')->put('database_created', 'database_created');
             echo 'Installation marked complete\n';
         } catch (Exception \$e) {
             echo 'Setup error: ' . \$e->getMessage() . '\n';
