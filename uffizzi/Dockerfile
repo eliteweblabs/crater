@@ -57,9 +57,6 @@ RUN mkdir -p storage/framework/sessions storage/framework/views storage/framewor
 # Cleanup manually generated build files
 RUN rm -rf /var/www/public/build || true
 
-# Configure npm for root user (needed during build)
-RUN npm config set unsafe-perm true
-
 # Frontend building - temporarily switch to sqlite for build
 RUN if [ -f .env ]; then \
         sed -i 's/DB_CONNECTION=mysql/DB_CONNECTION=sqlite/g' .env || true; \
@@ -71,13 +68,13 @@ RUN if [ -f .env ]; then \
 RUN composer install --no-interaction --prefer-dist --optimize-autoloader --no-scripts || \
     composer install --no-interaction --prefer-dist --optimize-autoloader
 
-# Install Node dependencies and build
-RUN npm ci --legacy-peer-deps 2>/dev/null || \
-    npm install --legacy-peer-deps || \
-    npm install
+# Install Node dependencies and build (using --unsafe-perm flag where needed)
+RUN npm ci --unsafe-perm --legacy-peer-deps 2>/dev/null || \
+    npm install --unsafe-perm --legacy-peer-deps || \
+    npm install --unsafe-perm
 
 # Install sass if needed
-RUN npm install --save-dev sass --legacy-peer-deps 2>/dev/null || true
+RUN npm install --save-dev sass --unsafe-perm --legacy-peer-deps 2>/dev/null || true
 
 # Build frontend assets
 RUN NODE_OPTIONS="--max-old-space-size=4096" npx vite build --target=es2020 2>&1 || \
