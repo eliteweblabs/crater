@@ -35,12 +35,23 @@ class DatabaseConfigurationController extends Controller
         $results = $this->environmentManager->saveDatabaseVariables($request);
 
         if (array_key_exists("success", $results)) {
-            Artisan::call('key:generate --force');
-            Artisan::call('optimize:clear');
-            Artisan::call('config:clear');
-            Artisan::call('cache:clear');
-            Artisan::call('storage:link');
-            Artisan::call('migrate --seed --force');
+            try {
+                Artisan::call('key:generate --force');
+                Artisan::call('optimize:clear');
+                Artisan::call('config:clear');
+                Artisan::call('cache:clear');
+                Artisan::call('storage:link');
+                
+                // Run migrations with increased timeout
+                set_time_limit(300); // 5 minutes
+                Artisan::call('migrate --seed --force');
+            } catch (\Exception $e) {
+                \Log::error('Installation migration error: ' . $e->getMessage());
+                return response()->json([
+                    'error' => 'migration_failed',
+                    'error_message' => $e->getMessage(),
+                ], 500);
+            }
         }
 
         return response()->json($results);
