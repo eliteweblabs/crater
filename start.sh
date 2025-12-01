@@ -264,13 +264,16 @@ php artisan cache:clear 2>/dev/null || true
 echo "Starting Laravel server on port: $PORT"
 echo "============================================"
 
-# Export database vars explicitly for PHP
+# Export database and app vars explicitly for PHP
 export DB_CONNECTION="${DB_CONNECTION:-mysql}"
 export DB_HOST="${DB_HOST:-127.0.0.1}"
 export DB_PORT="${DB_PORT:-3306}"
 export DB_DATABASE="${DB_DATABASE:-crater}"
 export DB_USERNAME="${DB_USERNAME:-crater}"
 export DB_PASSWORD="${DB_PASSWORD:-}"
+export APP_URL="${APP_URL:-https://crater-production.up.railway.app}"
+export SESSION_DOMAIN="${SESSION_DOMAIN:-.railway.app}"
+export SANCTUM_STATEFUL_DOMAINS="${SANCTUM_STATEFUL_DOMAINS:-crater-production.up.railway.app}"
 
 echo "DB_HOST=$DB_HOST"
 echo "DB_DATABASE=$DB_DATABASE"
