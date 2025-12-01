@@ -10,6 +10,19 @@ echo "============================================"
 echo "Crater Startup Script"
 echo "============================================"
 
+# Fix: Remove database settings from .env if they exist
+# Railway env vars should take precedence
+if [ -f ".env" ]; then
+    echo "Cleaning .env database settings to use Railway env vars..."
+    sed -i '/^DB_HOST=/d' .env 2>/dev/null || true
+    sed -i '/^DB_PORT=/d' .env 2>/dev/null || true
+    sed -i '/^DB_DATABASE=/d' .env 2>/dev/null || true
+    sed -i '/^DB_USERNAME=/d' .env 2>/dev/null || true
+    sed -i '/^DB_PASSWORD=/d' .env 2>/dev/null || true
+    sed -i '/^DB_CONNECTION=/d' .env 2>/dev/null || true
+    echo "Done - using Railway environment variables for database"
+fi
+
 # Function to wait for database
 wait_for_db() {
     echo "Waiting for database connection..."
