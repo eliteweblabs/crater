@@ -233,12 +233,15 @@ if [ "$UPDATE_ADMIN_PASSWORD" != "" ]; then
             \$user = \Crater\Models\User::where('role', 'super admin')->first();
             if (\$user) {
                 \$hashedPassword = \Illuminate\Support\Facades\Hash::make(\"$UPDATE_ADMIN_PASSWORD\");
-                \$user->update(['password' => \$hashedPassword]);
+                
+                // Use DB update to bypass model mutators (avoid double-hashing)
+                \Illuminate\Support\Facades\DB::table('users')
+                    ->where('id', \$user->id)
+                    ->update(['password' => \$hashedPassword]);
                 
                 // Verify it was saved
                 \$user->refresh();
                 echo 'Admin password updated successfully\n';
-                echo 'Saved hash: ' . \$user->password . '\n';
                 echo 'Password check: ' . (\Illuminate\Support\Facades\Hash::check(\"$UPDATE_ADMIN_PASSWORD\", \$user->password) ? 'PASS' : 'FAIL') . '\n';
             } else {
                 echo 'Admin user not found\n';
