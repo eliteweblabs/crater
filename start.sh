@@ -212,6 +212,25 @@ if [ "$UPDATE_ADMIN_EMAIL" != "" ]; then
     " || echo "Email update completed/failed"
 fi
 
+# Update admin password if requested
+if [ "$UPDATE_ADMIN_PASSWORD" != "" ]; then
+    echo "Updating admin password..."
+    php artisan tinker --execute="
+        try {
+            \$user = \Crater\Models\User::where('role', 'super admin')->first();
+            if (\$user) {
+                \$user->password = bcrypt('$UPDATE_ADMIN_PASSWORD');
+                \$user->save();
+                echo 'Admin password updated successfully\n';
+            } else {
+                echo 'Admin user not found\n';
+            }
+        } catch (\Exception \$e) {
+            echo 'Error: ' . \$e->getMessage() . '\n';
+        }
+    " || echo "Password update completed/failed"
+fi
+
 # Clear caches
 php artisan config:clear 2>/dev/null || true
 php artisan cache:clear 2>/dev/null || true
