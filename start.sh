@@ -257,14 +257,7 @@ if [ "$UPDATE_ADMIN_PASSWORD" != "" ]; then
     " || echo "Password update completed/failed"
 fi
 
-# Rebuild config cache to pick up all .env changes (including SANCTUM_STATEFUL_DOMAINS)
-php artisan config:cache 2>/dev/null || echo "Config cache rebuild completed"
-php artisan cache:clear 2>/dev/null || true
-
-echo "Starting Laravel server on port: $PORT"
-echo "============================================"
-
-# Export database and app vars explicitly for PHP
+# Export database and app vars explicitly for PHP BEFORE building config cache
 export DB_CONNECTION="${DB_CONNECTION:-mysql}"
 export DB_HOST="${DB_HOST:-127.0.0.1}"
 export DB_PORT="${DB_PORT:-3306}"
@@ -274,6 +267,13 @@ export DB_PASSWORD="${DB_PASSWORD:-}"
 export APP_URL="${APP_URL:-https://crater-production.up.railway.app}"
 export SESSION_DOMAIN="${SESSION_DOMAIN:-.railway.app}"
 export SANCTUM_STATEFUL_DOMAINS="${SANCTUM_STATEFUL_DOMAINS:-crater-production.up.railway.app}"
+
+# NOW rebuild config cache to pick up all exported environment variables
+php artisan config:cache 2>/dev/null || echo "Config cache rebuild completed"
+php artisan cache:clear 2>/dev/null || true
+
+echo "Starting Laravel server on port: $PORT"
+echo "============================================"
 
 echo "DB_HOST=$DB_HOST"
 echo "DB_DATABASE=$DB_DATABASE"
