@@ -10,18 +10,34 @@ echo "============================================"
 echo "Crater Startup Script"
 echo "============================================"
 
-# Fix: Remove database settings from .env if they exist
-# Railway env vars should take precedence
-if [ -f ".env" ]; then
-    echo "Cleaning .env database settings to use Railway env vars..."
-    sed -i '/^DB_HOST=/d' .env 2>/dev/null || true
-    sed -i '/^DB_PORT=/d' .env 2>/dev/null || true
-    sed -i '/^DB_DATABASE=/d' .env 2>/dev/null || true
-    sed -i '/^DB_USERNAME=/d' .env 2>/dev/null || true
-    sed -i '/^DB_PASSWORD=/d' .env 2>/dev/null || true
-    sed -i '/^DB_CONNECTION=/d' .env 2>/dev/null || true
-    echo "Done - using Railway environment variables for database"
+# Fix: Write Railway env vars directly to .env file
+# PHP/Laravel doesn't properly inherit system env vars on Railway
+echo "Writing database config to .env file..."
+
+# Create .env if it doesn't exist
+if [ ! -f ".env" ]; then
+    cp .env.example .env 2>/dev/null || touch .env
 fi
+
+# Remove existing DB settings
+sed -i '/^DB_CONNECTION=/d' .env 2>/dev/null || true
+sed -i '/^DB_HOST=/d' .env 2>/dev/null || true
+sed -i '/^DB_PORT=/d' .env 2>/dev/null || true
+sed -i '/^DB_DATABASE=/d' .env 2>/dev/null || true
+sed -i '/^DB_USERNAME=/d' .env 2>/dev/null || true
+sed -i '/^DB_PASSWORD=/d' .env 2>/dev/null || true
+
+# Write Railway vars to .env
+echo "" >> .env
+echo "DB_CONNECTION=${DB_CONNECTION:-mysql}" >> .env
+echo "DB_HOST=${DB_HOST:-127.0.0.1}" >> .env
+echo "DB_PORT=${DB_PORT:-3306}" >> .env
+echo "DB_DATABASE=${DB_DATABASE:-crater}" >> .env
+echo "DB_USERNAME=${DB_USERNAME:-crater}" >> .env
+echo "DB_PASSWORD=${DB_PASSWORD:-}" >> .env
+
+echo "Database config written to .env:"
+grep "^DB_" .env
 
 # Function to wait for database
 wait_for_db() {
