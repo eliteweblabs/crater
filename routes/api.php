@@ -97,6 +97,7 @@ use Crater\Http\Controllers\V1\Customer\General\ProfileController as CustomerPro
 use Crater\Http\Controllers\V1\Customer\Invoice\InvoicesController as CustomerInvoicesController;
 use Crater\Http\Controllers\V1\Customer\Payment\PaymentMethodController;
 use Crater\Http\Controllers\V1\Customer\Payment\PaymentsController as CustomerPaymentsController;
+use Crater\Http\Controllers\V1\Customer\Payment\StripePaymentController;
 use Crater\Http\Controllers\V1\Installation\AppDomainController;
 use Crater\Http\Controllers\V1\Installation\DatabaseConfigurationController;
 use Crater\Http\Controllers\V1\Installation\FilePermissionsController;
@@ -572,6 +573,9 @@ Route::prefix('/v1')->group(function () {
 
             Route::get('/payment-method', PaymentMethodController::class);
 
+            // Stripe payment routes
+            Route::post('/invoices/{invoice_id}/stripe/checkout', [StripePaymentController::class, 'createCheckoutSession']);
+
             Route::get('expenses', [CustomerExpensesController::class, 'index']);
 
             Route::get('expenses/{id}', [CustomerExpensesController::class, 'show']);
@@ -584,5 +588,8 @@ Route::prefix('/v1')->group(function () {
         });
     });
 });
+
+// Stripe webhook (no auth required - Stripe will call this)
+Route::post('/webhook/stripe', [StripePaymentController::class, 'handleWebhook']);
 
 Route::get('/cron', CronJobController::class)->middleware('cron-job');

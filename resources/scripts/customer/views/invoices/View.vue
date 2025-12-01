@@ -17,10 +17,7 @@
         </BaseButton>
 
         <BaseButton
-          v-if="
-            invoiceStore?.selectedViewInvoice?.paid_status !== 'PAID' &&
-            globalStore.enabledModules.includes('Payments')
-          "
+          v-if="invoiceStore?.selectedViewInvoice?.paid_status !== 'PAID'"
           variant="primary"
           @click="payInvoice"
         >
@@ -393,13 +390,28 @@ function sortData() {
   return true
 }
 
-function payInvoice() {
-  router.push({
-    name: 'invoice.portal.payment',
-    params: {
-      id: invoiceStore.selectedViewInvoice.id,
-      company: invoiceStore.selectedViewInvoice.company.slug,
-    },
-  })
+async function payInvoice() {
+  try {
+    const invoice = invoiceStore.selectedViewInvoice
+    
+    // Call our Stripe checkout endpoint
+    const response = await window.axios.post(
+      `/api/v1/customer/invoices/${invoice.id}/stripe/checkout`,
+      {},
+      {
+        headers: {
+          company: invoice.company.id,
+        },
+      }
+    )
+    
+    // Redirect to Stripe checkout
+    if (response.data.url) {
+      window.location.href = response.data.url
+    }
+  } catch (error) {
+    console.error('Payment error:', error)
+    alert('Unable to process payment. Please try again later.')
+  }
 }
 </script>

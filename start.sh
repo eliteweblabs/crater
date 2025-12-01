@@ -54,6 +54,11 @@ echo "SESSION_DOMAIN=${SESSION_DOMAIN:-.railway.app}" >> .env
 echo "SESSION_DRIVER=cookie" >> .env
 echo "SANCTUM_STATEFUL_DOMAINS=${SANCTUM_STATEFUL_DOMAINS:-crater-production.up.railway.app}" >> .env
 
+# Write Stripe configuration
+echo "STRIPE_KEY=${STRIPE_KEY}" >> .env
+echo "STRIPE_SECRET=${STRIPE_SECRET}" >> .env
+echo "STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}" >> .env
+
 echo "Database config written to .env:"
 grep "^DB_" .env
 echo "App config:"
@@ -296,6 +301,9 @@ export APP_URL="${APP_URL:-https://crater-production.up.railway.app}"
 export SESSION_DOMAIN="${SESSION_DOMAIN:-.railway.app}"
 export SESSION_DRIVER="${SESSION_DRIVER:-cookie}"
 export SANCTUM_STATEFUL_DOMAINS="${SANCTUM_STATEFUL_DOMAINS:-crater-production.up.railway.app,*.railway.app,localhost}"
+export STRIPE_KEY="${STRIPE_KEY:-}"
+export STRIPE_SECRET="${STRIPE_SECRET:-}"
+export STRIPE_WEBHOOK_SECRET="${STRIPE_WEBHOOK_SECRET:-}"
 
 # Clear any existing config cache so runtime config changes can take effect
 php artisan config:clear 2>/dev/null || true
