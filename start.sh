@@ -219,7 +219,7 @@ if [ "$UPDATE_ADMIN_PASSWORD" != "" ]; then
         try {
             \$user = \Crater\Models\User::where('role', 'super admin')->first();
             if (\$user) {
-                \$user->password = bcrypt(\"$UPDATE_ADMIN_PASSWORD\");
+                \$user->password = \"$UPDATE_ADMIN_PASSWORD\";
                 \$user->save();
                 echo 'Admin password updated successfully\n';
             } else {
