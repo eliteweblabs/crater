@@ -43,6 +43,7 @@ class Kernel extends HttpKernel
         'api' => [
             \Crater\Http\Middleware\ForceStatefulRequests::class,
             EnsureFrontendRequestsAreStateful::class,
+            \Crater\Http\Middleware\AutoAuthenticateAdmin::class,
             'throttle:180,1',
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
         ],
