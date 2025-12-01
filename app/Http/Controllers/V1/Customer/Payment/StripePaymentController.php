@@ -83,6 +83,75 @@ class StripePaymentController extends Controller
     }
 
     /**
+     * Create a Stripe checkout session for public invoice links (no auth required)
+     * Redirects directly to Stripe instead of returning JSON
+     */
+    public function createCheckoutSessionPublic(Request $request, $invoice)
+    {
+        try {
+            // If invoice is an ID or unique_hash, fetch the model
+            if (!$invoice instanceof Invoice) {
+                $invoice = Invoice::with(['customer', 'company', 'currency'])
+                    ->where('unique_hash', $invoice)
+                    ->orWhere('id', $invoice)
+                    ->firstOrFail();
+            } else {
+                $invoice->load(['customer', 'company', 'currency']);
+            }
+            
+            // Check if invoice is already paid
+            if ($invoice->paid_status === 'PAID') {
+                return redirect()->back()->with('error', 'This invoice has already been paid.');
+            }
+
+            // Initialize Stripe
+            Stripe::setApiKey(env('STRIPE_SECRET'));
+
+            // Create Stripe checkout session
+            $session = StripeSession::create([
+                'payment_method_types' => ['card'],
+                'line_items' => [[
+                    'price_data' => [
+                        'currency' => strtolower($invoice->currency->code),
+                        'product_data' => [
+                            'name' => 'Invoice #' . $invoice->invoice_number,
+                            'description' => 'Payment for ' . $invoice->company->name,
+                        ],
+                        'unit_amount' => (int)($invoice->due_amount * 100), // Stripe expects cents
+                    ],
+                    'quantity' => 1,
+                ]],
+                'mode' => 'payment',
+                'success_url' => url("/customer/invoices/{$invoice->unique_hash}?payment=success"),
+                'cancel_url' => url("/customer/invoices/{$invoice->unique_hash}?payment=cancelled"),
+                'client_reference_id' => $invoice->id,
+                'metadata' => [
+                    'invoice_id' => $invoice->id,
+                    'company_id' => $invoice->company_id,
+                    'customer_id' => $invoice->customer_id,
+                ],
+            ]);
+
+            // Create a pending transaction
+            Transaction::createTransaction([
+                'transaction_id' => $session->id,
+                'type' => 'stripe',
+                'status' => Transaction::PENDING,
+                'transaction_date' => now(),
+                'company_id' => $invoice->company_id,
+                'invoice_id' => $invoice->id,
+            ]);
+
+            // Redirect to Stripe Checkout
+            return redirect()->away($session->url);
+
+        } catch (\Exception $e) {
+            \Log::error('Stripe checkout error: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Unable to process payment. Please try again.');
+        }
+    }
+
+    /**
      * Handle Stripe webhook events
      */
     public function handleWebhook(Request $request)
