@@ -291,7 +291,7 @@ if [ ! -z "$COMPANY_NAME" ]; then
     " || echo "Company update completed/failed"
 fi
 
-# Update notification email and disable invoice viewed notifications
+# Update notification email, disable invoice viewed notifications, and enable PDF attachments
 if [ ! -z "$MAIL_FROM_ADDRESS" ]; then
     echo "Updating notification email to: $MAIL_FROM_ADDRESS"
     php artisan tinker --execute="
@@ -300,9 +300,12 @@ if [ ! -z "$MAIL_FROM_ADDRESS" ]; then
             \Crater\Models\CompanySetting::setSettings([
                 'notification_email' => '$MAIL_FROM_ADDRESS',
                 'notify_invoice_viewed' => 'NO',
-                'notify_estimate_viewed' => 'NO'
+                'notify_estimate_viewed' => 'NO',
+                'invoice_email_attachment' => 'YES',
+                'estimate_email_attachment' => 'YES',
+                'payment_email_attachment' => 'YES'
             ], \$company->id);
-            echo 'Notification settings updated\n';
+            echo 'Notification settings updated (PDF attachments enabled)\n';
         }
     " || echo "Notification settings update completed/failed"
 fi
