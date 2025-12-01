@@ -26,10 +26,8 @@ RUN mkdir -p storage/framework/sessions storage/framework/views storage/framewor
 # Copy .env.example to .env
 RUN cp .env.example .env || true
 
-# Install PHP dependencies only (assets are pre-built)
-# Remove lock file and regenerate with stripe/stripe-php package
-RUN rm -f composer.lock && \
-    composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev --no-scripts --ignore-platform-reqs
+# Install PHP dependencies (with Stripe SDK from updated composer.lock)
+RUN composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev --no-scripts --ignore-platform-reqs
 
 # Expose port
 EXPOSE 8000
