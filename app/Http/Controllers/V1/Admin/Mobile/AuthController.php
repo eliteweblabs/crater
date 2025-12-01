@@ -22,9 +22,13 @@ class AuthController extends Controller
             ]);
         }
 
+        // CRITICAL FIX: Create session for SPA (not just token for mobile)
+        Auth::login($user, true);
+
         return response()->json([
             'type' => 'Bearer',
-            'token' => $user->createToken($request->device_name)->plainTextToken,
+            'token' => $user->createToken($request->device_name ?? 'web')->plainTextToken,
+            'user' => $user,
         ]);
     }
 
