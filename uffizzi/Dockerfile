@@ -1,4 +1,5 @@
-# Crater Railway Dockerfile - v3 FINAL
+# Crater Railway Dockerfile - v4
+ARG CACHEBUST=1733018400
 FROM php:8.1-cli
 
 # Install dependencies
