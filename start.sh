@@ -274,8 +274,8 @@ export SESSION_DOMAIN="${SESSION_DOMAIN:-.railway.app}"
 export SESSION_DRIVER="${SESSION_DRIVER:-cookie}"
 export SANCTUM_STATEFUL_DOMAINS="${SANCTUM_STATEFUL_DOMAINS:-crater-production.up.railway.app,*.railway.app,localhost}"
 
-# NOW rebuild config cache to pick up all exported environment variables
-php artisan config:cache 2>/dev/null || echo "Config cache rebuild completed"
+# Clear any existing config cache so runtime config changes can take effect
+php artisan config:clear 2>/dev/null || true
 php artisan cache:clear 2>/dev/null || true
 
 echo "Starting Laravel server on port: $PORT"
