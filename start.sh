@@ -47,27 +47,20 @@ echo "DB_DATABASE=${DB_NAME_VAL}" >> .env
 echo "DB_USERNAME=${DB_USER_VAL}" >> .env
 echo "DB_PASSWORD=${DB_PASS_VAL}" >> .env
 
-# Write APP_URL, SESSION_DOMAIN, SESSION_DRIVER, and SANCTUM_STATEFUL_DOMAINS if provided
-if [ ! -z "$APP_URL" ]; then
-    echo "APP_URL=${APP_URL}" >> .env
-fi
-if [ ! -z "$SESSION_DOMAIN" ]; then
-    echo "SESSION_DOMAIN=${SESSION_DOMAIN}" >> .env
-fi
-if [ ! -z "$SESSION_DRIVER" ]; then
-    echo "SESSION_DRIVER=${SESSION_DRIVER}" >> .env
-fi
-if [ ! -z "$SANCTUM_STATEFUL_DOMAINS" ]; then
-    echo "SANCTUM_STATEFUL_DOMAINS=${SANCTUM_STATEFUL_DOMAINS}" >> .env
-fi
+# Write APP_URL, SESSION_DOMAIN, SESSION_DRIVER, and SANCTUM_STATEFUL_DOMAINS
+# Force SESSION_DRIVER=cookie for Railway (file sessions don't persist in containers)
+echo "APP_URL=${APP_URL:-https://crater-production.up.railway.app}" >> .env
+echo "SESSION_DOMAIN=${SESSION_DOMAIN:-.railway.app}" >> .env
+echo "SESSION_DRIVER=cookie" >> .env
+echo "SANCTUM_STATEFUL_DOMAINS=${SANCTUM_STATEFUL_DOMAINS:-crater-production.up.railway.app}" >> .env
 
 echo "Database config written to .env:"
 grep "^DB_" .env
 echo "App config:"
-grep "^APP_URL" .env 2>/dev/null || echo "APP_URL: not set"
-grep "^SESSION_DOMAIN" .env 2>/dev/null || echo "SESSION_DOMAIN: not set"
-grep "^SESSION_DRIVER" .env 2>/dev/null || echo "SESSION_DRIVER: not set"
-grep "^SANCTUM_STATEFUL_DOMAINS" .env 2>/dev/null || echo "SANCTUM_STATEFUL_DOMAINS: not set"
+grep "^APP_URL" .env
+grep "^SESSION_DOMAIN" .env
+grep "^SESSION_DRIVER" .env
+grep "^SANCTUM_STATEFUL_DOMAINS" .env
 
 # Function to wait for database
 wait_for_db() {
