@@ -171,6 +171,12 @@ Route::prefix('/v1')->group(function () {
             'timestamp' => now()->toISOString(),
             'php_version' => PHP_VERSION,
             'database_created_file' => \Storage::disk('local')->has('database_created'),
+            // Debug: show what Laravel thinks the DB config is
+            'config_db_host' => config('database.connections.mysql.host'),
+            'config_db_port' => config('database.connections.mysql.port'),
+            'config_db_database' => config('database.connections.mysql.database'),
+            'env_db_host' => env('DB_HOST'),
+            'env_db_port' => env('DB_PORT'),
         ];
 
         try {
