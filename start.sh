@@ -98,7 +98,27 @@ wait_for_db() {
 if [ "$FORCE_SETUP" = "true" ] || [ "$FORCE_SETUP" = "1" ]; then
     echo "FORCE_SETUP enabled - wiping database..."
     if wait_for_db; then
-        php artisan db:wipe --force 2>/dev/null || echo "Database wipe completed/skipped"
+        # Drop all tables using raw SQL (db:wipe doesn't exist in this Laravel version)
+        php -r "
+            \$host = getenv('DB_HOST') ?: '$DB_HOST_VAL';
+            \$port = getenv('DB_PORT') ?: '$DB_PORT_VAL';
+            \$db = getenv('DB_DATABASE') ?: '$DB_NAME_VAL';
+            \$user = getenv('DB_USERNAME') ?: '$DB_USER_VAL';
+            \$pass = getenv('DB_PASSWORD') ?: '$DB_PASS_VAL';
+            try {
+                \$pdo = new PDO(\"mysql:host=\$host;port=\$port;dbname=\$db\", \$user, \$pass);
+                \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                \$pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
+                \$tables = \$pdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN);
+                foreach (\$tables as \$table) {
+                    \$pdo->exec(\"DROP TABLE IF EXISTS \`\$table\`\");
+                }
+                \$pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
+                echo \"Dropped all tables successfully.\n\";
+            } catch (Exception \$e) {
+                echo \"Error wiping database: \" . \$e->getMessage() . \"\n\";
+            }
+        " || echo "Database wipe completed/failed"
         rm -f storage/app/database_created 2>/dev/null || true
         echo "Database wiped, proceeding with fresh setup..."
     fi
@@ -112,19 +132,14 @@ if [ "$AUTO_SETUP" = "true" ] || [ "$AUTO_SETUP" = "1" ]; then
     if wait_for_db; then
         echo "Running AUTO_SETUP..."
         
-        # Try to complete setup via tinker (more reliable than artisan command)
+        # Run migrations directly (not through tinker)
+        echo "Running migrations..."
+        php artisan migrate --seed --force 2>&1 || echo "Migration failed but continuing..."
+        
+        # Try to complete setup via tinker (more reliable for user/company creation)
         php artisan tinker --execute="
             try {
                 echo 'Checking database tables...\n';
-                
-                // Run migrations if needed
-                if (!\Schema::hasTable('users')) {
-                    echo 'Running migrations...\n';
-                    \Artisan::call('migrate', ['--seed' => true, '--force' => true]);
-                    echo 'Migrations completed!\n';
-                } else {
-                    echo 'Tables already exist\n';
-                }
                 
                 // Check/create user
                 echo 'Checking for admin user...\n';
