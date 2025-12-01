@@ -81,10 +81,8 @@ RUN npm install --legacy-peer-deps 2>&1 || \
     npm ci --legacy-peer-deps 2>&1 || \
     echo "npm install completed with errors but continuing"
 
-# Build assets - allow complete failure
-RUN npm run build 2>&1 || \
-    (cd resources && npm run build 2>&1) || \
-    echo "Build step failed but continuing - assets may need to be built at runtime"
+# Skip build - assets are pre-built in public/build
+RUN echo "Skipping npm build - assets are pre-built"
 
 # Restore mysql settings
 RUN if [ -f .env ]; then \
@@ -95,5 +93,6 @@ RUN if [ -f .env ]; then \
 # Expose port
 EXPOSE 8000
 
-# Start command - Railway will override with PORT from environment
-CMD sh -c "php artisan serve --host=0.0.0.0 --port=\${PORT:-8000}"
+# Start command - use our start.sh script
+RUN chmod +x start.sh 2>/dev/null || true
+CMD ["bash", "start.sh"]
