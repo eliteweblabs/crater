@@ -267,6 +267,20 @@ if [ "$UPDATE_ADMIN_PASSWORD" != "" ]; then
     " || echo "Password update completed/failed"
 fi
 
+# Update company name and slug if COMPANY_NAME is set
+if [ ! -z "$COMPANY_NAME" ]; then
+    echo "Updating company name to: $COMPANY_NAME"
+    php artisan tinker --execute="
+        \$company = \Crater\Models\Company::first();
+        if (\$company) {
+            \$company->name = '$COMPANY_NAME';
+            \$company->slug = \Illuminate\Support\Str::slug('$COMPANY_NAME');
+            \$company->save();
+            echo 'Company updated: ' . \$company->name . ' (slug: ' . \$company->slug . ')\n';
+        }
+    " || echo "Company update completed/failed"
+fi
+
 # Update company currency (defaults to USD)
 COMPANY_CURRENCY="${COMPANY_CURRENCY:-USD}"
 echo "Updating company currency to: $COMPANY_CURRENCY"
