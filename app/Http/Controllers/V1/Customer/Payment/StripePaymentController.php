@@ -46,7 +46,7 @@ class StripePaymentController extends Controller
                             'name' => 'Invoice #' . $invoice->invoice_number,
                             'description' => 'Payment for ' . $invoice->company->name,
                         ],
-                        'unit_amount' => (int)($invoice->due_amount * 100), // Stripe expects cents
+                        'unit_amount' => (int)($invoice->due_amount), // Amount is already in cents
                     ],
                     'quantity' => 1,
                 ]],
@@ -117,7 +117,7 @@ class StripePaymentController extends Controller
                             'name' => 'Invoice #' . $invoice->invoice_number,
                             'description' => 'Payment for ' . $invoice->company->name,
                         ],
-                        'unit_amount' => (int)($invoice->due_amount * 100), // Stripe expects cents
+                        'unit_amount' => (int)($invoice->due_amount), // Amount is already in cents
                     ],
                     'quantity' => 1,
                 ]],
