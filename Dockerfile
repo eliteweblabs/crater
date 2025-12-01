@@ -1,9 +1,11 @@
 FROM php:8.1-cli
 
-# Install system dependencies
+# Install system dependencies including Node.js 18
 RUN apt-get update && apt-get install -y \
     git curl libpng-dev libonig-dev libxml2-dev \
     zip unzip libzip-dev mariadb-client \
+    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
@@ -28,6 +30,9 @@ RUN cp .env.example .env || true
 
 # Install PHP dependencies (with Stripe SDK from updated composer.lock)
 RUN composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev --no-scripts --ignore-platform-reqs
+
+# Install and build frontend assets
+RUN npm install --legacy-peer-deps && npm run build
 
 # Expose port
 EXPOSE 8000

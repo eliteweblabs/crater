@@ -15,12 +15,18 @@ class StripePaymentController extends Controller
 {
     /**
      * Create a Stripe checkout session for an invoice
+     * Accepts either Invoice model (route model binding) or invoice ID
      */
-    public function createCheckoutSession(Request $request, $invoice_id)
+    public function createCheckoutSession(Request $request, $invoice)
     {
         try {
-            // Find the invoice
-            $invoice = Invoice::with(['customer', 'company'])->findOrFail($invoice_id);
+            // If invoice is an ID, fetch the model
+            if (!$invoice instanceof Invoice) {
+                $invoice = Invoice::with(['customer', 'company'])->findOrFail($invoice);
+            } else {
+                // Load relationships if not already loaded
+                $invoice->load(['customer', 'company']);
+            }
             
             // Check if invoice is already paid
             if ($invoice->paid_status === 'PAID') {
