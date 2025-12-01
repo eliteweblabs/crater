@@ -224,14 +224,16 @@ Route::prefix('/v1')->group(function () {
         Route::post('/finish', FinishController::class);
     });
 
+    // TEMPORARY: Bootstrap with only auth:sanctum (no company middleware) to bypass issues
+    Route::middleware(['auth:sanctum'])->group(function () {
+        Route::get('/bootstrap', BootstrapController::class);
+    });
 
     Route::middleware(['auth:sanctum', 'company'])->group(function () {
         Route::middleware(['bouncer'])->group(function () {
 
-            // Bootstrap
+            // Bootstrap (moved above temporarily)
             //----------------------------------
-
-            Route::get('/bootstrap', BootstrapController::class);
 
             // Currencies
             //----------------------------------
