@@ -119,11 +119,14 @@ class Invoice extends Model implements HasMedia
 
     public function getPaymentModuleEnabledAttribute()
     {
-        if (Module::has('Payments')) {
-            return Module::isEnabled('Payments');
-        }
-
-        return false;
+        // Always return true since we have custom Stripe integration
+        return true;
+        
+        // Original code (disabled):
+        // if (Module::has('Payments')) {
+        //     return Module::isEnabled('Payments');
+        // }
+        // return false;
     }
 
     public function getAllowEditAttribute()
