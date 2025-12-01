@@ -1,3 +1,4 @@
+# Cache bust: v2 - 2025-12-01
 FROM php:8.1-cli
 
 # Install system dependencies
