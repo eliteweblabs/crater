@@ -20,6 +20,17 @@ use Crater\Http\Controllers\V1\PDF\PaymentPdfController;
 use Crater\Models\Company;
 use Illuminate\Support\Facades\Route;
 
+// Serve storage files (for php artisan serve compatibility)
+// ----------------------------------------------
+
+Route::get('/storage/{path}', function ($path) {
+    $file = storage_path('app/public/' . $path);
+    if (!file_exists($file)) {
+        abort(404);
+    }
+    return response()->file($file);
+})->where('path', '.*');
+
 // Module Asset Includes
 // ----------------------------------------------
 

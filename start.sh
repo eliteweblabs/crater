@@ -64,6 +64,7 @@ echo "STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}" >> .env
 
 # Write filesystem configuration (use local storage)
 echo "FILESYSTEM_DRIVER=public" >> .env
+echo "MEDIA_DISK=public" >> .env
 
 echo "Database config written to .env:"
 grep "^DB_" .env
@@ -313,6 +314,8 @@ export SANCTUM_STATEFUL_DOMAINS="${SANCTUM_STATEFUL_DOMAINS:-crater-production.u
 export STRIPE_KEY="${STRIPE_KEY:-}"
 export STRIPE_SECRET="${STRIPE_SECRET:-}"
 export STRIPE_WEBHOOK_SECRET="${STRIPE_WEBHOOK_SECRET:-}"
+export FILESYSTEM_DRIVER="${FILESYSTEM_DRIVER:-public}"
+export MEDIA_DISK="${MEDIA_DISK:-public}"
 
 # Create storage symlink for public file access
 php artisan storage:link 2>/dev/null || true
