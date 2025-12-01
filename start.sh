@@ -42,25 +42,45 @@ grep "^DB_" .env
 # Function to wait for database
 wait_for_db() {
     echo "Waiting for database connection..."
+    echo "Testing connection to: $DB_HOST:$DB_PORT"
+    
+    # First test if we can resolve the hostname
+    echo "Testing DNS resolution..."
+    getent hosts $DB_HOST || echo "DNS lookup failed for $DB_HOST"
+    
+    # Test with nc if available
+    echo "Testing TCP connection..."
+    nc -zv $DB_HOST $DB_PORT 2>&1 || echo "NC test failed"
+    
     for i in {1..30}; do
-        if php -r "
+        RESULT=$(php -r "
+            \$host = getenv('DB_HOST') ?: '$DB_HOST';
+            \$port = getenv('DB_PORT') ?: '$DB_PORT';
+            \$db = getenv('DB_DATABASE') ?: '$DB_DATABASE';
+            \$user = getenv('DB_USERNAME') ?: '$DB_USERNAME';
+            \$pass = getenv('DB_PASSWORD') ?: '$DB_PASSWORD';
+            
+            echo \"Trying: mysql:host=\$host;port=\$port;dbname=\$db with user \$user\n\";
+            
             try {
                 \$pdo = new PDO(
-                    'mysql:host=' . getenv('DB_HOST') . ';port=' . (getenv('DB_PORT') ?: '3306') . ';dbname=' . getenv('DB_DATABASE'),
-                    getenv('DB_USERNAME'),
-                    getenv('DB_PASSWORD'),
-                    [PDO::ATTR_TIMEOUT => 5]
+                    \"mysql:host=\$host;port=\$port;dbname=\$db\",
+                    \$user,
+                    \$pass,
+                    [PDO::ATTR_TIMEOUT => 5, PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
                 );
-                echo 'connected';
-                exit(0);
+                echo 'SUCCESS: connected';
             } catch (Exception \$e) {
-                exit(1);
+                echo 'FAILED: ' . \$e->getMessage();
             }
-        " 2>/dev/null | grep -q "connected"; then
+        " 2>&1)
+        
+        echo "Attempt $i/30: $RESULT"
+        
+        if echo "$RESULT" | grep -q "SUCCESS"; then
             echo "Database connected!"
             return 0
         fi
-        echo "Attempt $i/30 - waiting for database..."
         sleep 2
     done
     echo "WARNING: Could not connect to database after 30 attempts"
