@@ -69,7 +69,7 @@ class Invoice extends Model implements HasMedia
 
     public function emailLogs()
     {
-        return $this->morphMany('App\Models\EmailLog', 'mailable');
+        return $this->morphMany('Crater\Models\EmailLog', 'mailable');
     }
 
     public function items()
