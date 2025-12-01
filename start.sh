@@ -232,9 +232,14 @@ if [ "$UPDATE_ADMIN_PASSWORD" != "" ]; then
         try {
             \$user = \Crater\Models\User::where('role', 'super admin')->first();
             if (\$user) {
-                \$user->password = \Illuminate\Support\Facades\Hash::make(\"$UPDATE_ADMIN_PASSWORD\");
-                \$user->save();
-                echo 'Admin password updated to hash: ' . \$user->password . '\n';
+                \$hashedPassword = \Illuminate\Support\Facades\Hash::make(\"$UPDATE_ADMIN_PASSWORD\");
+                \$user->update(['password' => \$hashedPassword]);
+                
+                // Verify it was saved
+                \$user->refresh();
+                echo 'Admin password updated successfully\n';
+                echo 'Saved hash: ' . \$user->password . '\n';
+                echo 'Password check: ' . (\Illuminate\Support\Facades\Hash::check(\"$UPDATE_ADMIN_PASSWORD\", \$user->password) ? 'PASS' : 'FAIL') . '\n';
             } else {
                 echo 'Admin user not found\n';
             }
