@@ -52,6 +52,9 @@ echo "DB_PASSWORD=${DB_PASS_VAL}" >> .env
 echo "APP_URL=${APP_URL:-https://crater-production.up.railway.app}" >> .env
 echo "SESSION_DOMAIN=${SESSION_DOMAIN:-.railway.app}" >> .env
 echo "SESSION_DRIVER=cookie" >> .env
+echo "SESSION_LIFETIME=10080" >> .env
+echo "SESSION_SECURE_COOKIE=true" >> .env
+echo "SESSION_SAME_SITE=lax" >> .env
 echo "SANCTUM_STATEFUL_DOMAINS=${SANCTUM_STATEFUL_DOMAINS:-crater-production.up.railway.app}" >> .env
 
 # Write Stripe configuration
@@ -303,6 +306,9 @@ export DB_PASSWORD="${DB_PASSWORD:-}"
 export APP_URL="${APP_URL:-https://crater-production.up.railway.app}"
 export SESSION_DOMAIN="${SESSION_DOMAIN:-.railway.app}"
 export SESSION_DRIVER="${SESSION_DRIVER:-cookie}"
+export SESSION_LIFETIME=10080
+export SESSION_SECURE_COOKIE=true
+export SESSION_SAME_SITE=lax
 export SANCTUM_STATEFUL_DOMAINS="${SANCTUM_STATEFUL_DOMAINS:-crater-production.up.railway.app,*.railway.app,localhost}"
 export STRIPE_KEY="${STRIPE_KEY:-}"
 export STRIPE_SECRET="${STRIPE_SECRET:-}"
