@@ -28,6 +28,7 @@ sed -i '/^DB_USERNAME=/d' .env 2>/dev/null || true
 sed -i '/^DB_PASSWORD=/d' .env 2>/dev/null || true
 sed -i '/^APP_URL=/d' .env 2>/dev/null || true
 sed -i '/^SESSION_DOMAIN=/d' .env 2>/dev/null || true
+sed -i '/^SESSION_DRIVER=/d' .env 2>/dev/null || true
 sed -i '/^SANCTUM_STATEFUL_DOMAINS=/d' .env 2>/dev/null || true
 
 # Write Railway vars to .env
@@ -46,12 +47,15 @@ echo "DB_DATABASE=${DB_NAME_VAL}" >> .env
 echo "DB_USERNAME=${DB_USER_VAL}" >> .env
 echo "DB_PASSWORD=${DB_PASS_VAL}" >> .env
 
-# Write APP_URL, SESSION_DOMAIN, and SANCTUM_STATEFUL_DOMAINS if provided
+# Write APP_URL, SESSION_DOMAIN, SESSION_DRIVER, and SANCTUM_STATEFUL_DOMAINS if provided
 if [ ! -z "$APP_URL" ]; then
     echo "APP_URL=${APP_URL}" >> .env
 fi
 if [ ! -z "$SESSION_DOMAIN" ]; then
     echo "SESSION_DOMAIN=${SESSION_DOMAIN}" >> .env
+fi
+if [ ! -z "$SESSION_DRIVER" ]; then
+    echo "SESSION_DRIVER=${SESSION_DRIVER}" >> .env
 fi
 if [ ! -z "$SANCTUM_STATEFUL_DOMAINS" ]; then
     echo "SANCTUM_STATEFUL_DOMAINS=${SANCTUM_STATEFUL_DOMAINS}" >> .env
@@ -62,6 +66,7 @@ grep "^DB_" .env
 echo "App config:"
 grep "^APP_URL" .env 2>/dev/null || echo "APP_URL: not set"
 grep "^SESSION_DOMAIN" .env 2>/dev/null || echo "SESSION_DOMAIN: not set"
+grep "^SESSION_DRIVER" .env 2>/dev/null || echo "SESSION_DRIVER: not set"
 grep "^SANCTUM_STATEFUL_DOMAINS" .env 2>/dev/null || echo "SANCTUM_STATEFUL_DOMAINS: not set"
 
 # Function to wait for database
@@ -266,6 +271,7 @@ export DB_USERNAME="${DB_USERNAME:-crater}"
 export DB_PASSWORD="${DB_PASSWORD:-}"
 export APP_URL="${APP_URL:-https://crater-production.up.railway.app}"
 export SESSION_DOMAIN="${SESSION_DOMAIN:-.railway.app}"
+export SESSION_DRIVER="${SESSION_DRIVER:-cookie}"
 export SANCTUM_STATEFUL_DOMAINS="${SANCTUM_STATEFUL_DOMAINS:-crater-production.up.railway.app,*.railway.app,localhost}"
 
 # NOW rebuild config cache to pick up all exported environment variables
