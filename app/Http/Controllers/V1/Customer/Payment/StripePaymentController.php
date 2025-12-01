@@ -91,18 +91,21 @@ class StripePaymentController extends Controller
         try {
             // If invoice is an ID or unique_hash, fetch the model
             if (!$invoice instanceof Invoice) {
-                $invoice = Invoice::with(['customer', 'company', 'currency'])
+                $invoice = Invoice::with(['customer', 'company', 'currency', 'emailLogs'])
                     ->where('unique_hash', $invoice)
                     ->orWhere('id', $invoice)
                     ->firstOrFail();
             } else {
-                $invoice->load(['customer', 'company', 'currency']);
+                $invoice->load(['customer', 'company', 'currency', 'emailLogs']);
             }
             
             // Check if invoice is already paid
             if ($invoice->paid_status === 'PAID') {
                 return redirect()->back()->with('error', 'This invoice has already been paid.');
             }
+
+            // Get the latest email log token for redirect URLs
+            $emailLogToken = $invoice->emailLogs()->latest()->first()->token ?? $invoice->unique_hash;
 
             // Initialize Stripe
             Stripe::setApiKey(env('STRIPE_SECRET'));
@@ -122,8 +125,8 @@ class StripePaymentController extends Controller
                     'quantity' => 1,
                 ]],
                 'mode' => 'payment',
-                'success_url' => url("/customer/invoices/{$invoice->unique_hash}?payment=success"),
-                'cancel_url' => url("/customer/invoices/{$invoice->unique_hash}?payment=cancelled"),
+                'success_url' => url("/customer/invoices/{$emailLogToken}?payment=success"),
+                'cancel_url' => url("/customer/invoices/{$emailLogToken}?payment=cancelled"),
                 'client_reference_id' => $invoice->id,
                 'metadata' => [
                     'invoice_id' => $invoice->id,
