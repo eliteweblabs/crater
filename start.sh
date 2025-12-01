@@ -257,8 +257,8 @@ if [ "$UPDATE_ADMIN_PASSWORD" != "" ]; then
     " || echo "Password update completed/failed"
 fi
 
-# Clear caches
-php artisan config:clear 2>/dev/null || true
+# Rebuild config cache to pick up all .env changes (including SANCTUM_STATEFUL_DOMAINS)
+php artisan config:cache 2>/dev/null || echo "Config cache rebuild completed"
 php artisan cache:clear 2>/dev/null || true
 
 echo "Starting Laravel server on port: $PORT"
