@@ -94,6 +94,16 @@ wait_for_db() {
     return 1
 }
 
+# FORCE_SETUP: Wipe database and force fresh setup
+if [ "$FORCE_SETUP" = "true" ] || [ "$FORCE_SETUP" = "1" ]; then
+    echo "FORCE_SETUP enabled - wiping database..."
+    if wait_for_db; then
+        php artisan db:wipe --force 2>/dev/null || echo "Database wipe completed/skipped"
+        rm -f storage/app/database_created 2>/dev/null || true
+        echo "Database wiped, proceeding with fresh setup..."
+    fi
+fi
+
 # Quick database fix - directly mark as installed if tables exist
 if [ "$AUTO_SETUP" = "true" ] || [ "$AUTO_SETUP" = "1" ]; then
     echo "AUTO_SETUP enabled..."
