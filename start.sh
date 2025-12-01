@@ -193,6 +193,25 @@ if [ "$AUTO_SETUP" = "true" ] || [ "$AUTO_SETUP" = "1" ]; then
     fi
 fi
 
+# Update admin email if requested
+if [ "$UPDATE_ADMIN_EMAIL" != "" ]; then
+    echo "Updating admin email to: $UPDATE_ADMIN_EMAIL"
+    php artisan tinker --execute="
+        try {
+            \$user = \Crater\Models\User::where('role', 'super admin')->first();
+            if (\$user) {
+                \$user->email = '$UPDATE_ADMIN_EMAIL';
+                \$user->save();
+                echo 'Admin email updated to: ' . \$user->email . '\n';
+            } else {
+                echo 'Admin user not found\n';
+            }
+        } catch (\Exception \$e) {
+            echo 'Error: ' . \$e->getMessage() . '\n';
+        }
+    " || echo "Email update completed/failed"
+fi
+
 # Clear caches
 php artisan config:clear 2>/dev/null || true
 php artisan cache:clear 2>/dev/null || true
