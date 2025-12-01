@@ -70,7 +70,7 @@ echo "MAIL_USERNAME=${MAIL_USERNAME:-resend}" >> .env
 echo "MAIL_PASSWORD=${MAIL_PASSWORD}" >> .env
 echo "MAIL_ENCRYPTION=${MAIL_ENCRYPTION:-tls}" >> .env
 echo "MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-noreply@example.com}" >> .env
-echo "MAIL_FROM_NAME=${MAIL_FROM_NAME:-Crater Invoice}" >> .env
+echo "MAIL_FROM_NAME=\"${MAIL_FROM_NAME:-Crater Invoice}\"" >> .env
 
 # Write filesystem configuration (use local storage)
 echo "FILESYSTEM_DRIVER=public" >> .env
