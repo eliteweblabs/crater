@@ -62,6 +62,16 @@ echo "STRIPE_KEY=${STRIPE_KEY}" >> .env
 echo "STRIPE_SECRET=${STRIPE_SECRET}" >> .env
 echo "STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}" >> .env
 
+# Write mail configuration (Resend SMTP)
+echo "MAIL_MAILER=${MAIL_MAILER:-smtp}" >> .env
+echo "MAIL_HOST=${MAIL_HOST:-smtp.resend.com}" >> .env
+echo "MAIL_PORT=${MAIL_PORT:-587}" >> .env
+echo "MAIL_USERNAME=${MAIL_USERNAME:-resend}" >> .env
+echo "MAIL_PASSWORD=${MAIL_PASSWORD}" >> .env
+echo "MAIL_ENCRYPTION=${MAIL_ENCRYPTION:-tls}" >> .env
+echo "MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-noreply@example.com}" >> .env
+echo "MAIL_FROM_NAME=${MAIL_FROM_NAME:-Crater Invoice}" >> .env
+
 # Write filesystem configuration (use local storage)
 echo "FILESYSTEM_DRIVER=public" >> .env
 echo "MEDIA_DISK=public" >> .env
@@ -330,6 +340,14 @@ export STRIPE_SECRET="${STRIPE_SECRET:-}"
 export STRIPE_WEBHOOK_SECRET="${STRIPE_WEBHOOK_SECRET:-}"
 export FILESYSTEM_DRIVER="${FILESYSTEM_DRIVER:-public}"
 export MEDIA_DISK="${MEDIA_DISK:-public}"
+export MAIL_MAILER="${MAIL_MAILER:-smtp}"
+export MAIL_HOST="${MAIL_HOST:-smtp.resend.com}"
+export MAIL_PORT="${MAIL_PORT:-587}"
+export MAIL_USERNAME="${MAIL_USERNAME:-resend}"
+export MAIL_PASSWORD="${MAIL_PASSWORD:-}"
+export MAIL_ENCRYPTION="${MAIL_ENCRYPTION:-tls}"
+export MAIL_FROM_ADDRESS="${MAIL_FROM_ADDRESS:-noreply@example.com}"
+export MAIL_FROM_NAME="${MAIL_FROM_NAME:-Crater Invoice}"
 
 # Create storage symlink for public file access
 php artisan storage:link 2>/dev/null || true
