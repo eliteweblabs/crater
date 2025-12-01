@@ -20,7 +20,7 @@
     <a
       href="http://bytefury.com/"
       target="_blank"
-      class="pl-1 font-normal text-gray-900"
+      class="pl-1 font-normal text-gray-900 hidden"
       >Bytefury
     </a>
   </footer>
