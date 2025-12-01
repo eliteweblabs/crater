@@ -28,13 +28,20 @@ sed -i '/^DB_USERNAME=/d' .env 2>/dev/null || true
 sed -i '/^DB_PASSWORD=/d' .env 2>/dev/null || true
 
 # Write Railway vars to .env
+# Check multiple possible variable names (Railway uses different formats)
+DB_HOST_VAL="${DB_HOST:-${MYSQL_HOST:-${MYSQLHOST:-db.railway.internal}}}"
+DB_PORT_VAL="${DB_PORT:-${MYSQL_PORT:-${MYSQLPORT:-3306}}}"
+DB_NAME_VAL="${DB_DATABASE:-${MYSQL_DATABASE:-${MYSQLDATABASE:-crater}}}"
+DB_USER_VAL="${DB_USERNAME:-${MYSQL_USER:-${MYSQLUSER:-crater}}}"
+DB_PASS_VAL="${DB_PASSWORD:-${MYSQL_PASSWORD:-${MYSQLPASSWORD:-}}}"
+
 echo "" >> .env
 echo "DB_CONNECTION=${DB_CONNECTION:-mysql}" >> .env
-echo "DB_HOST=${DB_HOST:-127.0.0.1}" >> .env
-echo "DB_PORT=${DB_PORT:-3306}" >> .env
-echo "DB_DATABASE=${DB_DATABASE:-crater}" >> .env
-echo "DB_USERNAME=${DB_USERNAME:-crater}" >> .env
-echo "DB_PASSWORD=${DB_PASSWORD:-}" >> .env
+echo "DB_HOST=${DB_HOST_VAL}" >> .env
+echo "DB_PORT=${DB_PORT_VAL}" >> .env
+echo "DB_DATABASE=${DB_NAME_VAL}" >> .env
+echo "DB_USERNAME=${DB_USER_VAL}" >> .env
+echo "DB_PASSWORD=${DB_PASS_VAL}" >> .env
 
 echo "Database config written to .env:"
 grep "^DB_" .env
