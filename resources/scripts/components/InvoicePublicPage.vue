@@ -108,18 +108,8 @@ const customerLogo = computed(() => {
 
 const pageTitle = computed(() => invoiceData.value?.invoice_number)
 
-async function payInvoice() {
-  try {
-    // Call our public Stripe checkout endpoint (no auth required)
-    const response = await axios.post(`/invoices/${invoiceData.value.unique_hash}/pay`)
-    
-    // Redirect to Stripe checkout
-    if (response.data.url) {
-      window.location.href = response.data.url
-    }
-  } catch (error) {
-    console.error('Payment error:', error)
-    alert('Unable to process payment. Please try again later.')
-  }
+function payInvoice() {
+  // Navigate to public Stripe checkout route (no auth required, server will redirect to Stripe)
+  window.location.href = `/invoices/${invoiceData.value.unique_hash}/pay`
 }
 </script>

@@ -115,7 +115,7 @@ Route::middleware('pdf-auth')->group(function () {
 // -------------------------------------------------
 
 // Public Stripe checkout endpoint (no auth required)
-Route::post('/invoices/{invoice:unique_hash}/pay', [\Crater\Http\Controllers\V1\Customer\Payment\StripePaymentController::class, 'createCheckoutSession']);
+Route::get('/invoices/{invoice:unique_hash}/pay', [\Crater\Http\Controllers\V1\Customer\Payment\StripePaymentController::class, 'createCheckoutSessionPublic']);
 
 Route::prefix('/customer')->group(function () {
     Route::get('/invoices/{email_log:token}', [CustomerInvoicePdfController::class, 'getInvoice']);

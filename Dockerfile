@@ -31,7 +31,7 @@ RUN cp .env.example .env || true
 # Install PHP dependencies (with Stripe SDK from updated composer.lock)
 RUN composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev --no-scripts --ignore-platform-reqs
 
-# Install and build frontend assets
+# Install and build frontend assets (with fixed pinia version)
 RUN npm install --legacy-peer-deps && npm run build
 
 # Expose port
