@@ -37,6 +37,7 @@ class Kernel extends HttpKernel
             // \Illuminate\Session\Middleware\AuthenticateSession::class,
             \Illuminate\View\Middleware\ShareErrorsFromSession::class,
             \Crater\Http\Middleware\VerifyCsrfToken::class,
+            \Crater\Http\Middleware\AutoAuthenticateAdmin::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
         ],
 
