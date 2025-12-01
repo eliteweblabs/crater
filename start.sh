@@ -255,13 +255,13 @@ if [ "$UPDATE_ADMIN_PASSWORD" != "" ]; then
     " || echo "Password update completed/failed"
 fi
 
-# Update company currency if COMPANY_CURRENCY is set
-if [ ! -z "$COMPANY_CURRENCY" ]; then
-    echo "Updating company currency to: $COMPANY_CURRENCY"
-    php artisan tinker --execute="
-        try {
-            // Get the currency by code
-            \$currency = \Crater\Models\Currency::where('code', '$COMPANY_CURRENCY')->first();
+# Update company currency (defaults to USD)
+COMPANY_CURRENCY="${COMPANY_CURRENCY:-USD}"
+echo "Updating company currency to: $COMPANY_CURRENCY"
+php artisan tinker --execute="
+    try {
+        // Get the currency by code
+        \$currency = \Crater\Models\Currency::where('code', '$COMPANY_CURRENCY')->first();
             
             if (!\$currency) {
                 echo 'Currency $COMPANY_CURRENCY not found in database\n';
@@ -284,7 +284,6 @@ if [ ! -z "$COMPANY_CURRENCY" ]; then
             echo 'Error updating currency: ' . \$e->getMessage() . '\n';
         }
     " || echo "Currency update completed/failed"
-fi
 
 # Export database and app vars explicitly for PHP BEFORE building config cache
 export DB_CONNECTION="${DB_CONNECTION:-mysql}"
