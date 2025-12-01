@@ -69,8 +69,8 @@ echo "MAIL_PORT=${MAIL_PORT:-587}" >> .env
 echo "MAIL_USERNAME=${MAIL_USERNAME:-resend}" >> .env
 echo "MAIL_PASSWORD=${MAIL_PASSWORD}" >> .env
 echo "MAIL_ENCRYPTION=${MAIL_ENCRYPTION:-tls}" >> .env
-echo "MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-noreply@example.com}" >> .env
-echo "MAIL_FROM_NAME=\"${MAIL_FROM_NAME:-Crater Invoice}\"" >> .env
+echo "MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-sen@eliteweblabs.com}" >> .env
+echo "MAIL_FROM_NAME=\"${MAIL_FROM_NAME:-Elite Web Labs}\"" >> .env
 
 # Write filesystem configuration (use local storage)
 echo "FILESYSTEM_DRIVER=public" >> .env
@@ -289,6 +289,22 @@ if [ ! -z "$COMPANY_NAME" ]; then
             echo 'Company updated: ' . \$company->name . ' (slug: ' . \$company->slug . ')\n';
         }
     " || echo "Company update completed/failed"
+fi
+
+# Update notification email and disable invoice viewed notifications
+if [ ! -z "$MAIL_FROM_ADDRESS" ]; then
+    echo "Updating notification email to: $MAIL_FROM_ADDRESS"
+    php artisan tinker --execute="
+        \$company = \Crater\Models\Company::first();
+        if (\$company) {
+            \Crater\Models\CompanySetting::setSettings([
+                'notification_email' => '$MAIL_FROM_ADDRESS',
+                'notify_invoice_viewed' => 'NO',
+                'notify_estimate_viewed' => 'NO'
+            ], \$company->id);
+            echo 'Notification settings updated\n';
+        }
+    " || echo "Notification settings update completed/failed"
 fi
 
 # Update company currency (defaults to USD)
