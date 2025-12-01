@@ -266,7 +266,7 @@ export DB_USERNAME="${DB_USERNAME:-crater}"
 export DB_PASSWORD="${DB_PASSWORD:-}"
 export APP_URL="${APP_URL:-https://crater-production.up.railway.app}"
 export SESSION_DOMAIN="${SESSION_DOMAIN:-.railway.app}"
-export SANCTUM_STATEFUL_DOMAINS="${SANCTUM_STATEFUL_DOMAINS:-crater-production.up.railway.app}"
+export SANCTUM_STATEFUL_DOMAINS="${SANCTUM_STATEFUL_DOMAINS:-crater-production.up.railway.app,*.railway.app,localhost}"
 
 # NOW rebuild config cache to pick up all exported environment variables
 php artisan config:cache 2>/dev/null || echo "Config cache rebuild completed"
@@ -277,5 +277,6 @@ echo "============================================"
 
 echo "DB_HOST=$DB_HOST"
 echo "DB_DATABASE=$DB_DATABASE"
+echo "SANCTUM_STATEFUL_DOMAINS=$SANCTUM_STATEFUL_DOMAINS"
 
 exec php artisan serve --host=0.0.0.0 --port=$PORT
