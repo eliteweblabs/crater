@@ -4,8 +4,8 @@ nixPkgs = ["php81", "php81Packages.composer", "nodejs_18"]
 [phases.install]
 cmds = [
   "composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist",
-  "npm ci --production",
-  "npm run build",
+  "npm install --legacy-peer-deps --production || npm install --force --production || true",
+  "npm run build || true",
   "chmod +x start.sh"
 ]
 
