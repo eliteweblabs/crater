@@ -19,7 +19,7 @@ WORKDIR /var/www
 COPY . /var/www/
 
 # Create necessary directories and set permissions
-RUN mkdir -p storage/framework/sessions storage/framework/views storage/framework/cache storage/logs bootstrap/cache \
+RUN mkdir -p storage/framework/sessions storage/framework/views storage/framework/cache storage/logs storage/app/public bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache \
     && chmod +x start.sh
 

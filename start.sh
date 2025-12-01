@@ -59,6 +59,9 @@ echo "STRIPE_KEY=${STRIPE_KEY}" >> .env
 echo "STRIPE_SECRET=${STRIPE_SECRET}" >> .env
 echo "STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}" >> .env
 
+# Write filesystem configuration (use local storage)
+echo "FILESYSTEM_DRIVER=public" >> .env
+
 echo "Database config written to .env:"
 grep "^DB_" .env
 echo "App config:"
@@ -304,6 +307,9 @@ export SANCTUM_STATEFUL_DOMAINS="${SANCTUM_STATEFUL_DOMAINS:-crater-production.u
 export STRIPE_KEY="${STRIPE_KEY:-}"
 export STRIPE_SECRET="${STRIPE_SECRET:-}"
 export STRIPE_WEBHOOK_SECRET="${STRIPE_WEBHOOK_SECRET:-}"
+
+# Create storage symlink for public file access
+php artisan storage:link 2>/dev/null || true
 
 # Clear any existing config cache so runtime config changes can take effect
 php artisan config:clear 2>/dev/null || true
