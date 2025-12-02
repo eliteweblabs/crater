@@ -1,42 +1,21 @@
-    @component('mail::layout')
-    {{-- Header --}}
-    @slot('header')
-        @component('mail::header', ['url' => ''])
-        @if($data['company']['logo'])
-            <img class="header-logo" src="{{asset($data['company']['logo'])}}" alt="{{$data['company']['name']}}">
-        @else
-            {{$data['company']['name']}}
-        @endif
-        @endcomponent
-    @endslot
+@component('mail::message')
+{{-- Header with company name --}}
+# Invoice from {{ $data['company']['name'] }}
 
-    {{-- Body --}}
-    <!-- Body here -->
+{!! $data['body'] !!}
 
-    {{-- Subcopy --}}
-    @slot('subcopy')
-        @component('mail::subcopy')
-            {!! $data['body'] !!}
-            @if(!$data['attach']['data'])
-                @component('mail::button', ['url' => $data['url']])
-                    View Invoice
-                @endcomponent
-            @endif
-            
-            @if($data['invoice']['paid_status'] !== 'PAID')
-                <p style="margin-top: 20px; text-align: center;">
-                    @component('mail::button', ['url' => url('/' . $data['company']['slug'] . '/customer/invoices/' . $data['invoice']['id']), 'color' => 'success'])
-                        💳 Pay Now
-                    @endcomponent
-                </p>
-            @endif
-        @endcomponent
-    @endslot
+@if(!$data['attach']['data'])
+@component('mail::button', ['url' => $data['url']])
+View Invoice
+@endcomponent
+@endif
 
-    {{-- Footer --}}
-    @slot('footer')
-        @component('mail::footer')
-            <!-- Powered by <a class="footer-link" href="https://craterapp.com">Crater</a> -->
-        @endcomponent
-    @endslot
+@if($data['invoice']['paid_status'] !== 'PAID')
+@component('mail::button', ['url' => url('/' . $data['company']['slug'] . '/customer/invoices/' . $data['invoice']['id']), 'color' => 'success'])
+Pay Now
+@endcomponent
+@endif
+
+Thanks,<br>
+{{ $data['company']['name'] }}
 @endcomponent

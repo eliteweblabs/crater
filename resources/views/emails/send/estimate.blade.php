@@ -1,35 +1,16 @@
-@component('mail::layout')
-    {{-- Header --}}
-    @slot('header')
-        @component('mail::header', ['url' => ''])
-        @if($data['company']['logo'])
-            <img class="header-logo" src="{{asset($data['company']['logo'])}}" alt="{{$data['company']['name']}}">
-        @else
-            {{$data['company']['name']}}
-        @endif
-        @endcomponent
-    @endslot
+@component('mail::message')
+{{-- Header with company name --}}
+# Estimate from {{ $data['company']['name'] }}
 
-    {{-- Body --}}
-    <!-- Body here -->
+{!! $data['body'] !!}
 
-    {{-- Subcopy --}}
-    @slot('subcopy')
-        @component('mail::subcopy')
-            {!! $data['body'] !!}
-            @if(!$data['attach']['data'])
-                @component('mail::button', ['url' => $data['url']])
-                    View Estimate
-                @endcomponent
-            @endif
-        @endcomponent
-    @endslot
+@if(!$data['attach']['data'])
+@component('mail::button', ['url' => $data['url']])
+View Estimate
+@endcomponent
+@endif
 
-    {{-- Footer --}}
-    @slot('footer')
-        @component('mail::footer')
-            <!-- Powered by <a class="footer-link" href="https://craterapp.com">Crater</a> -->
-        @endcomponent
-    @endslot
+Thanks,<br>
+{{ $data['company']['name'] }}
 @endcomponent
 
