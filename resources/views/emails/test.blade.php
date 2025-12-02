@@ -1,5 +1,5 @@
 @component('mail::message')
-# Test Email from Crater
+# Test Email from {{ config('app.name') }}
 
 {{ $my_message }}
 

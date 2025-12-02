@@ -27,6 +27,7 @@ sed -i '/^DB_DATABASE=/d' .env 2>/dev/null || true
 sed -i '/^DB_USERNAME=/d' .env 2>/dev/null || true
 sed -i '/^DB_PASSWORD=/d' .env 2>/dev/null || true
 sed -i '/^APP_URL=/d' .env 2>/dev/null || true
+sed -i '/^APP_NAME=/d' .env 2>/dev/null || true
 sed -i '/^SESSION_DOMAIN=/d' .env 2>/dev/null || true
 sed -i '/^SESSION_DRIVER=/d' .env 2>/dev/null || true
 sed -i '/^SANCTUM_STATEFUL_DOMAINS=/d' .env 2>/dev/null || true
@@ -47,8 +48,10 @@ echo "DB_DATABASE=${DB_NAME_VAL}" >> .env
 echo "DB_USERNAME=${DB_USER_VAL}" >> .env
 echo "DB_PASSWORD=${DB_PASS_VAL}" >> .env
 
-# Write APP_URL, SESSION_DOMAIN, SESSION_DRIVER, and SANCTUM_STATEFUL_DOMAINS
+# Write APP_URL, APP_NAME, SESSION_DOMAIN, SESSION_DRIVER, and SANCTUM_STATEFUL_DOMAINS
 # Force SESSION_DRIVER=cookie for Railway (file sessions don't persist in containers)
+# Use COMPANY_NAME for APP_NAME (removes Crater branding)
+echo "APP_NAME=\"${COMPANY_NAME:-My Company}\"" >> .env
 echo "APP_URL=${APP_URL:-https://crater-production.up.railway.app}" >> .env
 echo "SESSION_DOMAIN=${SESSION_DOMAIN:-.railway.app}" >> .env
 echo "SESSION_DRIVER=cookie" >> .env
@@ -366,7 +369,8 @@ export MAIL_USERNAME="${MAIL_USERNAME:-resend}"
 export MAIL_PASSWORD="${MAIL_PASSWORD:-}"
 export MAIL_ENCRYPTION="${MAIL_ENCRYPTION:-tls}"
 export MAIL_FROM_ADDRESS="${MAIL_FROM_ADDRESS:-noreply@example.com}"
-export MAIL_FROM_NAME="${MAIL_FROM_NAME:-Crater Invoice}"
+export MAIL_FROM_NAME="${MAIL_FROM_NAME:-${COMPANY_NAME:-My Company}}"
+export APP_NAME="${COMPANY_NAME:-My Company}"
 
 # Create storage symlink for public file access
 php artisan storage:link 2>/dev/null || true

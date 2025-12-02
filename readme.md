@@ -100,3 +100,5 @@ Help us translate on https://crowdin.com/project/crater-invoice
 Crater is released under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3.
 See [LICENSE](LICENSE) for details.
 
+
+
