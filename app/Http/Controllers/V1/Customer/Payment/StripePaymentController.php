@@ -125,8 +125,8 @@ class StripePaymentController extends Controller
                     'quantity' => 1,
                 ]],
                 'mode' => 'payment',
-                'success_url' => url("/customer/invoices/{$emailLogToken}?payment=success"),
-                'cancel_url' => url("/customer/invoices/{$emailLogToken}?payment=cancelled"),
+                'success_url' => url("/customer/invoices/view/{$emailLogToken}?payment=success"),
+                'cancel_url' => url("/customer/invoices/view/{$emailLogToken}?payment=cancelled"),
                 'client_reference_id' => $invoice->id,
                 'metadata' => [
                     'invoice_id' => $invoice->id,
