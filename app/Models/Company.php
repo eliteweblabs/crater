@@ -34,12 +34,20 @@ class Company extends Model implements HasMedia
     {
         $logo = $this->getMedia('logo')->first();
 
-        $isSystem = FileDisk::whereSetAsDefault(true)->first()->isSystem();
-
         if ($logo) {
-            if ($isSystem) {
-                return $logo->getPath();
-            } else {
+            try {
+                // For PDFs, convert logo to base64 data URI for reliable rendering
+                $path = $logo->getPath();
+                if (file_exists($path)) {
+                    $imageData = file_get_contents($path);
+                    $mimeType = $logo->mime_type ?? 'image/png';
+                    return 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
+                }
+                
+                // Fallback to URL if file doesn't exist locally
+                return $logo->getFullUrl();
+            } catch (\Exception $e) {
+                // If anything fails, try to return the URL
                 return $logo->getFullUrl();
             }
         }
