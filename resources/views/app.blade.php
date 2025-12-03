@@ -64,6 +64,12 @@
 
         @endif    
 
+        @if(config('crater.company_logo_url'))
+
+        window.company_logo_url = "{{ config('crater.company_logo_url') }}"
+
+        @endif
+
         window.Crater.start()
     </script>
 </body>

@@ -1,5 +1,11 @@
 <template>
-  <svg viewBox="0 0 225 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <img 
+    v-if="companyLogoUrl" 
+    :src="companyLogoUrl" 
+    alt="Company Logo" 
+    class="h-6 max-w-[180px] object-contain"
+  />
+  <svg v-else viewBox="0 0 225 50" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path
       d="M211.738 32.1659V27.7768C214.619 24.947 218.409 23.3831 224.397 23.1597V11.6916C218.939 11.6916 214.998 13.4043 211.738 16.1597V12.2873H199.576C199.507 12.9433 199.472 13.609 199.472 14.2828C199.472 22.3755 204.546 29.3041 211.738 32.1659Z"
       fill="url(#paint0_linear_499_29)"
@@ -145,6 +151,8 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+
 defineProps({
   darkColor: {
     type: String,
@@ -155,4 +163,6 @@ defineProps({
     default: 'rgba(var(--color-primary-400), var(--tw-text-opacity))',
   },
 })
+
+const companyLogoUrl = computed(() => window.company_logo_url || null)
 </script>

@@ -37,8 +37,9 @@ class StripePaymentController extends Controller
             Stripe::setApiKey(config('services.stripe.secret'));
 
             // Create Stripe checkout session
+            // Payment methods: card (includes Apple Pay/Google Pay), link (Stripe 1-click), cashapp, us_bank_account (ACH)
             $session = StripeSession::create([
-                'payment_method_types' => ['card'],
+                'payment_method_types' => ['card', 'link', 'cashapp', 'us_bank_account'],
                 'line_items' => [[
                     'price_data' => [
                         'currency' => strtolower($invoice->currency->code),
@@ -111,8 +112,9 @@ class StripePaymentController extends Controller
             Stripe::setApiKey(env('STRIPE_SECRET'));
 
             // Create Stripe checkout session
+            // Payment methods: card (includes Apple Pay/Google Pay), link (Stripe 1-click), cashapp, us_bank_account (ACH)
             $session = StripeSession::create([
-                'payment_method_types' => ['card'],
+                'payment_method_types' => ['card', 'link', 'cashapp', 'us_bank_account'],
                 'line_items' => [[
                     'price_data' => [
                         'currency' => strtolower($invoice->currency->code),
