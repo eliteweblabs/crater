@@ -32,6 +32,32 @@ class Company extends Model implements HasMedia
 
     public function getLogoPathAttribute()
     {
+        // Check for environment variable logo URL first
+        $envLogoUrl = env('COMPANY_LOGO_URL');
+        if ($envLogoUrl) {
+            try {
+                // Fetch the image and convert to base64 for PDF rendering
+                $imageData = @file_get_contents($envLogoUrl);
+                if ($imageData) {
+                    // Detect mime type from URL or default to png
+                    $extension = strtolower(pathinfo(parse_url($envLogoUrl, PHP_URL_PATH), PATHINFO_EXTENSION));
+                    $mimeTypes = [
+                        'png' => 'image/png',
+                        'jpg' => 'image/jpeg',
+                        'jpeg' => 'image/jpeg',
+                        'gif' => 'image/gif',
+                        'webp' => 'image/webp',
+                        'svg' => 'image/svg+xml',
+                    ];
+                    $mimeType = $mimeTypes[$extension] ?? 'image/png';
+                    return 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
+                }
+            } catch (\Exception $e) {
+                // If fetching fails, return the URL directly
+                return $envLogoUrl;
+            }
+        }
+
         $logo = $this->getMedia('logo')->first();
 
         if ($logo) {
@@ -57,6 +83,12 @@ class Company extends Model implements HasMedia
 
     public function getLogoAttribute()
     {
+        // Check for environment variable logo URL first
+        $envLogoUrl = env('COMPANY_LOGO_URL');
+        if ($envLogoUrl) {
+            return $envLogoUrl;
+        }
+
         $logo = $this->getMedia('logo')->first();
 
         if ($logo) {
