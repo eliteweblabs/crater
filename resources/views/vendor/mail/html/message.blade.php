@@ -2,7 +2,11 @@
     {{-- Header --}}
     @slot('header')
         @component('mail::header', ['url' => config('app.url')])
-            {{ config('app.name') }}
+            @if(config('crater.company_logo_url'))
+                <img src="{{ config('crater.company_logo_url') }}" alt="{{ config('app.name') }}" style="max-height: 50px; max-width: 200px;">
+            @else
+                {{ config('app.name') }}
+            @endif
         @endcomponent
     @endslot
 

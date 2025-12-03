@@ -32,8 +32,8 @@ class Company extends Model implements HasMedia
 
     public function getLogoPathAttribute()
     {
-        // Check for environment variable logo URL first
-        $envLogoUrl = env('COMPANY_LOGO_URL');
+        // Check for config logo URL first (reads from COMPANY_LOGO_URL env var)
+        $envLogoUrl = config('crater.company_logo_url');
         if ($envLogoUrl) {
             try {
                 // Fetch the image and convert to base64 for PDF rendering
@@ -83,8 +83,8 @@ class Company extends Model implements HasMedia
 
     public function getLogoAttribute()
     {
-        // Check for environment variable logo URL first
-        $envLogoUrl = env('COMPANY_LOGO_URL');
+        // Check for config logo URL first (reads from COMPANY_LOGO_URL env var)
+        $envLogoUrl = config('crater.company_logo_url');
         if ($envLogoUrl) {
             return $envLogoUrl;
         }

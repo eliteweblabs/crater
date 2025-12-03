@@ -15,6 +15,12 @@ use Crater\Models\TaxType;
 return [
 
     /*
+    * Company logo URL (from environment variable)
+    * Set COMPANY_LOGO_URL in your .env or Railway variables
+    */
+    'company_logo_url' => env('COMPANY_LOGO_URL'),
+
+    /*
     * Minimum php version.
     */
     'min_php_version' => '7.4.0',
