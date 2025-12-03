@@ -73,6 +73,7 @@ echo "STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}" >> .env
 
 # Write mail configuration (Resend SMTP)
 echo "MAIL_MAILER=${MAIL_MAILER:-smtp}" >> .env
+echo "MAIL_DRIVER=${MAIL_MAILER:-smtp}" >> .env
 echo "MAIL_HOST=${MAIL_HOST:-smtp.resend.com}" >> .env
 echo "MAIL_PORT=${MAIL_PORT:-587}" >> .env
 echo "MAIL_USERNAME=${MAIL_USERNAME:-resend}" >> .env
