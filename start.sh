@@ -3,7 +3,13 @@
 
 set -e
 
-PORT=${PORT:-8000}
+# Railway sets PORT for the web server, but we need to avoid MySQL port (3306)
+# If PORT is 3306 (MySQL), use 8000 instead
+if [ "${PORT:-8000}" = "3306" ]; then
+    PORT=8000
+else
+    PORT=${PORT:-8000}
+fi
 PORT=$((PORT))
 
 echo "============================================"
