@@ -351,11 +351,12 @@ php artisan tinker --execute="
     " || echo "Currency update completed/failed"
 
 # Export database and app vars explicitly for PHP BEFORE building config cache
+# Use the values we calculated earlier (DB_HOST_VAL etc) not defaults
 export DB_CONNECTION="${DB_CONNECTION:-mysql}"
-export DB_HOST="${DB_HOST:-127.0.0.1}"
-export DB_PORT="${DB_PORT:-3306}"
-export DB_DATABASE="${DB_DATABASE:-crater}"
-export DB_USERNAME="${DB_USERNAME:-crater}"
+export DB_HOST="${DB_HOST_VAL:-${DB_HOST:-mysql.railway.internal}}"
+export DB_PORT="${DB_PORT_VAL:-${DB_PORT:-3306}}"
+export DB_DATABASE="${DB_NAME_VAL:-${DB_DATABASE:-crater}}"
+export DB_USERNAME="${DB_USER_VAL:-${DB_USERNAME:-crater}}"
 export DB_PASSWORD="${DB_PASSWORD:-}"
 export APP_URL="${APP_URL:-https://crater-production.up.railway.app}"
 export SESSION_DOMAIN="${SESSION_DOMAIN:-.railway.app}"
