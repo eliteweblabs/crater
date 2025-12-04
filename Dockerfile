@@ -1,5 +1,6 @@
 FROM php:8.1-cli
 
+# Cache bust: 2025-12-04-v1
 # Install system dependencies including Node.js 18
 RUN apt-get update && apt-get install -y \
     git curl libpng-dev libonig-dev libxml2-dev \
@@ -16,6 +17,9 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 # Set working directory
 WORKDIR /var/www
+
+# Cache bust argument - change to force rebuild
+ARG CACHEBUST=2025-12-04-v1
 
 # Copy application files
 COPY . /var/www/
