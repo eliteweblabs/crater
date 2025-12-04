@@ -56,6 +56,14 @@ echo "DB_PASSWORD=${DB_PASS_VAL}" >> .env
 # Force SESSION_DRIVER=cookie for Railway (file sessions don't persist in containers)
 # Use COMPANY_NAME for APP_NAME (removes Crater branding)
 # SESSION_DOMAIN and SANCTUM_STATEFUL_DOMAINS auto-derive from APP_URL in config files
+
+# APP_URL is required - fail fast if not set
+if [ -z "$APP_URL" ]; then
+    echo "ERROR: APP_URL environment variable is required but not set!"
+    echo "Please set APP_URL in Railway variables (e.g., https://ap.reave.app)"
+    exit 1
+fi
+
 echo "APP_NAME=\"${COMPANY_NAME:-My Company}\"" >> .env
 echo "APP_URL=${APP_URL}" >> .env
 echo "SESSION_DRIVER=cookie" >> .env
@@ -354,7 +362,7 @@ export DB_PORT="${DB_PORT_VAL:-${DB_PORT:-3306}}"
 export DB_DATABASE="${DB_NAME_VAL:-${DB_DATABASE:-crater}}"
 export DB_USERNAME="${DB_USER_VAL:-${DB_USERNAME:-crater}}"
 export DB_PASSWORD="${DB_PASSWORD:-}"
-export APP_URL="${APP_URL}"
+export APP_URL="${APP_URL:?APP_URL must be set}"
 export SESSION_DRIVER="${SESSION_DRIVER:-cookie}"
 export SESSION_LIFETIME=10080
 export SESSION_SECURE_COOKIE=true
