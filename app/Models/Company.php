@@ -35,27 +35,24 @@ class Company extends Model implements HasMedia
         // Check for config logo URL first (reads from COMPANY_LOGO_URL env var)
         $envLogoUrl = config('crater.company_logo_url');
         if ($envLogoUrl) {
-            try {
-                // Fetch the image and convert to base64 for PDF rendering
-                $imageData = @file_get_contents($envLogoUrl);
-                if ($imageData) {
-                    // Detect mime type from URL or default to png
-                    $extension = strtolower(pathinfo(parse_url($envLogoUrl, PHP_URL_PATH), PATHINFO_EXTENSION));
-                    $mimeTypes = [
-                        'png' => 'image/png',
-                        'jpg' => 'image/jpeg',
-                        'jpeg' => 'image/jpeg',
-                        'gif' => 'image/gif',
-                        'webp' => 'image/webp',
-                        'svg' => 'image/svg+xml',
-                    ];
-                    $mimeType = $mimeTypes[$extension] ?? 'image/png';
-                    return 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
-                }
-            } catch (\Exception $e) {
-                // If fetching fails, return the URL directly
-                return $envLogoUrl;
+            $imageData = $this->fetchRemoteImage($envLogoUrl);
+            if ($imageData) {
+                // Detect mime type from URL or default to png
+                $extension = strtolower(pathinfo(parse_url($envLogoUrl, PHP_URL_PATH), PATHINFO_EXTENSION));
+                $mimeTypes = [
+                    'png' => 'image/png',
+                    'jpg' => 'image/jpeg',
+                    'jpeg' => 'image/jpeg',
+                    'gif' => 'image/gif',
+                    'webp' => 'image/webp',
+                    'svg' => 'image/svg+xml',
+                ];
+                $mimeType = $mimeTypes[$extension] ?? 'image/png';
+                return 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
             }
+            // If fetching fails, log and return null (don't return URL as dompdf can't fetch it either)
+            \Log::warning('Failed to fetch company logo from URL: ' . $envLogoUrl);
+            return null;
         }
 
         $logo = $this->getMedia('logo')->first();
@@ -70,15 +67,100 @@ class Company extends Model implements HasMedia
                     return 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
                 }
                 
-                // Fallback to URL if file doesn't exist locally
-                return $logo->getFullUrl();
+                // Try fetching from URL if local file doesn't exist
+                $url = $logo->getFullUrl();
+                $imageData = $this->fetchRemoteImage($url);
+                if ($imageData) {
+                    $mimeType = $logo->mime_type ?? 'image/png';
+                    return 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
+                }
+                
+                return null;
             } catch (\Exception $e) {
-                // If anything fails, try to return the URL
-                return $logo->getFullUrl();
+                \Log::warning('Failed to load company logo: ' . $e->getMessage());
+                return null;
             }
         }
 
         return null;
+    }
+
+    /**
+     * Fetch remote image using cURL with proper SSL handling
+     *
+     * @param string $url
+     * @return string|false
+     */
+    protected function fetchRemoteImage($url)
+    {
+        if (!function_exists('curl_init')) {
+            // Fallback to file_get_contents if cURL is not available
+            $context = stream_context_create([
+                'ssl' => [
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                ],
+                'http' => [
+                    'timeout' => 30,
+                    'user_agent' => 'Mozilla/5.0 (compatible; CraterInvoice/1.0)',
+                ],
+            ]);
+            return @file_get_contents($url, false, $context);
+        }
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS => 5,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; CraterInvoice/1.0)',
+            CURLOPT_HTTPHEADER => [
+                'Accept: image/*',
+            ],
+        ]);
+
+        $imageData = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($imageData === false || $httpCode !== 200) {
+            \Log::warning('Failed to fetch remote image: ' . $url . ' - HTTP ' . $httpCode . ' - ' . $error);
+            
+            // Retry with SSL verification disabled (some servers have certificate issues)
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $url,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS => 5,
+                CURLOPT_TIMEOUT => 30,
+                CURLOPT_CONNECTTIMEOUT => 10,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => 0,
+                CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; CraterInvoice/1.0)',
+                CURLOPT_HTTPHEADER => [
+                    'Accept: image/*',
+                ],
+            ]);
+
+            $imageData = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            curl_close($ch);
+
+            if ($imageData === false || $httpCode !== 200) {
+                \Log::error('Failed to fetch remote image even with SSL verification disabled: ' . $url . ' - HTTP ' . $httpCode . ' - ' . $error);
+                return false;
+            }
+        }
+
+        return $imageData;
     }
 
     public function getLogoAttribute()
