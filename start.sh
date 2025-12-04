@@ -25,7 +25,7 @@ if [ ! -f ".env" ]; then
     cp .env.example .env 2>/dev/null || touch .env
 fi
 
-# Remove existing DB and app settings
+# Remove existing DB and app settings (SESSION_DOMAIN and SANCTUM_STATEFUL_DOMAINS auto-derive from APP_URL)
 sed -i '/^DB_CONNECTION=/d' .env 2>/dev/null || true
 sed -i '/^DB_HOST=/d' .env 2>/dev/null || true
 sed -i '/^DB_PORT=/d' .env 2>/dev/null || true
@@ -34,9 +34,7 @@ sed -i '/^DB_USERNAME=/d' .env 2>/dev/null || true
 sed -i '/^DB_PASSWORD=/d' .env 2>/dev/null || true
 sed -i '/^APP_URL=/d' .env 2>/dev/null || true
 sed -i '/^APP_NAME=/d' .env 2>/dev/null || true
-sed -i '/^SESSION_DOMAIN=/d' .env 2>/dev/null || true
 sed -i '/^SESSION_DRIVER=/d' .env 2>/dev/null || true
-sed -i '/^SANCTUM_STATEFUL_DOMAINS=/d' .env 2>/dev/null || true
 
 # Write Railway vars to .env
 # Check multiple possible variable names (Railway uses different formats)
@@ -54,17 +52,16 @@ echo "DB_DATABASE=${DB_NAME_VAL}" >> .env
 echo "DB_USERNAME=${DB_USER_VAL}" >> .env
 echo "DB_PASSWORD=${DB_PASS_VAL}" >> .env
 
-# Write APP_URL, APP_NAME, SESSION_DOMAIN, SESSION_DRIVER, and SANCTUM_STATEFUL_DOMAINS
+# Write APP_URL, APP_NAME, SESSION_DRIVER
 # Force SESSION_DRIVER=cookie for Railway (file sessions don't persist in containers)
 # Use COMPANY_NAME for APP_NAME (removes Crater branding)
+# SESSION_DOMAIN and SANCTUM_STATEFUL_DOMAINS auto-derive from APP_URL in config files
 echo "APP_NAME=\"${COMPANY_NAME:-My Company}\"" >> .env
-echo "APP_URL=${APP_URL:-https://crater-production.up.railway.app}" >> .env
-echo "SESSION_DOMAIN=${SESSION_DOMAIN:-.railway.app}" >> .env
+echo "APP_URL=${APP_URL}" >> .env
 echo "SESSION_DRIVER=cookie" >> .env
 echo "SESSION_LIFETIME=10080" >> .env
 echo "SESSION_SECURE_COOKIE=true" >> .env
 echo "SESSION_SAME_SITE=lax" >> .env
-echo "SANCTUM_STATEFUL_DOMAINS=${SANCTUM_STATEFUL_DOMAINS:-crater-production.up.railway.app}" >> .env
 
 # Write Stripe configuration
 echo "STRIPE_KEY=${STRIPE_KEY}" >> .env
@@ -90,9 +87,8 @@ echo "Database config written to .env:"
 grep "^DB_" .env
 echo "App config:"
 grep "^APP_URL" .env
-grep "^SESSION_DOMAIN" .env
 grep "^SESSION_DRIVER" .env
-grep "^SANCTUM_STATEFUL_DOMAINS" .env
+echo "SESSION_DOMAIN and SANCTUM_STATEFUL_DOMAINS auto-derived from APP_URL"
 
 # Function to wait for database
 wait_for_db() {
@@ -358,13 +354,11 @@ export DB_PORT="${DB_PORT_VAL:-${DB_PORT:-3306}}"
 export DB_DATABASE="${DB_NAME_VAL:-${DB_DATABASE:-crater}}"
 export DB_USERNAME="${DB_USER_VAL:-${DB_USERNAME:-crater}}"
 export DB_PASSWORD="${DB_PASSWORD:-}"
-export APP_URL="${APP_URL:-https://crater-production.up.railway.app}"
-export SESSION_DOMAIN="${SESSION_DOMAIN:-.railway.app}"
+export APP_URL="${APP_URL}"
 export SESSION_DRIVER="${SESSION_DRIVER:-cookie}"
 export SESSION_LIFETIME=10080
 export SESSION_SECURE_COOKIE=true
 export SESSION_SAME_SITE=lax
-export SANCTUM_STATEFUL_DOMAINS="${SANCTUM_STATEFUL_DOMAINS:-crater-production.up.railway.app,*.railway.app,localhost}"
 export STRIPE_KEY="${STRIPE_KEY:-}"
 export STRIPE_SECRET="${STRIPE_SECRET:-}"
 export STRIPE_WEBHOOK_SECRET="${STRIPE_WEBHOOK_SECRET:-}"
@@ -392,6 +386,6 @@ echo "============================================"
 
 echo "DB_HOST=$DB_HOST"
 echo "DB_DATABASE=$DB_DATABASE"
-echo "SANCTUM_STATEFUL_DOMAINS=$SANCTUM_STATEFUL_DOMAINS"
+echo "APP_URL=$APP_URL"
 
 exec php artisan serve --host=0.0.0.0 --port=$PORT
