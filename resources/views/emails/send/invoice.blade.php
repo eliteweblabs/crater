@@ -11,7 +11,7 @@ View Invoice
 @endif
 
 @if($data['invoice']['paid_status'] !== 'PAID')
-@component('mail::button', ['url' => url('/' . $data['company']['slug'] . '/customer/invoices/' . $data['invoice']['id']), 'color' => 'success'])
+@component('mail::button', ['url' => url('/' . $data['company']['slug'] . '/customer/invoices/' . $data['invoice']['id'] . '/view'), 'color' => 'success'])
 Pay Now
 @endcomponent
 @endif
