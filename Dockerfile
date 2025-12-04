@@ -47,9 +47,7 @@ RUN echo '<VirtualHost *:80>\n\
     CustomLog ${APACHE_LOG_DIR}/access.log combined\n\
 </VirtualHost>' > /etc/apache2/sites-available/000-default.conf
 
-# Set Apache to listen on PORT (Railway sets this)
-RUN sed -i 's/Listen 80/Listen ${PORT}/g' /etc/apache2/ports.conf \
-    && sed -i 's/:80/:${PORT}/g' /etc/apache2/sites-available/000-default.conf
+# Apache port will be configured at runtime via CMD
 
 # Create storage symlink
 RUN ln -sf /var/www/html/storage/app/public /var/www/html/public/storage || true
@@ -58,4 +56,4 @@ RUN ln -sf /var/www/html/storage/app/public /var/www/html/public/storage || true
 EXPOSE 8080
 
 # Use startup script to configure env then start Apache
-CMD ["bash", "-c", "source start.sh && apache2-foreground"]
+CMD ["bash", "-c", "export SKIP_SERVE=true && source start.sh && sed -i \"s/Listen 80/Listen ${PORT:-8080}/g\" /etc/apache2/ports.conf && sed -i \"s/:80/:${PORT:-8080}/g\" /etc/apache2/sites-available/000-default.conf && apache2-foreground"]
