@@ -18,6 +18,7 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory to Apache's default
 WORKDIR /var/www/html
 
+# Force rebuild: v2
 # Copy application files
 COPY . /var/www/html/
 
