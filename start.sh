@@ -396,9 +396,4 @@ echo "DB_HOST=$DB_HOST"
 echo "DB_DATABASE=$DB_DATABASE"
 echo "APP_URL=$APP_URL"
 
-# If SKIP_SERVE is set (e.g., when using Apache), don't start artisan serve
-if [ "$SKIP_SERVE" = "true" ]; then
-    echo "SKIP_SERVE=true, not starting artisan serve (using external server)"
-else
-    exec php artisan serve --host=0.0.0.0 --port=$PORT
-fi
+exec php artisan serve --host=0.0.0.0 --port=$PORT
