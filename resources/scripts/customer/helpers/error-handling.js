@@ -17,6 +17,13 @@ export const handleError = (err) => {
       (err.response.statusText === 'Unauthorized' ||
         err.response.data === ' Unauthorized.')
     ) {
+      // Check if we're on a payment route - don't logout in that case
+      const currentPath = window.location.pathname
+      if (currentPath.includes('/pay') || currentPath.includes('/invoices/view/')) {
+        // Silently ignore 401 on payment routes - they don't require auth
+        return
+      }
+
       // Unauthorized and log out
       const msg = err.response.data.message
         ? err.response.data.message

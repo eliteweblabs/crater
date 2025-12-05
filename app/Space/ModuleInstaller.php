@@ -30,15 +30,27 @@ class ModuleInstaller
         $token = Setting::getSetting('api_token');
         $response = static::getRemote($url, ['timeout' => 100, 'track_redirects' => true], $token);
 
-        if ($response && ($response->getStatusCode() == 401)) {
-            return response()->json(['error' => 'invalid_token']);
+        // If API token is invalid or API is unavailable, return empty collection instead of error
+        // This allows the UI to still function even without module marketplace access
+        if (!$response || ($response->getStatusCode() == 401) || ($response->getStatusCode() != 200)) {
+            // Return empty collection so UI doesn't break
+            return ModuleResource::collection(collect([]));
         }
 
         if ($response && ($response->getStatusCode() == 200)) {
             $data = $response->getBody()->getContents();
         }
 
+        if (!$data) {
+            return ModuleResource::collection(collect([]));
+        }
+
         $data = json_decode($data);
+
+        // Handle case where data structure might be different
+        if (!$data || !isset($data->modules)) {
+            return ModuleResource::collection(collect([]));
+        }
 
         return ModuleResource::collection(collect($data->modules));
     }
@@ -226,6 +238,10 @@ class ModuleInstaller
             return response()->json(json_decode($data));
         }
 
-        return response()->json(['error' => 'invalid_token']);
+        // Return a more informative error message
+        return response()->json([
+            'error' => 'invalid_token',
+            'message' => 'Unable to connect to module marketplace. Stripe payment functionality is built-in and does not require modules. Configure STRIPE_SECRET and STRIPE_KEY in your environment variables to enable payments.'
+        ]);
     }
 }

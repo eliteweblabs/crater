@@ -34,6 +34,17 @@ export const useGlobalStore = defineStore({
             resolve(response)
           })
           .catch((err) => {
+            // If 401 and we're on a payment route, don't show error - just allow redirect
+            if (err.response && err.response.status === 401) {
+              const currentPath = window.location.pathname
+              // If we're about to pay or on a public invoice page, allow it
+              if (currentPath.includes('/pay') || currentPath.includes('/invoices/view/')) {
+                // Silently fail - payment route doesn't need auth
+                this.isAppLoaded = true
+                resolve({ data: { data: null, meta: { menu: [], modules: [] } } })
+                return
+              }
+            }
             handleError(err)
             reject(err)
           })

@@ -45,7 +45,7 @@ I
               v-if="
                 invoiceData &&
                 invoiceData.paid_status !== 'PAID' &&
-                invoiceData.payment_module_enabled
+                invoiceData.unique_hash
               "
               variant="primary"
               class="justify-center"
@@ -109,7 +109,14 @@ const customerLogo = computed(() => {
 const pageTitle = computed(() => invoiceData.value?.invoice_number)
 
 function payInvoice() {
+  if (!invoiceData.value || !invoiceData.value.unique_hash) {
+    console.error('Invoice data or unique_hash is missing')
+    return
+  }
+  
   // Navigate to public Stripe checkout route (no auth required, server will redirect to Stripe)
-  window.location.href = `/invoices/${invoiceData.value.unique_hash}/pay`
+  const paymentUrl = `/invoices/${invoiceData.value.unique_hash}/pay`
+  console.log('Redirecting to payment:', paymentUrl)
+  window.location.href = paymentUrl
 }
 </script>

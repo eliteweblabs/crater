@@ -21,6 +21,14 @@ class BootstrapController extends Controller
     {
         $customer = Auth::guard('customer')->user();
 
+        if (!$customer) {
+            return response()->json([
+                'error' => 'Unauthorized',
+                'message' => 'Customer authentication required. Please log in to access the customer portal.'
+            ], 401);
+        }
+
+        $menu = [];
         foreach (\Menu::get('customer_portal_menu')->items->toArray() as $data) {
             if ($customer) {
                 $menu[] = [

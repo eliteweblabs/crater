@@ -36,18 +36,26 @@ class StripePaymentController extends Controller
             // Initialize Stripe
             Stripe::setApiKey(config('services.stripe.secret'));
 
+            // Convert amount to cents for Stripe (Stripe requires amounts in smallest currency unit)
+            // Zero-decimal currencies (JPY, KRW, etc.) don't need conversion
+            $currencyCode = strtolower($invoice->currency->code);
+            $zeroDecimalCurrencies = ['jpy', 'krw', 'clp', 'vnd', 'xof', 'xaf', 'bif', 'djf', 'gnf', 'kmf', 'mga', 'rwf', 'xpf', 'vuv', 'ugx'];
+            $amountInCents = in_array($currencyCode, $zeroDecimalCurrencies) 
+                ? (int)$invoice->due_amount 
+                : (int)($invoice->due_amount * 100);
+
             // Create Stripe checkout session
             // Payment methods: card (includes Apple Pay/Google Pay), link (Stripe 1-click), cashapp, us_bank_account (ACH)
             $session = StripeSession::create([
                 'payment_method_types' => ['card', 'link', 'cashapp', 'us_bank_account'],
                 'line_items' => [[
                     'price_data' => [
-                        'currency' => strtolower($invoice->currency->code),
+                        'currency' => $currencyCode,
                         'product_data' => [
                             'name' => 'Invoice #' . $invoice->invoice_number,
                             'description' => 'Payment for ' . $invoice->company->name,
                         ],
-                        'unit_amount' => (int)($invoice->due_amount), // Amount is already in cents
+                        'unit_amount' => $amountInCents,
                     ],
                     'quantity' => 1,
                 ]],
@@ -111,18 +119,26 @@ class StripePaymentController extends Controller
             // Initialize Stripe
             Stripe::setApiKey(env('STRIPE_SECRET'));
 
+            // Convert amount to cents for Stripe (Stripe requires amounts in smallest currency unit)
+            // Zero-decimal currencies (JPY, KRW, etc.) don't need conversion
+            $currencyCode = strtolower($invoice->currency->code);
+            $zeroDecimalCurrencies = ['jpy', 'krw', 'clp', 'vnd', 'xof', 'xaf', 'bif', 'djf', 'gnf', 'kmf', 'mga', 'rwf', 'xpf', 'vuv', 'ugx'];
+            $amountInCents = in_array($currencyCode, $zeroDecimalCurrencies) 
+                ? (int)$invoice->due_amount 
+                : (int)($invoice->due_amount * 100);
+
             // Create Stripe checkout session
             // Payment methods: card (includes Apple Pay/Google Pay), link (Stripe 1-click), cashapp, us_bank_account (ACH)
             $session = StripeSession::create([
                 'payment_method_types' => ['card', 'link', 'cashapp', 'us_bank_account'],
                 'line_items' => [[
                     'price_data' => [
-                        'currency' => strtolower($invoice->currency->code),
+                        'currency' => $currencyCode,
                         'product_data' => [
                             'name' => 'Invoice #' . $invoice->invoice_number,
                             'description' => 'Payment for ' . $invoice->company->name,
                         ],
-                        'unit_amount' => (int)($invoice->due_amount), // Amount is already in cents
+                        'unit_amount' => $amountInCents,
                     ],
                     'quantity' => 1,
                 ]],

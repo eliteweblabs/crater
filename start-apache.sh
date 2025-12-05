@@ -148,17 +148,6 @@ php artisan cache:clear 2>/dev/null || true
 # Set permissions
 chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
 
-# Ensure .env is writable by www-data
-if [ -f ".env" ]; then
-    chown www-data:www-data .env 2>/dev/null || true
-    chmod 664 .env 2>/dev/null || true
-fi
-
-# Ensure .env can be created if it doesn't exist
-touch .env 2>/dev/null || true
-chown www-data:www-data .env 2>/dev/null || true
-chmod 664 .env 2>/dev/null || true
-
 echo "============================================"
 echo "Starting Apache on port ${PORT}"
 echo "============================================"
