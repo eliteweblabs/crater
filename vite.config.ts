@@ -13,8 +13,7 @@ export default defineConfig({
     },
     resolve: {
         alias: {
-            // Use ES module build for vue-i18n to support Composition API
-            "vue-i18n": "vue-i18n/dist/vue-i18n.esm-bundler.js"
+            // Remove vue-i18n alias - let it resolve naturally
         }
     }
 }).withPlugins(
