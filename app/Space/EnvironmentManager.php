@@ -133,33 +133,100 @@ class EnvironmentManager
         }
 
         try {
+            // Check if .env file is writable before attempting to write
+            if (!is_writable($this->envPath) && file_exists($this->envPath)) {
+                // Try multiple approaches to make it writable
+                $envPath = $this->envPath;
+                $attempts = [
+                    // Try to change ownership to www-data (Apache user)
+                    function() use ($envPath) {
+                        if (function_exists('posix_getpwnam')) {
+                            $wwwDataInfo = @posix_getpwnam('www-data');
+                            if ($wwwDataInfo !== false) {
+                                @chown($envPath, 'www-data');
+                                @chgrp($envPath, 'www-data');
+                            }
+                        }
+                    },
+                    // Try to make it world-writable
+                    function() use ($envPath) {
+                        @chmod($envPath, 0666);
+                    },
+                    // Try to make it group-writable
+                    function() use ($envPath) {
+                        @chmod($envPath, 0664);
+                    },
+                    // Try to make it owner-writable
+                    function() use ($envPath) {
+                        @chmod($envPath, 0644);
+                    },
+                ];
+                
+                foreach ($attempts as $attempt) {
+                    try {
+                        $attempt();
+                        if (is_writable($this->envPath)) {
+                            \Log::info('EnvironmentManager: Successfully made .env writable');
+                            break;
+                        }
+                    } catch (\Exception $e) {
+                        // Continue to next attempt
+                    }
+                }
+                
+                // Final check
+                if (!is_writable($this->envPath)) {
+                    $perms = @fileperms($this->envPath);
+                    $owner = @fileowner($this->envPath);
+                    $group = @filegroup($this->envPath);
+                    \Log::error('EnvironmentManager: .env file is not writable', [
+                        'path' => $this->envPath,
+                        'perms' => $perms ? decoct($perms & 0777) : 'unknown',
+                        'owner' => $owner,
+                        'group' => $group,
+                        'is_readable' => is_readable($this->envPath),
+                        'is_writable' => is_writable($this->envPath),
+                    ]);
+                    return [
+                        'error' => 'database_variables_save_error',
+                        'error_message' => 'Cannot write to .env file. Please check file permissions. The file may need to be owned by www-data or made world-writable (666).',
+                    ];
+                }
+            }
+            
+            $envContent = file_get_contents($this->envPath);
+            
             file_put_contents($this->envPath, str_replace(
                 $oldDatabaseData,
                 $newDatabaseData,
-                file_get_contents($this->envPath)
+                $envContent
             ));
 
+            $envContent = file_get_contents($this->envPath);
             file_put_contents($this->envPath, str_replace(
                 'APP_URL='.config('app.url'),
                 'APP_URL='.$request->app_url,
-                file_get_contents($this->envPath)
+                $envContent
             ));
 
+            $envContent = file_get_contents($this->envPath);
             file_put_contents($this->envPath, str_replace(
                 'SANCTUM_STATEFUL_DOMAINS='.env('SANCTUM_STATEFUL_DOMAINS'),
                 'SANCTUM_STATEFUL_DOMAINS='.$request->app_domain,
-                file_get_contents($this->envPath)
+                $envContent
             ));
 
-
+            $envContent = file_get_contents($this->envPath);
             file_put_contents($this->envPath, str_replace(
                 'SESSION_DOMAIN='.config('session.domain'),
                 'SESSION_DOMAIN='.explode(':', $request->app_domain)[0],
-                file_get_contents($this->envPath)
+                $envContent
             ));
         } catch (Exception $e) {
+            \Log::error('EnvironmentManager: Error writing to .env: ' . $e->getMessage());
             return [
                 'error' => 'database_variables_save_error',
+                'error_message' => 'Cannot write to .env file: ' . $e->getMessage(),
             ];
         }
 

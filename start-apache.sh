@@ -14,6 +14,20 @@ if [ ! -f ".env" ]; then
     cp .env.example .env 2>/dev/null || touch .env
 fi
 
+# Ensure .env file is writable by the web server
+# On Railway, the web server runs as www-data (Apache) or a non-root user
+# We need to make it writable and ensure correct ownership
+if [ -f ".env" ]; then
+    # Try to change ownership to www-data (Apache user) if it exists
+    if id www-data >/dev/null 2>&1; then
+        chown www-data:www-data .env 2>/dev/null || true
+    fi
+    # Make it writable by owner and group (664) or everyone (666)
+    chmod 666 .env 2>/dev/null || chmod 664 .env 2>/dev/null || chmod 644 .env 2>/dev/null || true
+    # Also ensure the directory is writable
+    chmod 755 . 2>/dev/null || true
+fi
+
 # Remove existing settings
 sed -i '/^DB_CONNECTION=/d' .env 2>/dev/null || true
 sed -i '/^DB_HOST=/d' .env 2>/dev/null || true
@@ -73,6 +87,22 @@ echo "MAIL_FROM_NAME=\"${MAIL_FROM_NAME:-${COMPANY_NAME:-My Company}}\"" >> .env
 # Filesystem
 echo "FILESYSTEM_DRIVER=public" >> .env
 echo "MEDIA_DISK=public" >> .env
+
+# Ensure .env file is writable by web server after all writes
+# This is critical for the installation wizard to be able to update .env
+if [ -f ".env" ]; then
+    # Try to change ownership to www-data (Apache user) if it exists
+    if id www-data >/dev/null 2>&1; then
+        chown www-data:www-data .env 2>/dev/null || true
+    fi
+    # Make it writable by owner and group (664) or everyone (666)
+    chmod 666 .env 2>/dev/null || chmod 664 .env 2>/dev/null || chmod 644 .env 2>/dev/null || true
+    # Also ensure the directory is writable
+    chmod 755 . 2>/dev/null || true
+    # Verify permissions
+    ls -la .env 2>/dev/null || true
+    echo ".env file permissions set (writable by web server)"
+fi
 
 echo "Config written:"
 echo "APP_URL=${APP_URL}"
@@ -145,8 +175,18 @@ php artisan storage:link 2>/dev/null || true
 php artisan config:clear 2>/dev/null || true
 php artisan cache:clear 2>/dev/null || true
 
-# Set permissions
+# Set permissions for storage and cache directories
 chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
+chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
+
+# Final check: Ensure .env is still writable
+if [ -f ".env" ]; then
+    if id www-data >/dev/null 2>&1; then
+        chown www-data:www-data .env 2>/dev/null || true
+    fi
+    chmod 666 .env 2>/dev/null || chmod 664 .env 2>/dev/null || true
+    echo "Final .env permissions check complete"
+fi
 
 echo "============================================"
 echo "Starting Apache on port ${PORT}"

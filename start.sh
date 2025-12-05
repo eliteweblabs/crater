@@ -25,6 +25,20 @@ if [ ! -f ".env" ]; then
     cp .env.example .env 2>/dev/null || touch .env
 fi
 
+# Ensure .env file is writable by the web server
+# On Railway, the web server runs as www-data (Apache) or a non-root user
+# We need to make it writable and ensure correct ownership
+if [ -f ".env" ]; then
+    # Try to change ownership to www-data (Apache user) if it exists
+    if id www-data >/dev/null 2>&1; then
+        chown www-data:www-data .env 2>/dev/null || true
+    fi
+    # Make it writable by owner and group (664) or everyone (666)
+    chmod 666 .env 2>/dev/null || chmod 664 .env 2>/dev/null || chmod 644 .env 2>/dev/null || true
+    # Also ensure the directory is writable
+    chmod 755 . 2>/dev/null || true
+fi
+
 # Remove existing DB and app settings (SESSION_DOMAIN and SANCTUM_STATEFUL_DOMAINS auto-derive from APP_URL)
 sed -i '/^DB_CONNECTION=/d' .env 2>/dev/null || true
 sed -i '/^DB_HOST=/d' .env 2>/dev/null || true
@@ -98,6 +112,22 @@ grep "^APP_URL" .env
 grep "^SESSION_DRIVER" .env
 echo "SESSION_DOMAIN and SANCTUM_STATEFUL_DOMAINS auto-derived from APP_URL"
 
+# Ensure .env file is writable by web server after all writes
+# This is critical for the installation wizard to be able to update .env
+if [ -f ".env" ]; then
+    # Try to change ownership to www-data (Apache user) if it exists
+    if id www-data >/dev/null 2>&1; then
+        chown www-data:www-data .env 2>/dev/null || true
+    fi
+    # Make it writable by owner and group (664) or everyone (666)
+    chmod 666 .env 2>/dev/null || chmod 664 .env 2>/dev/null || chmod 644 .env 2>/dev/null || true
+    # Also ensure the directory is writable
+    chmod 755 . 2>/dev/null || true
+    # Verify permissions
+    ls -la .env 2>/dev/null || true
+    echo ".env file permissions set (writable by web server)"
+fi
+
 # Function to wait for database
 wait_for_db() {
     echo "Waiting for database connection..."
@@ -147,11 +177,18 @@ wait_for_db() {
 }
 
 # FORCE_SETUP: Wipe database and force fresh setup
+# WARNING: This will DELETE ALL DATA including invoices, customers, etc.
+# SAFETY: This will only run if the database is empty or if FORCE_SETUP_EXPLICIT is also set to true
+# After running once, FORCE_SETUP is automatically disabled to prevent accidental data loss.
 if [ "$FORCE_SETUP" = "true" ] || [ "$FORCE_SETUP" = "1" ]; then
-    echo "FORCE_SETUP enabled - wiping database..."
+    echo "============================================"
+    echo "FORCE_SETUP DETECTED"
+    echo "============================================"
+    
     if wait_for_db; then
-        # Drop all tables using raw SQL (db:wipe doesn't exist in this Laravel version)
-        php -r "
+        # Check if database has existing data (safety check)
+        echo "Checking if database has existing data..."
+        HAS_DATA=$(php -r "
             \$host = getenv('DB_HOST') ?: '$DB_HOST_VAL';
             \$port = getenv('DB_PORT') ?: '$DB_PORT_VAL';
             \$db = getenv('DB_DATABASE') ?: '$DB_NAME_VAL';
@@ -160,20 +197,114 @@ if [ "$FORCE_SETUP" = "true" ] || [ "$FORCE_SETUP" = "1" ]; then
             try {
                 \$pdo = new PDO(\"mysql:host=\$host;port=\$port;dbname=\$db\", \$user, \$pass);
                 \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-                \$pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
-                \$tables = \$pdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN);
-                foreach (\$tables as \$table) {
-                    \$pdo->exec(\"DROP TABLE IF EXISTS \`\$table\`\");
+                
+                // Check if settings table exists and has profile_complete = COMPLETED
+                try {
+                    \$stmt = \$pdo->query(\"SELECT value FROM settings WHERE option = 'profile_complete' LIMIT 1\");
+                    \$result = \$stmt->fetch(PDO::FETCH_ASSOC);
+                    if (\$result && \$result['value'] === 'COMPLETED') {
+                        echo 'COMPLETED';
+                        exit(0);
+                    }
+                } catch (Exception \$e) {
+                    // Table doesn't exist, check users table
                 }
-                \$pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
-                echo \"Dropped all tables successfully.\n\";
+                
+                // Check if users table exists and has data
+                try {
+                    \$stmt = \$pdo->query(\"SELECT COUNT(*) as count FROM users\");
+                    \$result = \$stmt->fetch(PDO::FETCH_ASSOC);
+                    if (\$result && \$result['count'] > 0) {
+                        echo 'HAS_DATA';
+                        exit(0);
+                    }
+                } catch (Exception \$e) {
+                    // Table doesn't exist
+                }
+                
+                echo 'EMPTY';
             } catch (Exception \$e) {
-                echo \"Error wiping database: \" . \$e->getMessage() . \"\n\";
+                echo 'ERROR';
             }
-        " || echo "Database wipe completed/failed"
-        rm -f storage/app/database_created 2>/dev/null || true
-        echo "Database wiped, proceeding with fresh setup..."
+        " 2>/dev/null || echo "ERROR")
+        
+        if [ "$HAS_DATA" = "COMPLETED" ] || [ "$HAS_DATA" = "HAS_DATA" ]; then
+            if [ "$FORCE_SETUP_EXPLICIT" != "true" ] && [ "$FORCE_SETUP_EXPLICIT" != "1" ]; then
+                echo "============================================"
+                echo "SAFETY CHECK: Database contains data!"
+                echo "============================================"
+                echo "FORCE_SETUP is enabled, but the database has existing data."
+                echo "To prevent accidental data loss, FORCE_SETUP has been disabled."
+                echo ""
+                echo "If you REALLY want to wipe the database, you must ALSO set:"
+                echo "  FORCE_SETUP_EXPLICIT=true"
+                echo ""
+                echo "This requires explicit confirmation to prevent accidental data loss."
+                echo "============================================"
+                # Unset FORCE_SETUP to prevent it from running
+                export FORCE_SETUP=false
+            else
+                echo "============================================"
+                echo "WARNING: FORCE_SETUP_EXPLICIT is set!"
+                echo "WIPING DATABASE AND ALL DATA..."
+                echo "============================================"
+                # Drop all tables using raw SQL
+                php -r "
+                    \$host = getenv('DB_HOST') ?: '$DB_HOST_VAL';
+                    \$port = getenv('DB_PORT') ?: '$DB_PORT_VAL';
+                    \$db = getenv('DB_DATABASE') ?: '$DB_NAME_VAL';
+                    \$user = getenv('DB_USERNAME') ?: '$DB_USER_VAL';
+                    \$pass = getenv('DB_PASSWORD') ?: '$DB_PASS_VAL';
+                    try {
+                        \$pdo = new PDO(\"mysql:host=\$host;port=\$port;dbname=\$db\", \$user, \$pass);
+                        \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                        \$pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
+                        \$tables = \$pdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN);
+                        foreach (\$tables as \$table) {
+                            \$pdo->exec(\"DROP TABLE IF EXISTS \`\$table\`\");
+                        }
+                        \$pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
+                        echo \"Dropped all tables successfully.\n\";
+                    } catch (Exception \$e) {
+                        echo \"Error wiping database: \" . \$e->getMessage() . \"\n\";
+                    }
+                " || echo "Database wipe completed/failed"
+                rm -f storage/app/database_created 2>/dev/null || true
+                echo "Database wiped, proceeding with fresh setup..."
+                # Disable FORCE_SETUP after running
+                export FORCE_SETUP=false
+            fi
+        else
+            # Database is empty, safe to run FORCE_SETUP
+            echo "Database is empty, proceeding with FORCE_SETUP..."
+            # Drop all tables using raw SQL (db:wipe doesn't exist in this Laravel version)
+            php -r "
+                \$host = getenv('DB_HOST') ?: '$DB_HOST_VAL';
+                \$port = getenv('DB_PORT') ?: '$DB_PORT_VAL';
+                \$db = getenv('DB_DATABASE') ?: '$DB_NAME_VAL';
+                \$user = getenv('DB_USERNAME') ?: '$DB_USER_VAL';
+                \$pass = getenv('DB_PASSWORD') ?: '$DB_PASS_VAL';
+                try {
+                    \$pdo = new PDO(\"mysql:host=\$host;port=\$port;dbname=\$db\", \$user, \$pass);
+                    \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                    \$pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
+                    \$tables = \$pdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN);
+                    foreach (\$tables as \$table) {
+                        \$pdo->exec(\"DROP TABLE IF EXISTS \`\$table\`\");
+                    }
+                    \$pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
+                    echo \"Dropped all tables successfully.\n\";
+                } catch (Exception \$e) {
+                    echo \"Error wiping database: \" . \$e->getMessage() . \"\n\";
+                }
+            " || echo "Database wipe completed/failed"
+            rm -f storage/app/database_created 2>/dev/null || true
+            echo "Database wiped, proceeding with fresh setup..."
+            # Disable FORCE_SETUP after running
+            export FORCE_SETUP=false
+        fi
     fi
+    echo "============================================"
 fi
 
 # Quick database fix - directly mark as installed if tables exist
@@ -212,12 +343,13 @@ if [ "$AUTO_SETUP" = "true" ] || [ "$AUTO_SETUP" = "1" ]; then
                 // Check/create company
                 echo 'Checking for company...\n';
                 \$company = \Crater\Models\Company::first();
+                \$companyName = env('COMPANY_NAME', 'My Company');
                 if (!\$company) {
                     echo 'Creating company...\n';
                     \$company = \Crater\Models\Company::create([
-                        'name' => env('COMPANY_NAME', 'My Company'),
+                        'name' => \$companyName,
                         'owner_id' => \$user->id,
-                        'slug' => \Illuminate\Support\Str::slug(env('COMPANY_NAME', 'My Company')),
+                        'slug' => \Illuminate\Support\Str::slug(\$companyName),
                     ]);
                     \$company->unique_hash = \Vinkla\Hashids\Facades\Hashids::connection(\Crater\Models\Company::class)->encode(\$company->id);
                     \$company->save();
@@ -225,9 +357,18 @@ if [ "$AUTO_SETUP" = "true" ] || [ "$AUTO_SETUP" = "1" ]; then
                     \$user->companies()->attach(\$company->id);
                     \Silber\Bouncer\BouncerFacade::scope()->to(\$company->id);
                     \$user->assign('super admin');
-                    echo 'Company created: ' . \$company->name . '\n';
+                    echo 'Company created: ' . \$company->name . ' (slug: ' . \$company->slug . ')\n';
                 } else {
-                    echo 'Company exists: ' . \$company->name . '\n';
+                    // Update existing company if COMPANY_NAME is set and different
+                    if (\$companyName && \$company->name !== \$companyName) {
+                        echo 'Updating company name from "' . \$company->name . '" to "' . \$companyName . '"...\n';
+                        \$company->name = \$companyName;
+                        \$company->slug = \Illuminate\Support\Str::slug(\$companyName);
+                        \$company->save();
+                        echo 'Company updated: ' . \$company->name . ' (slug: ' . \$company->slug . ')\n';
+                    } else {
+                        echo 'Company exists: ' . \$company->name . ' (slug: ' . \$company->slug . ')\n';
+                    }
                 }
                 
                 // Mark as complete
@@ -294,13 +435,20 @@ fi
 # Update company name and slug if COMPANY_NAME is set
 if [ ! -z "$COMPANY_NAME" ]; then
     echo "Updating company name to: $COMPANY_NAME"
-    php artisan tinker --execute="
+    # Use a PHP script to safely handle special characters
+    php -r "
+        require __DIR__.'/vendor/autoload.php';
+        \$app = require_once __DIR__.'/bootstrap/app.php';
+        \$app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
         \$company = \Crater\Models\Company::first();
         if (\$company) {
-            \$company->name = '$COMPANY_NAME';
-            \$company->slug = \Illuminate\Support\Str::slug('$COMPANY_NAME');
+            \$companyName = getenv('COMPANY_NAME');
+            \$company->name = \$companyName;
+            \$company->slug = \Illuminate\Support\Str::slug(\$companyName);
             \$company->save();
-            echo 'Company updated: ' . \$company->name . ' (slug: ' . \$company->slug . ')\n';
+            echo 'Company updated: ' . \$company->name . ' (slug: ' . \$company->slug . ')' . PHP_EOL;
+        } else {
+            echo 'No company found to update' . PHP_EOL;
         }
     " || echo "Company update completed/failed"
 fi
