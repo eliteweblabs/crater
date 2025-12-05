@@ -16,38 +16,41 @@ class OnboardingWizardController extends Controller
      */
     public function getStep(Request $request)
     {
-        // Quick response if database not created yet
+        // First, try to check the database directly (more reliable than file)
+        try {
+            // Quick check: does settings table exist?
+            if (\Schema::hasTable('settings')) {
+                // Use direct DB query for faster response (avoid model overhead)
+                $profileComplete = \DB::table('settings')
+                    ->where('option', 'profile_complete')
+                    ->value('value');
+
+                // If installation is complete, recreate the file if missing
+                if ($profileComplete === 'COMPLETED' && !\Storage::disk('local')->has('database_created')) {
+                    \Storage::disk('local')->put('database_created', 'database_created');
+                }
+
+                return response()->json([
+                    'profile_complete' => $profileComplete ?: 0,
+                ]);
+            }
+        } catch (\Exception $e) {
+            // Database might not be ready yet (migrations still running)
+            \Log::debug('OnboardingWizard getStep: Database not ready - ' . $e->getMessage());
+        }
+
+        // Fallback: check for database_created file
+        // If file doesn't exist, installation hasn't started
         if (!\Storage::disk('local')->has('database_created')) {
             return response()->json([
                 'profile_complete' => 0,
             ]);
         }
 
-        try {
-            // Quick check: does settings table exist?
-            if (!\Schema::hasTable('settings')) {
-                // Settings table doesn't exist, migrations still running
-                return response()->json([
-                    'profile_complete' => 0,
-                ]);
-            }
-
-            // Use direct DB query for faster response (avoid model overhead)
-            $profileComplete = \DB::table('settings')
-                ->where('option', 'profile_complete')
-                ->value('value');
-
-            return response()->json([
-                'profile_complete' => $profileComplete ?: 0,
-            ]);
-        } catch (\Exception $e) {
-            // Database might not be ready yet (migrations still running)
-            \Log::debug('OnboardingWizard getStep: Database not ready - ' . $e->getMessage());
-            // Return step 0 on any error
-            return response()->json([
-                'profile_complete' => 0,
-            ]);
-        }
+        // File exists but database check failed - might be in transition
+        return response()->json([
+            'profile_complete' => 0,
+        ]);
     }
 
     public function updateStep(Request $request)
