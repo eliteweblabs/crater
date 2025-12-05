@@ -20,11 +20,25 @@ class AutoAuthenticateAdmin
             return $next($request);
         }
         
-        // Auto-login as super admin
-        $superAdmin = User::where('role', 'super admin')->first();
+        // Skip if database tables don't exist yet (during installation)
+        try {
+            if (!\Schema::hasTable('users')) {
+                return $next($request);
+            }
+        } catch (\Exception $e) {
+            // Database connection failed or tables don't exist
+            return $next($request);
+        }
         
-        if ($superAdmin) {
-            Auth::login($superAdmin);
+        // Auto-login as super admin
+        try {
+            $superAdmin = User::where('role', 'super admin')->first();
+            
+            if ($superAdmin) {
+                Auth::login($superAdmin);
+            }
+        } catch (\Exception $e) {
+            // Table doesn't exist or query failed - continue without auto-login
         }
         
         return $next($request);
