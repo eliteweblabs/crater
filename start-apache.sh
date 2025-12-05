@@ -88,6 +88,56 @@ export DB_PASSWORD="${DB_PASS_VAL}"
 export APP_URL="${APP_URL}"
 export PORT="${PORT}"
 
+# FORCE_SETUP: Wipe database and force fresh setup
+if [ "$FORCE_SETUP" = "true" ] || [ "$FORCE_SETUP" = "1" ]; then
+    echo "FORCE_SETUP enabled - wiping database..."
+    # Wait for database to be ready
+    for i in {1..30}; do
+        if php -r "
+            \$host = '${DB_HOST_VAL}';
+            \$port = '${DB_PORT_VAL}';
+            \$db = '${DB_NAME_VAL}';
+            \$user = '${DB_USER_VAL}';
+            \$pass = '${DB_PASS_VAL}';
+            try {
+                \$pdo = new PDO(\"mysql:host=\$host;port=\$port;dbname=\$db\", \$user, \$pass);
+                exit(0);
+            } catch (Exception \$e) {
+                exit(1);
+            }
+        " 2>/dev/null; then
+            echo "Database connection successful"
+            break
+        fi
+        echo "Waiting for database... ($i/30)"
+        sleep 2
+    done
+    
+    # Drop all tables
+    php -r "
+        \$host = '${DB_HOST_VAL}';
+        \$port = '${DB_PORT_VAL}';
+        \$db = '${DB_NAME_VAL}';
+        \$user = '${DB_USER_VAL}';
+        \$pass = '${DB_PASS_VAL}';
+        try {
+            \$pdo = new PDO(\"mysql:host=\$host;port=\$port;dbname=\$db\", \$user, \$pass);
+            \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            \$pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
+            \$tables = \$pdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN);
+            foreach (\$tables as \$table) {
+                \$pdo->exec(\"DROP TABLE IF EXISTS \`\$table\`\");
+            }
+            \$pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
+            echo \"Dropped all tables successfully.\n\";
+        } catch (Exception \$e) {
+            echo \"Error wiping database: \" . \$e->getMessage() . \"\n\";
+        }
+    " || echo "Database wipe completed/failed"
+    rm -f storage/app/database_created 2>/dev/null || true
+    echo "Database wiped, proceeding with fresh setup..."
+fi
+
 # Create storage link
 php artisan storage:link 2>/dev/null || true
 
