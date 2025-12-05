@@ -1,0 +1,25 @@
+[phases.setup]
+nixPkgs = ["php81", "php81Packages.composer"]
+
+[phases.install]
+cmds = [
+  "composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist",
+  "chmod +x start.sh"
+]
+
+# Note: Cache commands removed from build phase because they require
+# environment variables that may not be available during build.
+# These should be run at runtime after APP_KEY is set.
+# To cache at runtime, add to start command or run manually after deployment.
+
+[start]
+cmd = "bash start.sh"
+
+
+
+
+
+
+
+
+

@@ -1,46 +1,27 @@
-# Laravel
-/vendor/
-/node_modules/
-/public/hot
+/Modules
+/node_modules
 /public/storage
+/public/hot
 /storage/*.key
-/storage/app/*
-!/storage/app/.gitkeep
-/storage/framework/cache/*
-!/storage/framework/cache/.gitkeep
-/storage/framework/sessions/*
-!/storage/framework/sessions/.gitkeep
-/storage/framework/testing/*
-!/storage/framework/testing/.gitkeep
-/storage/framework/views/*
-!/storage/framework/views/.gitkeep
-/storage/logs/*
-!/storage/logs/.gitkeep
-/bootstrap/cache/*
-!/bootstrap/cache/.gitkeep
-
-# Environment
+/vendor
+/.idea
+Homestead.json
+Homestead.yaml
 .env
-.env.backup
-.env.production
 .phpunit.result.cache
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# OS
+.rnd
+/.expo
+/.vscode
+/docker-compose/db/data/
+.gitkeep
+/public/docs
+/.scribe
+!storage/fonts/.gitkeep
 .DS_Store
-Thumbs.db
 
-# Build
-/public/build
-/dist
 
-# Railway
-.railway/
+
+
+
 
 

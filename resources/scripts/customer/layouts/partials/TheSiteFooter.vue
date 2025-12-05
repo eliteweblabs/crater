@@ -1,0 +1,20 @@
+<template>
+  <footer
+    class="
+      fixed
+      bottom-0
+      flex
+      items-center
+      justify-center
+      w-full
+      h-10
+      py-2
+      text-sm
+      font-normal
+      text-gray-500
+      bg-white
+    "
+  >
+    <!-- Branding removed -->
+  </footer>
+</template>
