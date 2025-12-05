@@ -41,20 +41,24 @@ I
               </BaseButton>
             </a>
 
-            <BaseButton
+            <a
               v-if="
                 !isLoading &&
                 invoiceData &&
                 invoiceData.paid_status !== 'PAID' &&
                 invoiceData.unique_hash
               "
-              variant="primary"
-              class="justify-center"
-              :disabled="!invoiceData || !invoiceData.unique_hash"
-              @click="payInvoice"
+              :href="paymentUrl"
+              class="block w-full"
             >
-              {{ $t('general.pay_invoice') }}
-            </BaseButton>
+              <BaseButton
+                variant="primary"
+                class="justify-center w-full"
+                :disabled="!invoiceData || !invoiceData.unique_hash"
+              >
+                {{ $t('general.pay_invoice') }}
+              </BaseButton>
+            </a>
           </div>
         </template>
       </BasePageHeader>
@@ -109,29 +113,10 @@ const customerLogo = computed(() => {
 
 const pageTitle = computed(() => invoiceData.value?.invoice_number)
 
-function payInvoice() {
-  try {
-    if (!invoiceData.value) {
-      console.error('Invoice data is not loaded yet')
-      alert('Invoice data is still loading. Please wait a moment and try again.')
-      return
-    }
-    
-    if (!invoiceData.value.unique_hash) {
-      console.error('Invoice unique_hash is missing', invoiceData.value)
-      alert('Unable to process payment: Invoice information is incomplete.')
-      return
-    }
-    
-    // Navigate to public Stripe checkout route (no auth required, server will redirect to Stripe)
-    const paymentUrl = `/invoices/${invoiceData.value.unique_hash}/pay`
-    console.log('Redirecting to payment:', paymentUrl)
-    
-    // Use window.location.replace to avoid Vue Router interference
-    window.location.replace(paymentUrl)
-  } catch (error) {
-    console.error('Error in payInvoice:', error)
-    alert('An error occurred while processing payment. Please try again.')
+const paymentUrl = computed(() => {
+  if (!invoiceData.value || !invoiceData.value.unique_hash) {
+    return '#'
   }
-}
+  return `/invoices/${invoiceData.value.unique_hash}/pay`
+})
 </script>
