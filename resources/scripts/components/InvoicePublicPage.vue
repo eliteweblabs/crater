@@ -64,19 +64,28 @@ I
 
 <script setup>
 import axios from 'axios'
-import { ref, reactive, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import InvoiceInformationCard from '@/scripts/components/InvoiceInformationCard.vue'
 
 let invoiceData = ref(null)
 const route = useRoute()
-const router = useRouter()
 
 loadInvoice()
 
 async function loadInvoice() {
-  let res = await axios.get(`/customer/invoices/${route.params.hash}`)
-  invoiceData.value = res.data.data
+  try {
+    // The hash parameter is actually an email log token for public invoice view
+    let res = await axios.get(`/customer/invoices/${route.params.hash}`)
+    invoiceData.value = res.data.data
+  } catch (error) {
+    console.error('Error loading invoice:', error)
+    if (error.response) {
+      console.error('Response status:', error.response.status)
+      console.error('Response data:', error.response.data)
+    }
+    // Handle error - could show error message to user
+  }
 }
 
 const shareableLink = computed(() => {

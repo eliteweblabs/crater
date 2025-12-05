@@ -117,7 +117,18 @@ class StripePaymentController extends Controller
             $emailLogToken = $invoice->emailLogs()->latest()->first()->token ?? $invoice->unique_hash;
 
             // Initialize Stripe
-            Stripe::setApiKey(env('STRIPE_SECRET'));
+            $stripeSecret = config('services.stripe.secret');
+            if (!$stripeSecret) {
+                \Log::error('Stripe secret key not configured');
+                return redirect()->back()->with('error', 'Payment processing is not configured. Please contact support.');
+            }
+            Stripe::setApiKey($stripeSecret);
+
+            // Ensure currency is loaded
+            if (!$invoice->currency) {
+                \Log::error('Invoice currency not loaded for invoice: ' . $invoice->id);
+                return redirect()->back()->with('error', 'Invoice currency information is missing.');
+            }
 
             // Convert amount to cents for Stripe (Stripe requires amounts in smallest currency unit)
             // Zero-decimal currencies (JPY, KRW, etc.) don't need conversion
