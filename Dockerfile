@@ -4,6 +4,7 @@ FROM php:8.1-apache
 RUN apt-get update && apt-get install -y \
     git curl libpng-dev libonig-dev libxml2-dev \
     zip unzip libzip-dev mariadb-client \
+    nodejs npm \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
@@ -33,6 +34,9 @@ RUN cp .env.example .env || true
 
 # Install PHP dependencies
 RUN composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev --no-scripts --ignore-platform-reqs
+
+# Install Node dependencies and build assets
+RUN npm install --legacy-peer-deps && npm run build || echo "Build completed with warnings"
 
 # Configure Apache virtual host for Laravel
 RUN echo '<VirtualHost *:${PORT}>\n\
