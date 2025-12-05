@@ -41,7 +41,7 @@ export default class Crater {
     const i18n = createI18n({
       locale: 'en',
       fallbackLocale: 'en',
-      legacy: false, // Use Composition API mode
+      legacy: true, // Enable legacy mode for $tc support, but Composition API still works
       globalInjection: true,
       messages: this.messages,
     })
