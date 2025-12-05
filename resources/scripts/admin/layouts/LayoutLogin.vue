@@ -141,7 +141,7 @@ const pageHeading = computed(() => {
     return window.login_page_heading
   }
 
-  return 'Simple Invoicing for Individuals & Small Businesses'
+  return ''
 })
 
 const pageDescription = computed(() => {
@@ -149,7 +149,7 @@ const pageDescription = computed(() => {
     return window.login_page_description
   }
 
-  return 'Track expenses, record payments & generate beautiful invoices & estimates.'
+  return ''
 })
 
 const copyrightText = computed(() => {

@@ -47,7 +47,7 @@
           top-1/2
           left-1/2
         "
-        alt="Crater Logo"
+        alt="Company Logo"
       />
     </div>
   </div>
@@ -62,11 +62,6 @@ const props = defineProps({
     type: Boolean,
   },
 })
-
-function getCraterLogo() {
-  const imgUrl = new URL('/img/crater-logo.png', import.meta.url)
-  return imgUrl
-}
 </script>
 
 <style>

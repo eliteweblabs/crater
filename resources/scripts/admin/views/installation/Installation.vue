@@ -1,9 +1,10 @@
 <template>
   <div class="flex flex-col items-center justify-between w-full pt-10">
     <img
-      id="logo-crater"
-      src="/img/crater-logo.png"
-      alt="Crater Logo"
+      v-if="companyLogoUrl"
+      id="logo-company"
+      :src="companyLogoUrl"
+      alt="Company Logo"
       class="h-12 mb-5 md:mb-10"
     />
 
@@ -18,7 +19,7 @@
 </template>
 
 <script>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import Step1RequirementsCheck from './Step1RequirementsCheck.vue'
 import Step2PermissionCheck from './Step2PermissionCheck.vue'
 import Step3DatabaseConfig from './Step3DatabaseConfig.vue'
@@ -48,6 +49,13 @@ export default {
 
     const router = useRouter()
     const installationStore = useInstallationStore()
+
+    const companyLogoUrl = computed(() => {
+      if (window.company_logo_url) {
+        return window.company_logo_url
+      }
+      return null
+    })
 
     checkCurrentProgress()
 
@@ -104,6 +112,7 @@ export default {
       onStepChange,
       saveStepProgress,
       onNavClick,
+      companyLogoUrl,
     }
   },
 }
