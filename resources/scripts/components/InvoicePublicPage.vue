@@ -43,12 +43,14 @@ I
 
             <BaseButton
               v-if="
+                !isLoading &&
                 invoiceData &&
                 invoiceData.paid_status !== 'PAID' &&
                 invoiceData.unique_hash
               "
               variant="primary"
               class="justify-center"
+              :disabled="!invoiceData || !invoiceData.unique_hash"
               @click="payInvoice"
             >
               {{ $t('general.pay_invoice') }}
@@ -69,15 +71,18 @@ import { useRoute } from 'vue-router'
 import InvoiceInformationCard from '@/scripts/components/InvoiceInformationCard.vue'
 
 let invoiceData = ref(null)
+const isLoading = ref(true)
 const route = useRoute()
 
 loadInvoice()
 
 async function loadInvoice() {
   try {
+    isLoading.value = true
     // The hash parameter is actually an email log token for public invoice view
     let res = await axios.get(`/customer/invoices/${route.params.hash}`)
     invoiceData.value = res.data.data
+    console.log('Invoice loaded:', invoiceData.value)
   } catch (error) {
     console.error('Error loading invoice:', error)
     if (error.response) {
@@ -85,6 +90,8 @@ async function loadInvoice() {
       console.error('Response data:', error.response.data)
     }
     // Handle error - could show error message to user
+  } finally {
+    isLoading.value = false
   }
 }
 
@@ -103,14 +110,28 @@ const customerLogo = computed(() => {
 const pageTitle = computed(() => invoiceData.value?.invoice_number)
 
 function payInvoice() {
-  if (!invoiceData.value || !invoiceData.value.unique_hash) {
-    console.error('Invoice data or unique_hash is missing')
-    return
+  try {
+    if (!invoiceData.value) {
+      console.error('Invoice data is not loaded yet')
+      alert('Invoice data is still loading. Please wait a moment and try again.')
+      return
+    }
+    
+    if (!invoiceData.value.unique_hash) {
+      console.error('Invoice unique_hash is missing', invoiceData.value)
+      alert('Unable to process payment: Invoice information is incomplete.')
+      return
+    }
+    
+    // Navigate to public Stripe checkout route (no auth required, server will redirect to Stripe)
+    const paymentUrl = `/invoices/${invoiceData.value.unique_hash}/pay`
+    console.log('Redirecting to payment:', paymentUrl)
+    
+    // Use window.location.replace to avoid Vue Router interference
+    window.location.replace(paymentUrl)
+  } catch (error) {
+    console.error('Error in payInvoice:', error)
+    alert('An error occurred while processing payment. Please try again.')
   }
-  
-  // Navigate to public Stripe checkout route (no auth required, server will redirect to Stripe)
-  const paymentUrl = `/invoices/${invoiceData.value.unique_hash}/pay`
-  console.log('Redirecting to payment:', paymentUrl)
-  window.location.href = paymentUrl
 }
 </script>
