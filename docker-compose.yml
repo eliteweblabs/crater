@@ -11,9 +11,17 @@ services:
     image: crater-php
     restart: unless-stopped
     working_dir: /var/www/
+    environment:
+      APP_URL: "http://localhost:8080"
+      DB_HOST: "db"
+      DB_DATABASE: "crater"
+      DB_USERNAME: "crater"
+      DB_PASSWORD: "crater"
     volumes:
       - ./:/var/www
       - ./docker-compose/php/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:rw,delegated
+    ports:
+      - "8080:8080"
     networks:
       - crater
 
@@ -39,7 +47,7 @@ services:
     image: nginx:1.17-alpine
     restart: unless-stopped
     ports:
-      - 80:80
+      - 8080:80
     volumes:
       - ./:/var/www
       - ./docker-compose/nginx:/etc/nginx/conf.d/

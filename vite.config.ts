@@ -1,5 +1,6 @@
 import { defineConfig } from 'laravel-vite'
 import vue from '@vitejs/plugin-vue'
+import path from 'path'
 
 export default defineConfig({
     server: {
@@ -10,11 +11,23 @@ export default defineConfig({
     build: {
         target: 'es2020', // Support BigInt literals
         minify: 'terser',
+        rollupOptions: {
+            input: path.resolve(__dirname, 'resources/scripts/main.js')
+        }
     },
     resolve: {
         alias: {
-            // Remove vue-i18n alias - let it resolve naturally
-        }
+            '@': path.resolve(__dirname, 'resources'),
+        },
+    },
+    optimizeDeps: {
+        include: [
+            'vue',
+            'vue-router',
+            'pinia',
+            '@vuelidate/core',
+            'vue-i18n'
+        ]
     }
 }).withPlugins(
     vue

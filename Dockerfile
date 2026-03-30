@@ -40,8 +40,8 @@ RUN npm install --legacy-peer-deps && npm run build || echo "Build completed wit
 
 # Configure Apache virtual host for Laravel
 RUN echo '<VirtualHost *:${PORT}>\n\
-    DocumentRoot /var/www/html/public\n\
-    <Directory /var/www/html/public>\n\
+    DocumentRoot /var/www/public\n\
+    <Directory /var/www/public>\n\
         AllowOverride All\n\
         Require all granted\n\
     </Directory>\n\
@@ -53,7 +53,7 @@ RUN echo '<VirtualHost *:${PORT}>\n\
 RUN echo 'Listen ${PORT}' > /etc/apache2/ports.conf
 
 # Create storage symlink
-RUN ln -sf /var/www/html/storage/app/public /var/www/html/public/storage || true
+RUN ln -sf /var/www/storage/app/public /var/www/public/storage || true
 
 # Expose port
 EXPOSE 8080

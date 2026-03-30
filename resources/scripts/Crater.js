@@ -49,14 +49,15 @@ export default class Crater {
     window.i18n = i18n
 
     const { createPinia } = window.pinia
+    const pinia = createPinia()
 
+    app.use(pinia)
     app.use(router)
     app.use(Maska)
     app.use(i18n)
-    app.use(createPinia())
     app.provide('utils', utils)
     app.directive('tooltip', VTooltip)
 
-    app.mount('body')
+    app.mount('#app')
   }
 }
