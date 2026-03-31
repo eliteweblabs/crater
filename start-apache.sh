@@ -192,6 +192,10 @@ echo "============================================"
 echo "Starting Apache on port ${PORT}"
 echo "============================================"
 
+# Ensure only one MPM is loaded (php:8.1-apache defaults to prefork)
+a2dismod mpm_event mpm_worker 2>/dev/null || true
+a2enmod mpm_prefork 2>/dev/null || true
+
 # Match Listen and VirtualHost to Railway's PORT (image defaults to 8080)
 printf 'Listen %s\n' "${PORT}" > /etc/apache2/ports.conf
 if [ -f /etc/apache2/sites-enabled/000-default.conf ]; then
