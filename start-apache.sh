@@ -192,6 +192,12 @@ echo "============================================"
 echo "Starting Apache on port ${PORT}"
 echo "============================================"
 
+# Match Listen and VirtualHost to Railway's PORT (image defaults to 8080)
+printf 'Listen %s\n' "${PORT}" > /etc/apache2/ports.conf
+if [ -f /etc/apache2/sites-enabled/000-default.conf ]; then
+    sed -i "s/<VirtualHost \*:[0-9]*>/<VirtualHost *:${PORT}>/" /etc/apache2/sites-enabled/000-default.conf
+fi
+
 # Start Apache in foreground
 exec apache2-foreground
 
