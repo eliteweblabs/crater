@@ -10,7 +10,7 @@
   "require": {
     "php": "^7.4 || ^8.0",
     "aws/aws-sdk-php": "^3.142",
-    "barryvdh/laravel-dompdf": "^0.9.0",
+    "barryvdh/laravel-dompdf": "^2.0",
     "crater-invoice/modules": "^1.0.0",
     "doctrine/dbal": "^2.10",
     "dragonmantank/cron-expression": "^3.1",

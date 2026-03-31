@@ -13,12 +13,6 @@ RUN docker-php-ext-install pdo_mysql mbstring zip exif pcntl bcmath gd
 # Enable Apache modules
 RUN a2enmod rewrite headers
 
-# mod_php is not thread-safe — only mpm_prefork is valid. Newer Debian/Apache
-# images may enable mpm_event alongside prefork, which aborts with AH00534.
-RUN a2dismod mpm_event 2>/dev/null || true \
-    && a2dismod mpm_worker 2>/dev/null || true \
-    && a2enmod mpm_prefork
-
 # Get latest Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
@@ -44,23 +38,22 @@ RUN composer install --no-interaction --prefer-dist --optimize-autoloader --no-d
 # Install Node dependencies and build assets
 RUN npm install --legacy-peer-deps && npm run build || echo "Build completed with warnings"
 
-# Laravel docroot (WORKDIR is /var/www/html). Port is set at runtime in start-apache.sh.
-RUN printf '%s\n' \
-    '<VirtualHost *:8080>' \
-    '    DocumentRoot /var/www/html/public' \
-    '    <Directory /var/www/html/public>' \
-    '        AllowOverride All' \
-    '        Require all granted' \
-    '    </Directory>' \
-    '    ErrorLog ${APACHE_LOG_DIR}/error.log' \
-    '    CustomLog ${APACHE_LOG_DIR}/access.log combined' \
-    '</VirtualHost>' \
-    > /etc/apache2/sites-available/000-default.conf
+# Configure Apache virtual host for Laravel
+RUN echo '<VirtualHost *:${PORT}>\n\
+    DocumentRoot /var/www/html/public\n\
+    <Directory /var/www/html/public>\n\
+        AllowOverride All\n\
+        Require all granted\n\
+    </Directory>\n\
+    ErrorLog ${APACHE_LOG_DIR}/error.log\n\
+    CustomLog ${APACHE_LOG_DIR}/access.log combined\n\
+</VirtualHost>' > /etc/apache2/sites-available/000-default.conf
 
-RUN printf 'Listen 8080\n' > /etc/apache2/ports.conf
+# Make Apache listen on PORT env var (Railway sets this)
+RUN echo 'Listen ${PORT}' > /etc/apache2/ports.conf
 
-# Public disk symlink (Laravel)
-RUN ln -sf /var/www/html/storage/app/public /var/www/html/public/storage || true
+# Create storage symlink
+RUN ln -sf /var/www/storage/app/public /var/www/public/storage || true
 
 # Expose port
 EXPOSE 8080
