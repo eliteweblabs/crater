@@ -180,7 +180,9 @@ class StripePaymentController extends Controller
         } catch (\Exception $e) {
             \Log::error('Stripe checkout error: ' . $e->getMessage());
             $fallbackUrl = isset($invoiceViewUrl) ? $invoiceViewUrl : url('/');
-            return redirect($fallbackUrl)->with('error', 'Unable to process payment. Please try again.');
+            \Log::error('Stripe public checkout exception: ' . $e->getMessage() . ' | Trace: ' . $e->getTraceAsString());
+            // Temporary debug: show error details
+            return response()->json(['error' => $e->getMessage(), 'class' => get_class($e)], 500);
         }
     }
 
