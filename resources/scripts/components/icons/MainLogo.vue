@@ -3,7 +3,7 @@
     v-if="companyLogoUrl" 
     :src="companyLogoUrl" 
     alt="Company Logo" 
-    class="h-6 max-w-[180px] object-contain"
+    class="h-10 max-w-[200px] object-contain"
   />
 </template>
 
