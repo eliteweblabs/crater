@@ -102,32 +102,32 @@ class StripePaymentController extends Controller
             if (!$invoice instanceof Invoice) {
                 $invoice = Invoice::with(['customer', 'company', 'currency', 'emailLogs'])
                     ->where('unique_hash', $invoice)
-                    ->orWhere('id', $invoice)
                     ->firstOrFail();
             } else {
                 $invoice->load(['customer', 'company', 'currency', 'emailLogs']);
             }
             
+            // Build a safe fallback URL using the email log token (public invoice view)
+            $emailLogToken = $invoice->emailLogs()->latest()->first()->token ?? $invoice->unique_hash;
+            $invoiceViewUrl = url("/customer/invoices/view/{$emailLogToken}");
+
             // Check if invoice is already paid
             if ($invoice->paid_status === 'PAID') {
-                return redirect()->back()->with('error', 'This invoice has already been paid.');
+                return redirect($invoiceViewUrl)->with('error', 'This invoice has already been paid.');
             }
-
-            // Get the latest email log token for redirect URLs
-            $emailLogToken = $invoice->emailLogs()->latest()->first()->token ?? $invoice->unique_hash;
 
             // Initialize Stripe
             $stripeSecret = config('services.stripe.secret');
             if (!$stripeSecret) {
                 \Log::error('Stripe secret key not configured');
-                return redirect()->back()->with('error', 'Payment processing is not configured. Please contact support.');
+                return redirect($invoiceViewUrl)->with('error', 'Payment processing is not configured. Please contact support.');
             }
             Stripe::setApiKey($stripeSecret);
 
             // Ensure currency is loaded
             if (!$invoice->currency) {
                 \Log::error('Invoice currency not loaded for invoice: ' . $invoice->id);
-                return redirect()->back()->with('error', 'Invoice currency information is missing.');
+                return redirect($invoiceViewUrl)->with('error', 'Invoice currency information is missing.');
             }
 
             // Convert amount to cents for Stripe (Stripe requires amounts in smallest currency unit)
@@ -179,7 +179,8 @@ class StripePaymentController extends Controller
 
         } catch (\Exception $e) {
             \Log::error('Stripe checkout error: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Unable to process payment. Please try again.');
+            $fallbackUrl = isset($invoiceViewUrl) ? $invoiceViewUrl : url('/');
+            return redirect($fallbackUrl)->with('error', 'Unable to process payment. Please try again.');
         }
     }
 
