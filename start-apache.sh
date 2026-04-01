@@ -196,6 +196,11 @@ echo "============================================"
 a2dismod mpm_event mpm_worker 2>/dev/null || true
 a2enmod mpm_prefork 2>/dev/null || true
 
+# Add aliases for assets/fonts/img so /assets/ maps to /build/assets/ etc.
+if [ -f /etc/apache2/sites-enabled/000-default.conf ]; then
+    sed -i '/<\/VirtualHost>/i \    Alias /assets /var/www/html/public/build/assets\n    Alias /fonts /var/www/html/public/build/fonts\n    Alias /img /var/www/html/public/build/img\n    <Directory /var/www/html/public/build>\n        Require all granted\n    </Directory>' /etc/apache2/sites-enabled/000-default.conf
+fi
+
 # Match Listen and VirtualHost to Railway's PORT (image defaults to 8080)
 printf 'Listen %s\n' "${PORT}" > /etc/apache2/ports.conf
 if [ -f /etc/apache2/sites-enabled/000-default.conf ]; then
