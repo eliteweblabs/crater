@@ -175,6 +175,13 @@ php artisan storage:link 2>/dev/null || true
 php artisan config:clear 2>/dev/null || true
 php artisan cache:clear 2>/dev/null || true
 
+# Auto-migrate if database is empty
+if [ "$AUTO_MIGRATE" = "true" ]; then
+    echo "AUTO_MIGRATE enabled - running migrations and seeds..."
+    php artisan migrate --seed --force 2>&1 || echo "Migration/seed failed"
+    echo "Migrations complete."
+fi
+
 # Set permissions for storage and cache directories
 chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
 chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
