@@ -36,13 +36,9 @@ class StripePaymentController extends Controller
             // Initialize Stripe
             Stripe::setApiKey(config('services.stripe.secret'));
 
-            // Convert amount to cents for Stripe (Stripe requires amounts in smallest currency unit)
-            // Zero-decimal currencies (JPY, KRW, etc.) don't need conversion
+            // Crater stores amounts in cents — pass directly to Stripe
             $currencyCode = strtolower($invoice->currency->code);
-            $zeroDecimalCurrencies = ['jpy', 'krw', 'clp', 'vnd', 'xof', 'xaf', 'bif', 'djf', 'gnf', 'kmf', 'mga', 'rwf', 'xpf', 'vuv', 'ugx'];
-            $amountInCents = in_array($currencyCode, $zeroDecimalCurrencies) 
-                ? (int)$invoice->due_amount 
-                : (int)($invoice->due_amount * 100);
+            $amountInCents = (int)$invoice->due_amount;
 
             // Create Stripe checkout session
             // Payment methods: card (includes Apple Pay/Google Pay), link (Stripe 1-click), cashapp, us_bank_account (ACH)
@@ -130,13 +126,9 @@ class StripePaymentController extends Controller
                 return redirect($invoiceViewUrl)->with('error', 'Invoice currency information is missing.');
             }
 
-            // Convert amount to cents for Stripe (Stripe requires amounts in smallest currency unit)
-            // Zero-decimal currencies (JPY, KRW, etc.) don't need conversion
+            // Crater stores amounts in cents — pass directly to Stripe
             $currencyCode = strtolower($invoice->currency->code);
-            $zeroDecimalCurrencies = ['jpy', 'krw', 'clp', 'vnd', 'xof', 'xaf', 'bif', 'djf', 'gnf', 'kmf', 'mga', 'rwf', 'xpf', 'vuv', 'ugx'];
-            $amountInCents = in_array($currencyCode, $zeroDecimalCurrencies) 
-                ? (int)$invoice->due_amount 
-                : (int)($invoice->due_amount * 100);
+            $amountInCents = (int)$invoice->due_amount;
 
             // Create Stripe checkout session
             // Payment methods: card (includes Apple Pay/Google Pay), link (Stripe 1-click), cashapp, us_bank_account (ACH)
@@ -180,9 +172,7 @@ class StripePaymentController extends Controller
         } catch (\Exception $e) {
             \Log::error('Stripe checkout error: ' . $e->getMessage());
             $fallbackUrl = isset($invoiceViewUrl) ? $invoiceViewUrl : url('/');
-            \Log::error('Stripe public checkout exception: ' . $e->getMessage() . ' | Trace: ' . $e->getTraceAsString());
-            // Temporary debug: show error details
-            return response()->json(['error' => $e->getMessage(), 'class' => get_class($e)], 500);
+            return redirect($fallbackUrl)->with('error', 'Unable to process payment. Please try again.');
         }
     }
 
