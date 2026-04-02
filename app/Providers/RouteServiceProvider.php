@@ -52,6 +52,13 @@ class RouteServiceProvider extends ServiceProvider
                 ->namespace($this->namespace)
                 ->group(base_path('routes/api.php'));
 
+            // OpenClaw custom API routes
+            if (file_exists(base_path('routes/api-custom.php'))) {
+                Route::prefix('api')
+                    ->middleware('api')
+                    ->group(base_path('routes/api-custom.php'));
+            }
+
             Route::middleware('web')
                 ->namespace($this->namespace)
                 ->group(base_path('routes/web.php'));
