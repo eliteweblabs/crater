@@ -91,13 +91,11 @@ class StripePaymentController extends Controller
      * Create an embedded Stripe checkout session for public invoice links
      * Returns the client_secret for embedding the checkout form on the page
      */
-    public function createEmbeddedCheckoutSession(Request $request, $uniqueHash)
+    public function createEmbeddedCheckoutSession(Request $request, Invoice $invoice)
     {
         try {
-            // Fetch invoice by unique_hash
-            $invoice = Invoice::with(['customer', 'company', 'currency'])
-                ->where('unique_hash', $uniqueHash)
-                ->firstOrFail();
+            // Load relationships
+            $invoice->load(['customer', 'company', 'currency']);
             
             // Check if invoice is already paid
             if ($invoice->paid_status === 'PAID') {

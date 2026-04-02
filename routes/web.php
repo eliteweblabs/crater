@@ -121,7 +121,7 @@ Route::get('/invoices/{uniqueHash}', [\Crater\Http\Controllers\PublicInvoiceCont
 Route::get('/invoices/{invoice:unique_hash}/pay', [\Crater\Http\Controllers\V1\Customer\Payment\StripePaymentController::class, 'createCheckoutSessionPublic']);
 
 // API endpoint for embedded checkout
-Route::post('/api/invoices/{uniqueHash}/checkout-session', [\Crater\Http\Controllers\V1\Customer\Payment\StripePaymentController::class, 'createEmbeddedCheckoutSession']);
+Route::post('/api/invoices/{invoice:unique_hash}/checkout-session', [\Crater\Http\Controllers\V1\Customer\Payment\StripePaymentController::class, 'createEmbeddedCheckoutSession']);
 
 Route::prefix('/customer')->group(function () {
     Route::get('/invoices/{email_log:token}', [CustomerInvoicePdfController::class, 'getInvoice']);
