@@ -103,9 +103,8 @@ class StripePaymentController extends Controller
                 $invoice->load(['customer', 'company', 'currency', 'emailLogs']);
             }
             
-            // Build a safe fallback URL using the email log token (public invoice view)
-            $emailLogToken = $invoice->emailLogs()->latest()->first()->token ?? $invoice->unique_hash;
-            $invoiceViewUrl = url("/customer/invoices/view/{$emailLogToken}");
+            // Build a safe fallback URL using the public invoice view
+            $invoiceViewUrl = url("/invoices/{$invoice->unique_hash}");
 
             // Check if invoice is already paid
             if ($invoice->paid_status === 'PAID') {
@@ -146,8 +145,8 @@ class StripePaymentController extends Controller
                     'quantity' => 1,
                 ]],
                 'mode' => 'payment',
-                'success_url' => url("/customer/invoices/view/{$emailLogToken}?payment=success"),
-                'cancel_url' => url("/customer/invoices/view/{$emailLogToken}?payment=cancelled"),
+                'success_url' => url("/invoices/{$invoice->unique_hash}?payment=success"),
+                'cancel_url' => url("/invoices/{$invoice->unique_hash}?payment=cancelled"),
                 'client_reference_id' => $invoice->id,
                 'metadata' => [
                     'invoice_id' => $invoice->id,
