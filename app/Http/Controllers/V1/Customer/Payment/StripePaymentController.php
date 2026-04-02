@@ -120,6 +120,7 @@ class StripePaymentController extends Controller
                 'automatic_payment_methods' => [
                     'enabled' => true,
                 ],
+                'customer_email' => $invoice->customer->email ?? null,
                 'line_items' => [[
                     'price_data' => [
                         'currency' => $currencyCode,
