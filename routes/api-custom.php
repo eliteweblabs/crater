@@ -97,7 +97,8 @@ Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $reque
         'invoice_number' => $invoice->invoice_number,
         'customer' => $customer->name,
         'total' => $subTotal / 100,
-        'view_url' => url("/reave/invoices/{$invoice->id}/view"),
+        'admin_url' => url("/admin/invoices/{$invoice->id}/view"),
         'public_url' => url("/invoices/{$invoice->unique_hash}"),
+        'pdf_url' => url("/invoices/pdf/{$invoice->unique_hash}"),
     ]);
 });
