@@ -114,6 +114,9 @@ Route::middleware('pdf-auth')->group(function () {
 // customer pdf endpoints for invoice, estimate and Payment
 // -------------------------------------------------
 
+// Public invoice view (like Harvest - shows invoice + payment button)
+Route::get('/invoices/{uniqueHash}', [\Crater\Http\Controllers\PublicInvoiceController::class, 'show']);
+
 // Public Stripe checkout endpoint (no auth required)
 Route::get('/invoices/{invoice:unique_hash}/pay', [\Crater\Http\Controllers\V1\Customer\Payment\StripePaymentController::class, 'createCheckoutSessionPublic']);
 
