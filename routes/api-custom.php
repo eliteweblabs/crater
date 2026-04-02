@@ -53,7 +53,9 @@ Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $reque
         $subTotal += ($item['price'] * 100) * $item['quantity'];
     }
 
-    // Create invoice
+    // Create invoice with unique hash for public link
+    $uniqueHash = \Illuminate\Support\Str::random(32);
+    
     $invoice = Invoice::create([
         'invoice_date' => now()->format('Y-m-d'),
         'due_date' => now()->addDays(30)->format('Y-m-d'),
@@ -69,6 +71,7 @@ Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $reque
         'notes' => $validated['notes'] ?? '',
         'status' => $validated['status'] ?? 'DRAFT',
         'template_name' => 'invoice1',
+        'unique_hash' => $uniqueHash,
     ]);
 
     // Add line items
