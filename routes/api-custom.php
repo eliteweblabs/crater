@@ -101,7 +101,8 @@ Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $reque
         'customer' => $customer->name,
         'total' => $subTotal / 100,
         'admin_url' => url("/admin/invoices/{$invoice->id}/view"),
-        'public_url' => url("/invoices/{$invoice->unique_hash}"),
+        'sms_link' => url("/invoices/pdf/{$invoice->unique_hash}"),
         'pdf_url' => url("/invoices/pdf/{$invoice->unique_hash}"),
+        'payment_url' => url("/invoices/{$invoice->unique_hash}/pay"),
     ]);
 });
