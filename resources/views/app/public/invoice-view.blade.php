@@ -156,10 +156,7 @@
         @endif
 
         @if($invoice->paid_status !== 'PAID')
-        <div style="margin-top: 40px; padding: 30px; background: #f9f9f9; border-radius: 8px;">
-            <h2 style="font-size: 20px; margin-bottom: 20px; color: #333;">💳 Pay Invoice</h2>
-            <div id="checkout"></div>
-        </div>
+        <div id="checkout" style="margin-top: 40px;"></div>
         @endif
 
         <div style="margin-top: 20px; text-align: center;">
