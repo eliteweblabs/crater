@@ -69,7 +69,7 @@ Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $reque
         'discount_type' => 'fixed',
         'discount_val' => 0,
         'notes' => $validated['notes'] ?? '',
-        'status' => $validated['status'] ?? 'DRAFT',
+        'status' => $validated['status'] ?? 'SENT',
         'template_name' => 'invoice1',
         'unique_hash' => $uniqueHash,
     ]);
