@@ -5,6 +5,16 @@ use Crater\Models\Customer;
 use Crater\Models\Invoice;
 use Crater\Models\InvoiceItem;
 
+// Debug endpoint to check env var
+Route::get('/openclaw/debug', function () {
+    $token = env('OPENCLAW_API_TOKEN');
+    return response()->json([
+        'token_exists' => !empty($token),
+        'token_length' => strlen($token ?? ''),
+        'token_first_8' => substr($token ?? '', 0, 8),
+    ]);
+});
+
 // Simple invoice creation endpoint for OpenClaw
 // POST /api/openclaw/create-invoice
 Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $request) {
