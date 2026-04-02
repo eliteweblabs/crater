@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Invoice {{ $invoice->invoice_number }}</title>
-    <script src="https://js.stripe.com/v3/"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; }
@@ -155,21 +154,12 @@
         </div>
         @endif
 
-        @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
-        <div class="payment-section">
-            <h2>💳 Pay Invoice</h2>
-            <form id="payment-form">
-                <div id="payment-element"></div>
-                <button type="submit" id="submit-button" class="btn btn-primary">
-                    <span id="button-text">Pay ${{ number_format($invoice->total / 100, 2) }}</span>
-                    <span id="spinner" style="display: none;">Processing...</span>
-                </button>
-                <div id="payment-message" class="error-message"></div>
-            </form>
-        </div>
-        @endif
-
-        <div style="margin-top: 20px; text-align: center;">
+        <div class="actions">
+            @if($invoice->paid_status !== 'PAID')
+            <a href="{{ url("/invoices/{$invoice->unique_hash}/pay") }}" class="btn btn-primary">
+                💳 Pay with Card
+            </a>
+            @endif
             <a href="{{ url("/invoices/pdf/{$invoice->unique_hash}") }}" class="btn btn-secondary" target="_blank">
                 📄 Download PDF
             </a>
@@ -181,96 +171,5 @@
         </div>
     </div>
 
-    @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
-    <script>
-        const stripe = Stripe('{{ config("services.stripe.key") }}');
-        
-        const options = {
-            mode: 'payment',
-            amount: {{ $invoice->total }},
-            currency: '{{ strtolower($invoice->currency->code ?? "usd") }}',
-            appearance: {
-                theme: 'stripe',
-                variables: {
-                    colorPrimary: '#667eea',
-                }
-            },
-            paymentMethodCreation: 'manual',
-        };
-
-        const elements = stripe.elements(options);
-        const paymentElement = elements.create('payment', {
-            wallets: {
-                applePay: 'auto',
-                googlePay: 'auto',
-            }
-        });
-        paymentElement.mount('#payment-element');
-
-        const form = document.getElementById('payment-form');
-        const submitButton = document.getElementById('submit-button');
-        const buttonText = document.getElementById('button-text');
-        const spinner = document.getElementById('spinner');
-        const messageElement = document.getElementById('payment-message');
-
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            submitButton.disabled = true;
-            buttonText.style.display = 'none';
-            spinner.style.display = 'inline';
-
-            try {
-                const {error: createError, paymentMethod} = await stripe.createPaymentMethod({
-                    elements,
-                });
-
-                if (createError) {
-                    messageElement.textContent = createError.message;
-                    submitButton.disabled = false;
-                    buttonText.style.display = 'inline';
-                    spinner.style.display = 'none';
-                    return;
-                }
-
-                const response = await fetch('{{ url("/api/invoices/{$invoice->unique_hash}/pay") }}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                    },
-                    body: JSON.stringify({
-                        payment_method_id: paymentMethod.id
-                    })
-                });
-
-                const result = await response.json();
-
-                if (result.error) {
-                    messageElement.textContent = result.error;
-                    submitButton.disabled = false;
-                    buttonText.style.display = 'inline';
-                    spinner.style.display = 'none';
-                } else if (result.requires_action) {
-                    const {error: confirmError} = await stripe.confirmCardPayment(result.payment_intent_client_secret);
-                    if (confirmError) {
-                        messageElement.textContent = confirmError.message;
-                        submitButton.disabled = false;
-                        buttonText.style.display = 'inline';
-                        spinner.style.display = 'none';
-                    } else {
-                        window.location.reload();
-                    }
-                } else {
-                    window.location.reload();
-                }
-            } catch (error) {
-                messageElement.textContent = 'An unexpected error occurred.';
-                submitButton.disabled = false;
-                buttonText.style.display = 'inline';
-                spinner.style.display = 'none';
-            }
-        });
-    </script>
-    @endif
 </body>
 </html>
