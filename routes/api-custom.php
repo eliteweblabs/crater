@@ -6,16 +6,7 @@ use Crater\Models\Invoice;
 use Crater\Models\InvoiceItem;
 use Stripe\Stripe;
 use Stripe\PaymentIntent;
-
-// Debug endpoint to check env var
-Route::get('/openclaw/debug', function () {
-    $token = env('OPENCLAW_API_TOKEN');
-    return response()->json([
-        'token_exists' => !empty($token),
-        'token_length' => strlen($token ?? ''),
-        'token_first_8' => substr($token ?? '', 0, 8),
-    ]);
-});
+use Stripe\Checkout\Session as StripeSession;
 
 // Simple invoice creation endpoint for OpenClaw
 // POST /api/openclaw/create-invoice
@@ -110,46 +101,54 @@ Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $reque
     ]);
 });
 
-// Process payment for invoice
-Route::post('/invoices/{uniqueHash}/pay', function (Illuminate\Http\Request $request, $uniqueHash) {
+// Debug endpoint to check env var
+Route::get('/openclaw/debug', function () {
+    $token = env('OPENCLAW_API_TOKEN');
+    return response()->json([
+        'token_exists' => !empty($token),
+        'token_length' => strlen($token ?? ''),
+        'token_first_8' => substr($token ?? '', 0, 8),
+    ]);
+});
+
+// Create embedded checkout session for invoice
+Route::post('/invoices/{uniqueHash}/checkout-session', function ($uniqueHash) {
     try {
-        $invoice = Invoice::where('unique_hash', $uniqueHash)->firstOrFail();
-        
+        $invoice = Invoice::with(['customer', 'company', 'currency'])
+            ->where('unique_hash', $uniqueHash)
+            ->firstOrFail();
+
         if ($invoice->paid_status === 'PAID') {
             return response()->json(['error' => 'Invoice already paid'], 400);
         }
 
         Stripe::setApiKey(config('services.stripe.secret'));
 
-        $paymentIntent = PaymentIntent::create([
-            'amount' => $invoice->total,
-            'currency' => strtolower($invoice->currency->code ?? 'usd'),
-            'payment_method' => $request->payment_method_id,
-            'confirm' => true,
-            'return_url' => url("/invoices/{$uniqueHash}"),
+        $session = StripeSession::create([
+            'ui_mode' => 'embedded',
+            'payment_method_types' => ['card', 'link', 'cashapp', 'us_bank_account'],
+            'line_items' => [[
+                'price_data' => [
+                    'currency' => strtolower($invoice->currency->code ?? 'usd'),
+                    'product_data' => [
+                        'name' => 'Invoice #' . $invoice->invoice_number,
+                        'description' => 'Payment for ' . $invoice->company->name,
+                    ],
+                    'unit_amount' => $invoice->total,
+                ],
+                'quantity' => 1,
+            ]],
+            'mode' => 'payment',
+            'return_url' => url("/invoices/{$uniqueHash}?payment=success"),
             'metadata' => [
                 'invoice_id' => $invoice->id,
                 'invoice_number' => $invoice->invoice_number,
-                'customer_name' => $invoice->customer->name,
             ],
         ]);
 
-        if ($paymentIntent->status === 'succeeded') {
-            $invoice->update([
-                'paid_status' => 'PAID',
-                'status' => 'COMPLETED',
-            ]);
-            return response()->json(['success' => true]);
-        } elseif ($paymentIntent->status === 'requires_action') {
-            return response()->json([
-                'requires_action' => true,
-                'payment_intent_client_secret' => $paymentIntent->client_secret,
-            ]);
-        } else {
-            return response()->json(['error' => 'Payment failed'], 400);
-        }
+        return response()->json(['clientSecret' => $session->client_secret]);
     } catch (\Exception $e) {
-        \Log::error('Payment error: ' . $e->getMessage());
+        \Log::error('Checkout session error: ' . $e->getMessage());
         return response()->json(['error' => $e->getMessage()], 400);
     }
 });

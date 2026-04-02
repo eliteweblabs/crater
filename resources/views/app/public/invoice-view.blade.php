@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Invoice {{ $invoice->invoice_number }}</title>
+    <script src="https://js.stripe.com/v3/"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; }
@@ -154,12 +155,14 @@
         </div>
         @endif
 
-        <div class="actions">
-            @if($invoice->paid_status !== 'PAID')
-            <a href="{{ url("/invoices/{$invoice->unique_hash}/pay") }}" class="btn btn-primary">
-                💳 Pay with Card
-            </a>
-            @endif
+        @if($invoice->paid_status !== 'PAID')
+        <div style="margin-top: 40px; padding: 30px; background: #f9f9f9; border-radius: 8px;">
+            <h2 style="font-size: 20px; margin-bottom: 20px; color: #333;">💳 Pay Invoice</h2>
+            <div id="checkout"></div>
+        </div>
+        @endif
+
+        <div style="margin-top: 20px; text-align: center;">
             <a href="{{ url("/invoices/pdf/{$invoice->unique_hash}") }}" class="btn btn-secondary" target="_blank">
                 📄 Download PDF
             </a>
@@ -171,5 +174,26 @@
         </div>
     </div>
 
+    @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
+    <script>
+        const stripe = Stripe('{{ config("services.stripe.key") }}');
+        
+        fetch('{{ url("/api/invoices/{$invoice->unique_hash}/checkout-session") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.clientSecret) {
+                const checkout = stripe.initEmbeddedCheckout({
+                    clientSecret: data.clientSecret
+                });
+                checkout.mount('#checkout');
+            }
+        });
+    </script>
+    @endif
 </body>
 </html>
