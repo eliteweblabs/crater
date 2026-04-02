@@ -185,13 +185,19 @@
             }
         })
         .then(r => r.json())
-        .then(data => {
+        .then(async data => {
             if (data.clientSecret) {
-                const checkout = stripe.initEmbeddedCheckout({
+                const checkout = await stripe.initEmbeddedCheckout({
                     clientSecret: data.clientSecret
                 });
                 checkout.mount('#checkout');
+            } else if (data.error) {
+                document.getElementById('checkout').innerHTML = `<p style="color: #d32f2f;">Error: ${data.error}</p>`;
             }
+        })
+        .catch(error => {
+            console.error('Checkout error:', error);
+            document.getElementById('checkout').innerHTML = `<p style="color: #d32f2f;">Unable to load payment form. Please try again.</p>`;
         });
     </script>
     @endif
