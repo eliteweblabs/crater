@@ -88,6 +88,80 @@ class StripePaymentController extends Controller
     }
 
     /**
+     * Create an embedded Stripe checkout session for public invoice links
+     * Returns the client_secret for embedding the checkout form on the page
+     */
+    public function createEmbeddedCheckoutSession(Request $request, $uniqueHash)
+    {
+        try {
+            // Fetch invoice by unique_hash
+            $invoice = Invoice::with(['customer', 'company', 'currency'])
+                ->where('unique_hash', $uniqueHash)
+                ->firstOrFail();
+            
+            // Check if invoice is already paid
+            if ($invoice->paid_status === 'PAID') {
+                return response()->json(['error' => 'Invoice is already paid'], 400);
+            }
+
+            // Initialize Stripe
+            $stripeSecret = config('services.stripe.secret');
+            if (!$stripeSecret) {
+                \Log::error('Stripe secret key not configured');
+                return response()->json(['error' => 'Payment processing is not configured'], 500);
+            }
+            Stripe::setApiKey($stripeSecret);
+
+            // Crater stores amounts in cents — pass directly to Stripe
+            $currencyCode = strtolower($invoice->currency->code);
+            $amountInCents = (int)$invoice->due_amount;
+
+            // Create Stripe embedded checkout session
+            $session = StripeSession::create([
+                'ui_mode' => 'embedded',
+                'payment_method_types' => ['card', 'link', 'cashapp', 'us_bank_account'],
+                'line_items' => [[
+                    'price_data' => [
+                        'currency' => $currencyCode,
+                        'product_data' => [
+                            'name' => 'Invoice #' . $invoice->invoice_number,
+                            'description' => 'Payment for ' . $invoice->company->name,
+                        ],
+                        'unit_amount' => $amountInCents,
+                    ],
+                    'quantity' => 1,
+                ]],
+                'mode' => 'payment',
+                'return_url' => url("/invoices/{$invoice->unique_hash}?payment=success&session_id={CHECKOUT_SESSION_ID}"),
+                'client_reference_id' => $invoice->id,
+                'metadata' => [
+                    'invoice_id' => $invoice->id,
+                    'company_id' => $invoice->company_id,
+                    'customer_id' => $invoice->customer_id,
+                ],
+            ]);
+
+            // Create a pending transaction
+            Transaction::createTransaction([
+                'transaction_id' => $session->id,
+                'type' => 'stripe',
+                'status' => Transaction::PENDING,
+                'transaction_date' => now(),
+                'company_id' => $invoice->company_id,
+                'invoice_id' => $invoice->id,
+            ]);
+
+            return response()->json([
+                'clientSecret' => $session->client_secret,
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Stripe embedded checkout error: ' . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * Create a Stripe checkout session for public invoice links (no auth required)
      * Redirects directly to Stripe instead of returning JSON
      */

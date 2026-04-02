@@ -32,12 +32,54 @@ class Company extends Model implements HasMedia
 
     public function getLogoPathAttribute()
     {
-        // Always use Reave logo for PDFs
-        $logoPath = public_path('build/img/crater-logo.png');
-        
-        if (file_exists($logoPath)) {
-            $imageData = file_get_contents($logoPath);
-            return 'data:image/png;base64,' . base64_encode($imageData);
+        // Check for config logo URL first (reads from COMPANY_LOGO_URL env var)
+        $envLogoUrl = config('crater.company_logo_url');
+        if ($envLogoUrl) {
+            $imageData = $this->fetchRemoteImage($envLogoUrl);
+            if ($imageData) {
+                // Detect mime type from URL or default to png
+                $extension = strtolower(pathinfo(parse_url($envLogoUrl, PHP_URL_PATH), PATHINFO_EXTENSION));
+                $mimeTypes = [
+                    'png' => 'image/png',
+                    'jpg' => 'image/jpeg',
+                    'jpeg' => 'image/jpeg',
+                    'gif' => 'image/gif',
+                    'webp' => 'image/webp',
+                    'svg' => 'image/svg+xml',
+                ];
+                $mimeType = $mimeTypes[$extension] ?? 'image/png';
+                return 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
+            }
+            // If fetching fails, log and return null (don't return URL as dompdf can't fetch it either)
+            \Log::warning('Failed to fetch company logo from URL: ' . $envLogoUrl);
+            return null;
+        }
+
+        $logo = $this->getMedia('logo')->first();
+
+        if ($logo) {
+            try {
+                // For PDFs, convert logo to base64 data URI for reliable rendering
+                $path = $logo->getPath();
+                if (file_exists($path)) {
+                    $imageData = file_get_contents($path);
+                    $mimeType = $logo->mime_type ?? 'image/png';
+                    return 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
+                }
+
+                // Try fetching from URL if local file doesn't exist
+                $url = $logo->getFullUrl();
+                $imageData = $this->fetchRemoteImage($url);
+                if ($imageData) {
+                    $mimeType = $logo->mime_type ?? 'image/png';
+                    return 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
+                }
+
+                return null;
+            } catch (\Exception $e) {
+                \Log::warning('Failed to load company logo: ' . $e->getMessage());
+                return null;
+            }
         }
 
         return null;
@@ -123,8 +165,19 @@ class Company extends Model implements HasMedia
 
     public function getLogoAttribute()
     {
-        // Always use Reave logo
-        return asset('build/img/crater-logo.png');
+        // Check for config logo URL first (reads from COMPANY_LOGO_URL env var)
+        $envLogoUrl = config('crater.company_logo_url');
+        if ($envLogoUrl) {
+            return $envLogoUrl;
+        }
+
+        $logo = $this->getMedia('logo')->first();
+
+        if ($logo) {
+            return $logo->getFullUrl();
+        }
+
+        return null;
     }
 
     public function customers()

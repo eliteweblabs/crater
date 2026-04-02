@@ -61,7 +61,7 @@
 
         <div class="header">
             <div class="logo">
-                <img src="{{ asset('build/img/crater-logo.png') }}" alt="{{ $invoice->company->name }}">
+                <img src="{{ $invoice->company->logo ?? asset('build/img/crater-logo.png') }}" alt="{{ $invoice->company->name }}">
             </div>
             <div class="invoice-info">
                 <h1>INVOICE</h1>
