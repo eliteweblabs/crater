@@ -357,7 +357,32 @@ function getFrequencyLabel(frequencyFormat) {
     return frequency.value === frequencyFormat
   })
 
-  return frequencyObj ? frequencyObj.label : `CUSTOM: ${frequencyFormat}`
+  if (frequencyObj) {
+    return frequencyObj.label
+  }
+
+  // Parse common cron patterns for better display
+  const cronParts = (frequencyFormat || '').trim().split(/\s+/)
+  
+  // Yearly pattern: 0 0 1 {month} *
+  if (cronParts.length === 5 && cronParts[0] === '0' && cronParts[1] === '0' && cronParts[2] === '1' && cronParts[4] === '*') {
+    const month = parseInt(cronParts[3])
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+    if (month >= 1 && month <= 12) {
+      return `Every year on ${monthNames[month - 1]} 1st`
+    }
+  }
+  
+  // Monthly pattern: 0 0 {day} * *
+  if (cronParts.length === 5 && cronParts[0] === '0' && cronParts[1] === '0' && cronParts[3] === '*' && cronParts[4] === '*') {
+    const day = parseInt(cronParts[2])
+    if (day >= 1 && day <= 31) {
+      const suffix = day === 1 ? 'st' : day === 2 ? 'nd' : day === 3 ? 'rd' : 'th'
+      return `Every month on the ${day}${suffix}`
+    }
+  }
+
+  return `CUSTOM: ${frequencyFormat}`
 }
 
 function refreshTable() {
