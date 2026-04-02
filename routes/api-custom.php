@@ -33,7 +33,7 @@ Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $reque
     if (!$customer) {
         $customer = Customer::create([
             'name' => $validated['customer_name'],
-            'email' => $validated['customer_email'] ?? 'noreply@eliteweblabs.com',
+            'email' => $validated['customer_email'] ?? null,
             'company_id' => 1,
             'contact_name' => $validated['customer_name'],
             'currency_id' => 1,
