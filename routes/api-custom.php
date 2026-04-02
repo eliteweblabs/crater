@@ -4,6 +4,8 @@ use Illuminate\Support\Facades\Route;
 use Crater\Models\Customer;
 use Crater\Models\Invoice;
 use Crater\Models\InvoiceItem;
+use Stripe\Stripe;
+use Stripe\PaymentIntent;
 
 // Debug endpoint to check env var
 Route::get('/openclaw/debug', function () {
@@ -106,4 +108,48 @@ Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $reque
         'pdf_url' => url("/invoices/pdf/{$uniqueHash}"),
         'payment_url' => url("/invoices/{$uniqueHash}/pay"),
     ]);
+});
+
+// Process payment for invoice
+Route::post('/invoices/{uniqueHash}/pay', function (Illuminate\Http\Request $request, $uniqueHash) {
+    try {
+        $invoice = Invoice::where('unique_hash', $uniqueHash)->firstOrFail();
+        
+        if ($invoice->paid_status === 'PAID') {
+            return response()->json(['error' => 'Invoice already paid'], 400);
+        }
+
+        Stripe::setApiKey(config('services.stripe.secret'));
+
+        $paymentIntent = PaymentIntent::create([
+            'amount' => $invoice->total,
+            'currency' => strtolower($invoice->currency->code ?? 'usd'),
+            'payment_method' => $request->payment_method_id,
+            'confirm' => true,
+            'return_url' => url("/invoices/{$uniqueHash}"),
+            'metadata' => [
+                'invoice_id' => $invoice->id,
+                'invoice_number' => $invoice->invoice_number,
+                'customer_name' => $invoice->customer->name,
+            ],
+        ]);
+
+        if ($paymentIntent->status === 'succeeded') {
+            $invoice->update([
+                'paid_status' => 'PAID',
+                'status' => 'COMPLETED',
+            ]);
+            return response()->json(['success' => true]);
+        } elseif ($paymentIntent->status === 'requires_action') {
+            return response()->json([
+                'requires_action' => true,
+                'payment_intent_client_secret' => $paymentIntent->client_secret,
+            ]);
+        } else {
+            return response()->json(['error' => 'Payment failed'], 400);
+        }
+    } catch (\Exception $e) {
+        \Log::error('Payment error: ' . $e->getMessage());
+        return response()->json(['error' => $e->getMessage()], 400);
+    }
 });
