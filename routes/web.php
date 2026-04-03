@@ -123,6 +123,17 @@ Route::get('/invoices/{invoice:unique_hash}/pay', [\Crater\Http\Controllers\V1\C
 // API endpoint for embedded checkout
 Route::post('/api/invoices/{invoice:unique_hash}/checkout-session', [\Crater\Http\Controllers\V1\Customer\Payment\StripePaymentController::class, 'createEmbeddedCheckoutSession']);
 
+// Public test endpoint for OpenClaw token verification (no auth)
+Route::get('/test/openclaw-token', function () {
+    $token = env('OPENCLAW_API_TOKEN');
+    return response()->json([
+        'token_exists' => !empty($token),
+        'token_length' => strlen($token ?? ''),
+        'token_first_chars' => substr($token ?? '', 0, 10),
+        'token_last_chars' => substr($token ?? '', -10),
+    ]);
+});
+
 Route::prefix('/customer')->group(function () {
     Route::get('/invoices/{email_log:token}', [CustomerInvoicePdfController::class, 'getInvoice']);
     Route::get('/invoices/view/{email_log:token}', [CustomerInvoicePdfController::class, 'getPdf'])->name('invoice');
