@@ -101,13 +101,14 @@ Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $reque
     ]);
 });
 
-// Debug endpoint to check env var
+// Debug endpoint to check env var (public - no auth needed)
 Route::get('/openclaw/debug', function () {
     $token = env('OPENCLAW_API_TOKEN');
     return response()->json([
         'token_exists' => !empty($token),
         'token_length' => strlen($token ?? ''),
         'token_first_8' => substr($token ?? '', 0, 8),
+        'env_check' => env('APP_ENV'),
     ]);
 });
 
