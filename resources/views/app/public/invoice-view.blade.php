@@ -5,15 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Invoice {{ $invoice->invoice_number }}</title>
     
-    <!-- OG Meta Tags for Social Sharing - Clients will love this! -->
+    <!-- OG Meta Tags for Social Sharing - Uses Client's Logo! -->
     <meta property="og:type" content="website">
     <meta property="og:title" content="Invoice {{ $invoice->invoice_number }} - ${{ number_format($invoice->total / 100, 2) }}">
     <meta property="og:description" content="{{ $invoice->customer->name }} - Due {{ $invoice->formattedDueDate }}">
-    @if($invoice->company && $invoice->company->logo)
+    @if($invoice->customer->avatar)
+    <meta property="og:image" content="{{ $invoice->customer->avatar }}">
+    @elseif($invoice->company && $invoice->company->logo)
     <meta property="og:image" content="{{ asset('uploads/'.$invoice->company->logo) }}">
     @endif
     <meta property="og:url" content="{{ url()->current() }}">
-    <meta property="og:site_name" content="{{ $invoice->company->name ?? 'Invoice' }}">
+    <meta property="og:site_name" content="{{ $invoice->customer->name }}">
     
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image">
