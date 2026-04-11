@@ -101,6 +101,58 @@ Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $reque
     ]);
 });
 
+// Update invoice endpoint for OpenClaw
+// PUT /api/openclaw/invoice/{id}
+Route::put('/openclaw/invoice/{id}', function (Illuminate\Http\Request $request, $id) {
+    // Auth token check
+    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $invoice = Invoice::findOrFail($id);
+
+    $validated = $request->validate([
+        'status' => 'nullable|in:DRAFT,SENT,VIEWED,OVERDUE,COMPLETED',
+        'due_date' => 'nullable|date',
+        'notes' => 'nullable|string',
+    ]);
+
+    if (isset($validated['status'])) {
+        $invoice->status = $validated['status'];
+    }
+    if (isset($validated['due_date'])) {
+        $invoice->due_date = $validated['due_date'];
+    }
+    if (isset($validated['notes'])) {
+        $invoice->notes = $validated['notes'];
+    }
+    $invoice->save();
+
+    return response()->json([
+        'success' => true,
+        'invoice_id' => $invoice->id,
+        'status' => $invoice->status,
+    ]);
+});
+
+// Delete invoice endpoint for OpenClaw
+// DELETE /api/openclaw/invoice/{id}
+Route::delete('/openclaw/invoice/{id}', function (Illuminate\Http\Request $request, $id) {
+    // Auth token check
+    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $invoice = Invoice::findOrFail($id);
+    $invoice->delete();
+
+    return response()->json([
+        'success' => true,
+        'invoice_id' => $id,
+        'deleted' => true,
+    ]);
+});
+
 // Debug endpoint to check env var (public - no auth needed)
 Route::get('/openclaw/debug', function () {
     $token = env('OPENCLAW_API_TOKEN');
