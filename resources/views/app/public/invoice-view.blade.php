@@ -210,8 +210,52 @@
         <div class="footer">
             <p>Thank you for your business!</p>
             <p style="margin-top: 8px;">{{ $invoice->company->name }}</p>
+            @if($invoice->company->website)
+            <p style="margin-top: 4px;"><a href="{{ $invoice->company->website }}" target="_blank" style="color: #667eea;">{{ $invoice->company->website }}</a></p>
+            @endif
         </div>
     </div>
+
+    <!-- All Invoices Section -->
+    @if($customerInvoices && $customerInvoices->count() > 1)
+    <div class="container" style="margin-top: 20px;">
+        <div style="padding: 20px; background: #f9f9f9; border-radius: 8px;">
+            <h3 style="font-size: 18px; margin-bottom: 16px; color: #333;">All Open Invoices</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr>
+                        <th style="text-align: left; padding: 12px 0; border-bottom: 2px solid #eee; font-size: 12px; text-transform: uppercase; color: #999;">Invoice #</th>
+                        <th style="text-align: left; padding: 12px 0; border-bottom: 2px solid #eee; font-size: 12px; text-transform: uppercase; color: #999;">Date</th>
+                        <th style="text-align: left; padding: 12px 0; border-bottom: 2px solid #eee; font-size: 12px; text-transform: uppercase; color: #999;">Due</th>
+                        <th style="text-align: right; padding: 12px 0; border-bottom: 2px solid #eee; font-size: 12px; text-transform: uppercase; color: #999;">Amount</th>
+                        <th style="text-align: center; padding: 12px 0; border-bottom: 2px solid #eee; font-size: 12px; text-transform: uppercase; color: #999;">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($customerInvoices as $inv)
+                    <tr>
+                        <td style="padding: 12px 0; border-bottom: 1px solid #f5f5f5;">
+                            @if($inv->unique_hash === $invoice->unique_hash)
+                            <strong>{{ $inv->invoice_number }}</strong>
+                            @else
+                            <a href="{{ url("/invoices/{$inv->unique_hash}") }}" style="color: #667eea; font-weight: 500;">{{ $inv->invoice_number }}</a>
+                            @endif
+                        </td>
+                        <td style="padding: 12px 0; border-bottom: 1px solid #f5f5f5; color: #666;">{{ $inv->formattedInvoiceDate }}</td>
+                        <td style="padding: 12px 0; border-bottom: 1px solid #f5f5f5; color: #666;">{{ $inv->formattedDueDate }}</td>
+                        <td style="padding: 12px 0; border-bottom: 1px solid #f5f5f5; text-align: right; font-weight: 500;">${{ number_format($inv->total / 100, 2) }}</td>
+                        <td style="padding: 12px 0; border-bottom: 1px solid #f5f5f5; text-align: center;">
+                            <span class="status {{ strtolower($inv->paid_status === 'PAID' ? 'paid' : $inv->status) }}" style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase;">
+                                {{ $inv->paid_status === 'PAID' ? 'PAID' : $inv->status }}
+                            </span>
+                        </td>
+                    </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    </div>
+    @endif
 
     @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
     <script>
