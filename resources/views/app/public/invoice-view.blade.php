@@ -187,8 +187,16 @@
 
         @if(env('CASHAPP_HANDLE'))
         <div style="margin-top: 20px; text-align: center;">
-            <a href="https://cash.app/${{ env('CASHAPP_HANDLE') }}/{{ number_format($invoice->total / 100, 2) }}" class="btn btn-secondary" target="_blank" style="background: #FFDF00; color: black; border-color: #FFDF00;">
+            <a href="https://cash.app/${{ env('CASHAPP_HANDLE') }}/{{ number_format($invoice->total / 100, 2) }}" class="btn btn-secondary" target="_blank" style="background: linear-gradient(135deg, #FFDF00 0%, #EFEFEF 100%); color: black; border: 2px solid #000;">
                 💵 Pay with Cash App
+            </a>
+        </div>
+        @endif
+
+        @if(env('PAYPAL_EMAIL'))
+        <div style="margin-top: 20px; text-align: center;">
+            <a href="https://www.paypal.com/paypalme/{{ env('PAYPAL_EMAIL') }}/{{ number_format($invoice->total / 100, 2) }}" class="btn btn-secondary" target="_blank" style="background: #003087; color: white;">
+                🅿️ Pay with PayPal
             </a>
         </div>
         @endif
