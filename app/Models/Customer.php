@@ -215,12 +215,15 @@ class Customer extends Authenticatable implements HasMedia
         
         $payload = $request->getCustomerPayload();
         
-        // Fix clients with no currency set - set default
-        if ((!isset($customer->currency_id) || !$customer->currency_id) && (!isset($payload['currency_id']) || !$payload['currency_id'])) {
+        // Fix clients with no currency set - set default to USD
+        if (!isset($customer->currency_id) || !$customer->currency_id) {
             $payload['currency_id'] = 1;
         }
-
-        if (($customer->currency_id !== ($payload['currency_id'] ?? $customer->currency_id)) && $condition) {
+        
+        // Only block currency change if old currency was already set AND different
+        $oldCurrency = $customer->currency_id;
+        $newCurrency = $payload['currency_id'] ?? $oldCurrency;
+        if ($oldCurrency && $newCurrency && ($oldCurrency != $newCurrency) && $condition) {
             return 'you_cannot_edit_currency';
         }
 
