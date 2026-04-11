@@ -177,7 +177,14 @@ class Customer extends Authenticatable implements HasMedia
 
     public static function createCustomer($request)
     {
-        $customer = Customer::create($request->getCustomerPayload());
+        $payload = $request->getCustomerPayload();
+        
+        // Set default currency (USD = 1) if not provided
+        if (!isset($payload['currency_id']) || !$payload['currency_id']) {
+            $payload['currency_id'] = 1; // USD default
+        }
+        
+        $customer = Customer::create($payload);
 
         if ($request->shipping) {
             if ($request->hasAddress($request->shipping)) {
