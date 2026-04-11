@@ -84,6 +84,8 @@ Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $reque
             'discount_val' => 0,
             'tax' => 0,
             'company_id' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
     }
 
