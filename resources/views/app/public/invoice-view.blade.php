@@ -4,6 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Invoice {{ $invoice->invoice_number }}</title>
+    
+    <!-- OG Meta Tags for Social Sharing - Clients will love this! -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Invoice {{ $invoice->invoice_number }} - ${{ number_format($invoice->total / 100, 2) }}">
+    <meta property="og:description" content="{{ $invoice->customer->name }} - Due {{ $invoice->formattedDueDate }}">
+    @if($invoice->company && $invoice->company->logo)
+    <meta property="og:image" content="{{ asset('uploads/'.$invoice->company->logo) }}">
+    @endif
+    <meta property="og:url" content="{{ url()->current() }}">
+    <meta property="og:site_name" content="{{ $invoice->company->name ?? 'Invoice' }}">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Invoice {{ $invoice->invoice_number }}">
+    <meta name="twitter:description" content="{{ $invoice->customer->name }} - Due {{ $invoice->formattedDueDate }}">
+    
     <script src="https://js.stripe.com/v3/"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
