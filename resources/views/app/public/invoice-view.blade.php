@@ -177,6 +177,14 @@
         <div id="checkout" style="margin-top: 40px;"></div>
         @endif
 
+        @if(env('VENMO_HANDLE'))
+        <div style="margin-top: 20px; text-align: center;">
+            <a href="https://venmo.com/?txn=pay&recipients={{ env('VENMO_HANDLE') }}&amount={{ number_format($invoice->total / 100, 2) }}&note=Invoice+{{ $invoice->invoice_number }}" class="btn btn-secondary" target="_blank" style="background: #008CFF; color: white; border-color: #008CFF;">
+                💙 Pay with Venmo
+            </a>
+        </div>
+        @endif
+
         <div style="margin-top: 20px; text-align: center;">
             <a href="{{ url("/invoices/pdf/{$invoice->unique_hash}") }}" class="btn btn-secondary" target="_blank">
                 📄 Download PDF
