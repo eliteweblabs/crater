@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Crater\Models\Customer;
 use Crater\Models\Invoice;
 use Crater\Models\InvoiceItem;
+use Crater\Models\RecurringInvoice;
 use Stripe\Stripe;
 use Stripe\PaymentIntent;
 use Stripe\Checkout\Session as StripeSession;
@@ -206,4 +207,70 @@ Route::post('/invoices/{uniqueHash}/checkout-session', function ($uniqueHash) {
         \Log::error('Checkout session error: ' . $e->getMessage());
         return response()->json(['error' => $e->getMessage()], 400);
     }
+});
+
+// Create recurring invoice endpoint for OpenClaw
+// POST /api/openclaw/create-recurring-invoice
+Route::post('/openclaw/create-recurring-invoice', function (Illuminate\Http\Request $request) {
+    // Auth token check
+    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $validated = $request->validate([
+        'customer_name' => 'required|string',
+        'starts_at' => 'nullable|date',
+        'frequency' => 'nullable|string',
+        'send_automatically' => 'nullable|boolean',
+    ]);
+
+    // Find customer
+    $customer = Customer::where('name', $validated['customer_name'])->firstOrFail();
+
+    // Default recurring invoice items
+    $hostingItem = [
+        'name' => 'Website, domain, database and/or email hosting',
+        'description' => 'Annual hosting fee',
+        'price' => 42500,
+        'quantity' => 1,
+        'discount' => 0,
+        'discount_type' => 'fixed',
+        'discount_val' => 0,
+        'tax' => 0,
+        'total' => 42500,
+        'company_id' => 1,
+    ];
+
+    $recurringInvoice = \Crater\Models\RecurringInvoice::create([
+        'customer_id' => $customer->id,
+        'company_id' => 1,
+        'creator_id' => 1,
+        'starts_at' => $validated['starts_at'] ?? now()->format('Y-m-d'),
+        'frequency' => $validated['frequency'] ?? '0 0 1 4 *', // Monthly on the 1st
+        'send_automatically' => $validated['send_automatically'] ?? false,
+        'status' => 'ACTIVE',
+        'template_name' => 'invoice1',
+        'discount_type' => 'fixed',
+        'discount' => '0.00',
+        'discount_val' => 0,
+        'sub_total' => 42500,
+        'total' => 42500,
+        'tax' => 0,
+        'due_amount' => 42500,
+    ]);
+
+    // Add the hosting line item
+    \Crater\Models\InvoiceItem::create(array_merge($hostingItem, [
+        'invoice_id' => null,
+        'item_id' => null,
+        'recurring_invoice_id' => $recurringInvoice->id,
+    ]));
+
+    return response()->json([
+        'success' => true,
+        'recurring_invoice_id' => $recurringInvoice->id,
+        'customer' => $customer->name,
+        'starts_at' => $recurringInvoice->starts_at,
+        'frequency' => $recurringInvoice->frequency,
+    ]);
 });
