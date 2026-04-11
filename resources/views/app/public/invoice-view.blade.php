@@ -185,6 +185,14 @@
         </div>
         @endif
 
+        @if(env('CASHAPP_HANDLE'))
+        <div style="margin-top: 20px; text-align: center;">
+            <a href="https://cash.app/${{ env('CASHAPP_HANDLE') }}/{{ number_format($invoice->total / 100, 2) }}" class="btn btn-secondary" target="_blank" style="background: #FFDF00; color: black; border-color: #FFDF00;">
+                💵 Pay with Cash App
+            </a>
+        </div>
+        @endif
+
         <div style="margin-top: 20px; text-align: center;">
             <a href="{{ url("/invoices/pdf/{$invoice->unique_hash}") }}" class="btn btn-secondary" target="_blank">
                 📄 Download PDF
