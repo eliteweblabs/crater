@@ -489,9 +489,9 @@ class Invoice extends Model implements HasMedia
             $invoiceItem['company_id'] = $invoice->company_id;
             $invoiceItem['exchange_rate'] = $exchange_rate;
             $invoiceItem['base_price'] = $invoiceItem['price'] * $exchange_rate;
-            $invoiceItem['base_discount_val'] = $invoiceItem['discount_val'] * $exchange_rate;
-            $invoiceItem['base_tax'] = $invoiceItem['tax'] * $exchange_rate;
-            $invoiceItem['base_total'] = $invoiceItem['total'] * $exchange_rate;
+            $invoiceItem['base_discount_val'] = ($invoiceItem['discount_val'] ?? 0) * $exchange_rate;
+            $invoiceItem['base_tax'] = ($invoiceItem['tax'] ?? 0) * $exchange_rate;
+            $invoiceItem['base_total'] = ($invoiceItem['total'] ?? ($invoiceItem['price'] * $invoiceItem['quantity'])) * $exchange_rate;
 
             if (array_key_exists('recurring_invoice_id', $invoiceItem)) {
                 unset($invoiceItem['recurring_invoice_id']);
