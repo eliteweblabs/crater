@@ -488,6 +488,7 @@ class Invoice extends Model implements HasMedia
         foreach ($invoiceItems as $invoiceItem) {
             $invoiceItem['company_id'] = $invoice->company_id;
             $invoiceItem['exchange_rate'] = $exchange_rate;
+            $invoiceItem['discount_type'] = $invoiceItem['discount_type'] ?? 'fixed';
             $invoiceItem['base_price'] = $invoiceItem['price'] * $exchange_rate;
             $invoiceItem['base_discount_val'] = ($invoiceItem['discount_val'] ?? 0) * $exchange_rate;
             $invoiceItem['base_tax'] = ($invoiceItem['tax'] ?? 0) * $exchange_rate;
