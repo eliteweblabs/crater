@@ -449,6 +449,9 @@ class Invoice extends Model implements HasMedia
         $data['subject'] = $this->getEmailString($data['subject']);
         $data['body'] = $this->getEmailString($data['body']);
         $data['attach']['data'] = ($this->getEmailAttachmentSetting()) ? $this->getPDFData() : null;
+        
+        // Add public invoice URL (same as Telegram/OpenClaw)
+        $data['invoice_url'] = url('/invoices/pdf/' . $this->unique_hash);
 
         return $data;
     }

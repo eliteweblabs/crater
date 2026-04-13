@@ -5,13 +5,13 @@
 {!! $data['body'] !!}
 
 @if(!$data['attach']['data'])
-@component('mail::button', ['url' => $data['url']])
+@component('mail::button', ['url' => $data['invoice_url']])
 View Invoice
 @endcomponent
 @endif
 
 @if($data['invoice']['paid_status'] !== 'PAID')
-@component('mail::button', ['url' => url('/invoices/pdf/' . $data['invoice']['unique_hash']), 'color' => 'success'])
+@component('mail::button', ['url' => $data['invoice_url'], 'color' => 'success'])
 Pay Invoice
 @endcomponent
 @endif
