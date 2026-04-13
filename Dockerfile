@@ -9,6 +9,10 @@ RUN apt-get update && apt-get install -y \
 # Install PHP extensions
 RUN docker-php-ext-install pdo_mysql mbstring zip exif pcntl bcmath gd
 
+# Raise PHP upload limits (default 2M is too small for profile images)
+RUN echo "upload_max_filesize=20M\npost_max_size=25M\nmemory_limit=256M" \
+    > /usr/local/etc/php/conf.d/uploads.ini
+
 # Enable Apache modules
 RUN a2enmod rewrite headers
 
