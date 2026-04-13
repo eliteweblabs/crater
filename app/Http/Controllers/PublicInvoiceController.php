@@ -14,7 +14,9 @@ class PublicInvoiceController extends Controller
 
         // Get all non-draft invoices for the same customer
         $customerInvoices = Invoice::where('customer_id', $invoice->customer_id)
+            ->where('company_id', $invoice->company_id)
             ->where('status', '<>', 'DRAFT')
+            ->where('id', '<>', $invoice->id)  // Exclude current invoice
             ->orderBy('created_at', 'desc')
             ->get(['id', 'invoice_number', 'total', 'status', 'paid_status', 'due_date', 'unique_hash']);
 

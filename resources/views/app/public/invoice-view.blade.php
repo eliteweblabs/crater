@@ -217,7 +217,7 @@
     </div>
 
     <!-- All Invoices Section -->
-    @if($customerInvoices && $customerInvoices->count() > 1)
+    @if($customerInvoices && $customerInvoices->count() > 0)
     <div class="container" style="margin-top: 20px;">
         <div style="padding: 20px; background: #f9f9f9; border-radius: 8px;">
             <h3 style="font-size: 18px; margin-bottom: 16px; color: #333;">All Open Invoices</h3>
