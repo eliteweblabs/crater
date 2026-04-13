@@ -4,17 +4,9 @@
 
 {!! $data['body'] !!}
 
-@if(!$data['attach']['data'])
-@component('mail::button', ['url' => $data['invoice_url']])
-View Invoice
-@endcomponent
-@endif
-
-@if($data['invoice']['paid_status'] !== 'PAID')
 @component('mail::button', ['url' => $data['invoice_url'], 'color' => 'success'])
-Pay Invoice
+View Invoice & Pay
 @endcomponent
-@endif
 
 Thanks,<br>
 {{ $data['company']['name'] }}
