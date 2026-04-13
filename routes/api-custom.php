@@ -5,6 +5,7 @@ use Crater\Models\Customer;
 use Crater\Models\Invoice;
 use Crater\Models\InvoiceItem;
 use Crater\Models\RecurringInvoice;
+use Crater\Services\SerialNumberFormatter;
 use Stripe\Stripe;
 use Stripe\PaymentIntent;
 use Stripe\Checkout\Session as StripeSession;
@@ -50,10 +51,18 @@ Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $reque
     // Create invoice with unique hash for public link
     $uniqueHash = \Illuminate\Support\Str::random(32);
     
+    // Get proper invoice number from serial number formatter
+    $invoiceModel = new Invoice();
+    $serial = (new SerialNumberFormatter())
+        ->setModel($invoiceModel)
+        ->setCompany(1)
+        ->setNextNumbers();
+    $invoiceNumber = $serial->getNextNumber();
+    
     $invoice = Invoice::create([
         'invoice_date' => now()->format('Y-m-d'),
         'due_date' => now()->addDays(30)->format('Y-m-d'),
-        'invoice_number' => 'INV-' . strtoupper(substr(md5(time()), 0, 8)),
+        'invoice_number' => $invoiceNumber,
         'customer_id' => $customer->id,
         'company_id' => 1,
         'sub_total' => $subTotal,
