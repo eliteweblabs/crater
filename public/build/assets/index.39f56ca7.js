@@ -1,1 +1,0 @@
-import{x as e,a0 as t}from"./main.92562a37.js";var a={name:"ValidateEach",props:{rules:{type:Object,required:!0},state:{type:Object,required:!0},options:{type:Object,default:()=>({})},index:{type:Number,default:0}},setup(a,s){let{slots:r}=s;const p=e(a.rules,t(a,"state"),a.options);return()=>r.default({v:p.value})}};export{a as V};
