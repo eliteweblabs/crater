@@ -204,10 +204,18 @@ class StripePaymentController extends Controller
             $currencyCode = strtolower($invoice->currency->code);
             $amountInCents = (int)$invoice->due_amount;
 
+            // Allow the caller to narrow the payment method via ?method=card|bank|cashapp
+            $methodParam = $request->get('method', 'all');
+            $paymentMethodTypes = match($methodParam) {
+                'card'    => ['card', 'link'],
+                'bank'    => ['us_bank_account'],
+                'cashapp' => ['cashapp'],
+                default   => ['card', 'link', 'cashapp', 'us_bank_account'],
+            };
+
             // Create Stripe checkout session
-            // Payment methods: card (includes Apple Pay/Google Pay), link (Stripe 1-click), cashapp, us_bank_account (ACH)
             $session = StripeSession::create([
-                'payment_method_types' => ['card', 'link', 'cashapp', 'us_bank_account'],
+                'payment_method_types' => $paymentMethodTypes,
                 'line_items' => [[
                     'price_data' => [
                         'currency' => $currencyCode,
@@ -305,18 +313,23 @@ class StripePaymentController extends Controller
         try {
             $invoice = Invoice::with(['company', 'customer'])->findOrFail($invoice_id);
 
-            // Find or create Stripe payment method
+            // Avoid double-fulfillment if already paid
+            if ($invoice->paid_status === 'PAID') {
+                \Log::info("Webhook skipped — invoice #{$invoice->invoice_number} already paid");
+                return;
+            }
+
+            // Find or create the Stripe payment method row for this company
             $paymentMethod = PaymentMethod::firstOrCreate(
                 ['name' => 'Stripe', 'company_id' => $invoice->company_id],
                 ['name' => 'Stripe', 'company_id' => $invoice->company_id]
             );
 
-            // Update transaction to success
+            // Mark the pending transaction as complete (or create one if it's missing)
             $transaction = Transaction::where('transaction_id', $session['id'])->first();
             if ($transaction) {
                 $transaction->completeTransaction();
             } else {
-                // Create transaction if it doesn't exist
                 $transaction = Transaction::createTransaction([
                     'transaction_id' => $session['id'],
                     'type' => 'stripe',
@@ -327,8 +340,11 @@ class StripePaymentController extends Controller
                 ]);
             }
 
-            // Create payment record using the transaction
-            Payment::generatePayment($transaction);
+            // Use the amount Stripe actually collected (in cents) so partial payments
+            // are recorded correctly and don't push due_amount below zero.
+            $amountCharged = $session['amount_total'] ?? $invoice->due_amount;
+
+            Payment::generatePayment($transaction, $paymentMethod->id, $amountCharged);
 
             \Log::info("Payment fulfilled for invoice #{$invoice->invoice_number}");
 

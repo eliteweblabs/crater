@@ -22,7 +22,6 @@
     <meta name="twitter:title" content="Invoice {{ $invoice->invoice_number }}">
     <meta name="twitter:description" content="{{ $invoice->customer->name }} - Due {{ $invoice->formattedDueDate }}">
     
-    <script src="https://js.stripe.com/v3/"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; }
@@ -173,8 +172,25 @@
         </div>
         @endif
 
-        @if($invoice->paid_status !== 'PAID')
-        <div id="checkout" style="margin-top: 40px;"></div>
+        @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
+        <div style="margin-top: 40px; padding: 30px; background: #f9f9f9; border-radius: 8px;">
+            <h2 style="font-size: 16px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 20px;">Pay Now</h2>
+            <a href="{{ url("/invoices/{$invoice->unique_hash}/pay?method=card") }}"
+               style="display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 15px 24px; border-radius: 8px; background: linear-gradient(to right, #A855F7, #F72585); color: #fff; font-size: 16px; font-weight: 600; text-decoration: none; margin-bottom: 12px; box-shadow: 0 4px 14px rgba(168,85,247,0.35); transition: opacity 0.2s;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                Pay with Card / Apple Pay / Google Pay
+            </a>
+            <a href="{{ url("/invoices/{$invoice->unique_hash}/pay?method=bank") }}"
+               style="display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 15px 24px; border-radius: 8px; background: #fff; color: #333; font-size: 15px; font-weight: 600; text-decoration: none; margin-bottom: 12px; border: 2px solid #ddd;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>
+                Pay with Bank Account (ACH)
+            </a>
+            <a href="{{ url("/invoices/{$invoice->unique_hash}/pay?method=cashapp") }}"
+               style="display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 15px 24px; border-radius: 8px; background: #00D632; color: #fff; font-size: 15px; font-weight: 600; text-decoration: none; border: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05.82 1.87 2.65 1.87 1.96 0 2.4-.98 2.4-1.59 0-.83-.44-1.61-2.67-2.14-2.48-.6-4.18-1.62-4.18-3.67 0-1.72 1.39-2.84 3.11-3.21V4h2v1.95c1.86.45 2.79 1.86 2.85 3.39H14.3c-.05-1.11-.64-1.87-2.22-1.87-1.5 0-2.4.68-2.4 1.64 0 .84.65 1.39 2.67 1.91s4.18 1.39 4.18 3.91c-.01 1.83-1.38 2.83-3.12 3.16z"/></svg>
+                Pay with Cash App
+            </a>
+        </div>
         @endif
 
         @if(env('VENMO_HANDLE'))
@@ -257,32 +273,5 @@
     </div>
     @endif
 
-    @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
-    <script>
-        const stripe = Stripe('{{ config("services.stripe.key") }}');
-        
-        fetch('{{ url("/api/invoices/{$invoice->unique_hash}/checkout-session") }}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(r => r.json())
-        .then(async data => {
-            if (data.clientSecret) {
-                const checkout = await stripe.initEmbeddedCheckout({
-                    clientSecret: data.clientSecret
-                });
-                checkout.mount('#checkout');
-            } else if (data.error) {
-                document.getElementById('checkout').innerHTML = `<p style="color: #d32f2f;">Error: ${data.error}</p>`;
-            }
-        })
-        .catch(error => {
-            console.error('Checkout error:', error);
-            document.getElementById('checkout').innerHTML = `<p style="color: #d32f2f;">Unable to load payment form. Please try again.</p>`;
-        });
-    </script>
-    @endif
 </body>
 </html>

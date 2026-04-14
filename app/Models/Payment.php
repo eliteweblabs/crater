@@ -439,7 +439,7 @@ class Payment extends Model implements HasMedia
         ];
     }
 
-    public static function generatePayment($transaction)
+    public static function generatePayment($transaction, $paymentMethodId = null, $amount = null)
     {
         $invoice = Invoice::find($transaction->invoice_id);
 
@@ -449,11 +449,15 @@ class Payment extends Model implements HasMedia
             ->setCustomer($invoice->customer_id)
             ->setNextNumbers();
 
+        // Use the explicitly provided amount, falling back to the invoice's current due
+        // amount (what was actually charged), rather than the original invoice total.
+        $paymentAmount = $amount ?? $invoice->due_amount;
+
         $data['payment_number'] = $serial->getNextNumber();
         $data['payment_date'] = Carbon::now()->format('y-m-d');
-        $data['amount'] = $invoice->total;
+        $data['amount'] = $paymentAmount;
         $data['invoice_id'] = $invoice->id;
-        $data['payment_method_id'] = request()->payment_method_id;
+        $data['payment_method_id'] = $paymentMethodId ?? request()->payment_method_id;
         $data['customer_id'] = $invoice->customer_id;
         $data['exchange_rate'] = $invoice->exchange_rate;
         $data['base_amount'] = $data['amount'] * $data['exchange_rate'];
@@ -467,7 +471,7 @@ class Payment extends Model implements HasMedia
         $payment->customer_sequence_number = $serial->nextCustomerSequenceNumber;
         $payment->save();
 
-        $invoice->subtractInvoicePayment($invoice->total);
+        $invoice->subtractInvoicePayment($paymentAmount);
 
         return $payment;
     }

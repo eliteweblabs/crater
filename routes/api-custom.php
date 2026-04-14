@@ -6,10 +6,6 @@ use Crater\Models\Invoice;
 use Crater\Models\InvoiceItem;
 use Crater\Models\RecurringInvoice;
 use Crater\Services\SerialNumberFormatter;
-use Stripe\Stripe;
-use Stripe\PaymentIntent;
-use Stripe\Checkout\Session as StripeSession;
-
 // Simple invoice creation endpoint for OpenClaw
 // POST /api/openclaw/create-invoice
 Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $request) {
@@ -174,48 +170,6 @@ Route::get('/openclaw/debug', function () {
         'token_first_8' => substr($token ?? '', 0, 8),
         'env_check' => env('APP_ENV'),
     ]);
-});
-
-// Create embedded checkout session for invoice
-Route::post('/invoices/{uniqueHash}/checkout-session', function ($uniqueHash) {
-    try {
-        $invoice = Invoice::with(['customer', 'company', 'currency'])
-            ->where('unique_hash', $uniqueHash)
-            ->firstOrFail();
-
-        if ($invoice->paid_status === 'PAID') {
-            return response()->json(['error' => 'Invoice already paid'], 400);
-        }
-
-        Stripe::setApiKey(config('services.stripe.secret'));
-
-        $session = StripeSession::create([
-            'ui_mode' => 'embedded',
-            'payment_method_types' => ['card', 'link', 'cashapp', 'us_bank_account'],
-            'line_items' => [[
-                'price_data' => [
-                    'currency' => strtolower($invoice->currency->code ?? 'usd'),
-                    'product_data' => [
-                        'name' => 'Invoice #' . $invoice->invoice_number,
-                        'description' => 'Payment for ' . $invoice->company->name,
-                    ],
-                    'unit_amount' => $invoice->total,
-                ],
-                'quantity' => 1,
-            ]],
-            'mode' => 'payment',
-            'return_url' => url("/invoices/{$uniqueHash}?payment=success"),
-            'metadata' => [
-                'invoice_id' => $invoice->id,
-                'invoice_number' => $invoice->invoice_number,
-            ],
-        ]);
-
-        return response()->json(['clientSecret' => $session->client_secret]);
-    } catch (\Exception $e) {
-        \Log::error('Checkout session error: ' . $e->getMessage());
-        return response()->json(['error' => $e->getMessage()], 400);
-    }
 });
 
 // Create recurring invoice endpoint for OpenClaw
