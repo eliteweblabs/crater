@@ -175,21 +175,57 @@
         @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
         <div style="margin-top: 40px; padding: 30px; background: #f9f9f9; border-radius: 8px;">
             <h2 style="font-size: 16px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 20px;">Pay Now</h2>
-            <a href="{{ url("/invoices/{$invoice->unique_hash}/pay?method=card") }}"
-               style="display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 15px 24px; border-radius: 8px; background: linear-gradient(to right, #A855F7, #F72585); color: #fff; font-size: 16px; font-weight: 600; text-decoration: none; margin-bottom: 12px; box-shadow: 0 4px 14px rgba(168,85,247,0.35); transition: opacity 0.2s;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-                Pay with Card / Apple Pay / Google Pay
+
+            {{-- Radio toggle options --}}
+            <div id="pay-options" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+
+                <label id="opt-card" style="display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: #fff; border: 2px solid #A855F7; border-radius: 10px; cursor: pointer;">
+                    <input type="radio" name="pay_method" value="card" checked
+                           style="width: 18px; height: 18px; accent-color: #A855F7; flex-shrink: 0;"
+                           onchange="updatePayBtn()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#A855F7" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                    <span style="font-size: 15px; font-weight: 600; color: #333;">Card / Apple Pay / Google Pay</span>
+                </label>
+
+                <label id="opt-bank" style="display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: #fff; border: 2px solid #e5e7eb; border-radius: 10px; cursor: pointer;">
+                    <input type="radio" name="pay_method" value="bank"
+                           style="width: 18px; height: 18px; accent-color: #A855F7; flex-shrink: 0;"
+                           onchange="updatePayBtn()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#555" stroke-width="2"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>
+                    <span style="font-size: 15px; font-weight: 600; color: #333;">Bank Account (ACH)</span>
+                </label>
+
+                <label id="opt-cashapp" style="display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: #fff; border: 2px solid #e5e7eb; border-radius: 10px; cursor: pointer;">
+                    <input type="radio" name="pay_method" value="cashapp"
+                           style="width: 18px; height: 18px; accent-color: #A855F7; flex-shrink: 0;"
+                           onchange="updatePayBtn()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="#00D632"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05.82 1.87 2.65 1.87 1.96 0 2.4-.98 2.4-1.59 0-.83-.44-1.61-2.67-2.14-2.48-.6-4.18-1.62-4.18-3.67 0-1.72 1.39-2.84 3.11-3.21V4h2v1.95c1.86.45 2.79 1.86 2.85 3.39H14.3c-.05-1.11-.64-1.87-2.22-1.87-1.5 0-2.4.68-2.4 1.64 0 .84.65 1.39 2.67 1.91s4.18 1.39 4.18 3.91c-.01 1.83-1.38 2.83-3.12 3.16z"/></svg>
+                    <span style="font-size: 15px; font-weight: 600; color: #333;">Cash App Pay</span>
+                </label>
+
+            </div>
+
+            <a id="pay-btn"
+               href="{{ url("/invoices/{$invoice->unique_hash}/pay?method=card") }}"
+               style="display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 16px 24px; border-radius: 10px; background: linear-gradient(to right, #A855F7, #7C3AED); color: #fff; font-size: 16px; font-weight: 700; text-decoration: none; box-shadow: 0 4px 14px rgba(124,58,237,0.4); box-sizing: border-box;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                Pay Securely
             </a>
-            <a href="{{ url("/invoices/{$invoice->unique_hash}/pay?method=bank") }}"
-               style="display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 15px 24px; border-radius: 8px; background: #fff; color: #333; font-size: 15px; font-weight: 600; text-decoration: none; margin-bottom: 12px; border: 2px solid #ddd;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>
-                Pay with Bank Account (ACH)
-            </a>
-            <a href="{{ url("/invoices/{$invoice->unique_hash}/pay?method=cashapp") }}"
-               style="display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 15px 24px; border-radius: 8px; background: #00D632; color: #fff; font-size: 15px; font-weight: 600; text-decoration: none; border: none;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05.82 1.87 2.65 1.87 1.96 0 2.4-.98 2.4-1.59 0-.83-.44-1.61-2.67-2.14-2.48-.6-4.18-1.62-4.18-3.67 0-1.72 1.39-2.84 3.11-3.21V4h2v1.95c1.86.45 2.79 1.86 2.85 3.39H14.3c-.05-1.11-.64-1.87-2.22-1.87-1.5 0-2.4.68-2.4 1.64 0 .84.65 1.39 2.67 1.91s4.18 1.39 4.18 3.91c-.01 1.83-1.38 2.83-3.12 3.16z"/></svg>
-                Pay with Cash App
-            </a>
+
+            <script>
+                const baseUrl = '{{ url("/invoices/{$invoice->unique_hash}/pay") }}';
+                const optEls  = { card: document.getElementById('opt-card'), bank: document.getElementById('opt-bank'), cashapp: document.getElementById('opt-cashapp') };
+                const ACTIVE  = '#A855F7';
+                const IDLE    = '#e5e7eb';
+
+                function updatePayBtn() {
+                    const method = document.querySelector('input[name="pay_method"]:checked').value;
+                    document.getElementById('pay-btn').href = baseUrl + '?method=' + method;
+                    Object.entries(optEls).forEach(([key, el]) => {
+                        el.style.borderColor = key === method ? ACTIVE : IDLE;
+                    });
+                }
+            </script>
         </div>
         @endif
 
