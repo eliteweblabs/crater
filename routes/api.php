@@ -167,10 +167,21 @@ Route::prefix('/v1')->group(function () {
     //----------------------------------
 
     Route::get('/health', function () {
+        $envFile = base_path('.env');
+        $envLines = [];
+        if (file_exists($envFile)) {
+            foreach (file($envFile) as $line) {
+                if (str_starts_with($line, 'DB_HOST=') || str_starts_with($line, 'DB_DATABASE=')) {
+                    $envLines[] = trim($line);
+                }
+            }
+        }
         $status = [
             'status' => 'ok',
             'timestamp' => now()->toISOString(),
             'php_version' => PHP_VERSION,
+            'env_file_path' => $envFile,
+            'env_db_lines' => $envLines,
             'database_created_file' => \Storage::disk('local')->has('database_created'),
             // Debug: show what Laravel thinks the DB config is
             'config_db_host' => config('database.connections.mysql.host'),
