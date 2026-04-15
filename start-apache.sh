@@ -178,7 +178,7 @@ php artisan cache:clear 2>/dev/null || true
 
 # Sync ADMIN_PASSWORD env var → database user record on every deploy
 if [ -n "$ADMIN_PASSWORD" ]; then
-    echo "Syncing admin password..."
+    echo "Syncing admin password (len=${#ADMIN_PASSWORD})..."
     php -r '
 require "/var/www/html/vendor/autoload.php";
 $app = require_once "/var/www/html/bootstrap/app.php";
@@ -187,6 +187,7 @@ $db   = config("database.connections.mysql.database");
 $host = config("database.connections.mysql.host");
 echo "DB: " . $host . "/" . $db . PHP_EOL;
 $password = getenv("ADMIN_PASSWORD");
+echo "PW_LEN=" . strlen($password) . " PW_FIRST3=" . substr($password, 0, 3) . PHP_EOL;
 $targetEmail = getenv("ADMIN_EMAIL");
 $user = $targetEmail ? Crater\Models\User::where("email", $targetEmail)->first() : null;
 if (!$user) { $user = Crater\Models\User::orderBy("id")->first(); }
