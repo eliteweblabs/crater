@@ -94,8 +94,8 @@ class StripePaymentController extends Controller
     public function createEmbeddedCheckoutSession(Request $request, Invoice $invoice)
     {
         try {
-            // Load relationships
-            $invoice->load(['customer', 'company', 'currency']);
+            // Load relationships (currency may not be loaded from the public route)
+            $invoice->loadMissing(['customer', 'company', 'currency']);
             
             // Check if invoice is already paid
             if ($invoice->paid_status === 'PAID') {
@@ -117,9 +117,6 @@ class StripePaymentController extends Controller
             // Create Stripe embedded checkout session
             $session = StripeSession::create([
                 'ui_mode' => 'embedded',
-                'automatic_payment_methods' => [
-                    'enabled' => true,
-                ],
                 'customer_email' => $invoice->customer->email ?? null,
                 'line_items' => [[
                     'price_data' => [

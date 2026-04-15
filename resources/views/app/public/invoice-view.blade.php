@@ -176,11 +176,6 @@
         </div>
         @endif
 
-        {{-- VERSION: 2026-04-15-v3 --}}
-        <div style="background:#ff0;padding:6px 12px;font-size:11px;font-family:monospace;border-radius:4px;margin-top:20px;">
-            DEPLOY CHECK: 2026-04-15-v3 | stripe_key={{ config('services.stripe.key') ? 'SET' : 'MISSING' }} | paid={{ $invoice->paid_status }}
-        </div>
-
         @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
         <div id="stripe-checkout" style="margin-top: 40px;"></div>
 
