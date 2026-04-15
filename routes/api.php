@@ -182,6 +182,8 @@ Route::prefix('/v1')->group(function () {
             'php_version' => PHP_VERSION,
             'env_file_path' => $envFile,
             'env_db_lines' => $envLines,
+            'config_cache_exists' => file_exists(base_path('bootstrap/cache/config.php')),
+            'env_file_mtime' => file_exists($envFile) ? date('Y-m-d H:i:s', filemtime($envFile)) : 'missing',
             'database_created_file' => \Storage::disk('local')->has('database_created'),
             // Debug: show what Laravel thinks the DB config is
             'config_db_host' => config('database.connections.mysql.host'),
