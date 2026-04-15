@@ -68,20 +68,6 @@ echo "SESSION_LIFETIME=10080" >> .env
 echo "SESSION_SECURE_COOKIE=true" >> .env
 echo "SESSION_SAME_SITE=lax" >> .env
 
-# Admin reset token (used by /api/v1/reset-admin-pw route)
-if [ -n "$ADMIN_RESET_TOKEN" ]; then
-    sed -i '/^ADMIN_RESET_TOKEN=/d' .env 2>/dev/null || true
-    echo "ADMIN_RESET_TOKEN=${ADMIN_RESET_TOKEN}" >> .env
-fi
-if [ -n "$ADMIN_PASSWORD" ]; then
-    sed -i '/^ADMIN_PASSWORD=/d' .env 2>/dev/null || true
-    echo "ADMIN_PASSWORD=${ADMIN_PASSWORD}" >> .env
-fi
-if [ -n "$ADMIN_EMAIL" ]; then
-    sed -i '/^ADMIN_EMAIL=/d' .env 2>/dev/null || true
-    echo "ADMIN_EMAIL=${ADMIN_EMAIL}" >> .env
-fi
-
 # Stripe
 echo "STRIPE_KEY=${STRIPE_KEY}" >> .env
 echo "STRIPE_SECRET=${STRIPE_SECRET}" >> .env

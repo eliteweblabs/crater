@@ -166,32 +166,6 @@ Route::prefix('/v1')->group(function () {
     // Health Check
     //----------------------------------
 
-    // Temporary one-time password reset route — protected by secret token
-    Route::get('/reset-admin-pw', function (\Illuminate\Http\Request $request) {
-        $secret = env('ADMIN_RESET_TOKEN');
-        if (!$secret || $request->get('token') !== $secret) {
-            return response()->json(['error' => 'Forbidden'], 403);
-        }
-        $password = env('ADMIN_PASSWORD');
-        if (!$password) {
-            return response()->json(['error' => 'ADMIN_PASSWORD not set'], 400);
-        }
-        $targetEmail = env('ADMIN_EMAIL');
-        $user = $targetEmail ? \Crater\Models\User::where('email', $targetEmail)->first() : null;
-        if (!$user) { $user = \Crater\Models\User::orderBy('id')->first(); }
-        if (!$user) {
-            return response()->json(['error' => 'No users found'], 404);
-        }
-        $user->password = $password;
-        $user->save();
-        $verify = \Illuminate\Support\Facades\Hash::check($password, $user->fresh()->password);
-        return response()->json([
-            'success' => true,
-            'email'   => $user->email,
-            'verify'  => $verify,
-        ]);
-    });
-
     Route::get('/health', function () {
         $envFile = base_path('.env');
         $envLines = [];
