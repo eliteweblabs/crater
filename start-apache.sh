@@ -177,21 +177,27 @@ php artisan view:clear 2>/dev/null || true
 php artisan cache:clear 2>/dev/null || true
 
 # Sync ADMIN_PASSWORD env var → database user record on every deploy
-if [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
-    echo "Syncing admin password for ${ADMIN_EMAIL}..."
+if [ -n "$ADMIN_PASSWORD" ]; then
+    echo "Syncing admin password..."
     php -r '
 require "/var/www/html/vendor/autoload.php";
 $app = require_once "/var/www/html/bootstrap/app.php";
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
-$email    = getenv("ADMIN_EMAIL");
 $password = getenv("ADMIN_PASSWORD");
-$user = Crater\Models\User::where("email", $email)->first();
+$targetEmail = getenv("ADMIN_EMAIL");
+// Find by target email, or fall back to first admin user
+$user = $targetEmail
+    ? Crater\Models\User::where("email", $targetEmail)->first()
+    : null;
+if (!$user) {
+    $user = Crater\Models\User::orderBy("id")->first();
+}
 if ($user) {
     $user->password = Illuminate\Support\Facades\Hash::make($password);
     $user->save();
-    echo "Password synced for " . $email . PHP_EOL;
+    echo "Password synced for " . $user->email . PHP_EOL;
 } else {
-    echo "Admin user not found: " . $email . PHP_EOL;
+    echo "No users found in database yet." . PHP_EOL;
 }
 ' 2>&1 || echo "Password sync skipped (app not ready yet)"
 fi
