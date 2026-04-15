@@ -117,6 +117,7 @@ class StripePaymentController extends Controller
             // Create Stripe embedded checkout session
             $session = StripeSession::create([
                 'ui_mode' => 'embedded',
+                'payment_method_types' => ['card', 'cashapp', 'us_bank_account'],
                 'customer_email' => $invoice->customer->email ?? null,
                 'line_items' => [[
                     'price_data' => [

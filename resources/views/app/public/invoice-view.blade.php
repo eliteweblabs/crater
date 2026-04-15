@@ -179,6 +179,17 @@
         @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
         <div id="stripe-checkout" style="margin-top: 40px;"></div>
 
+        @if(env('VENMO_HANDLE'))
+        <div style="margin-top: 16px; text-align: center;">
+            <a href="https://venmo.com/?txn=pay&recipients={{ env('VENMO_HANDLE') }}&amount={{ number_format($invoice->total / 100, 2) }}&note=Invoice+{{ $invoice->invoice_number }}"
+               target="_blank"
+               style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: #008CFF; color: #fff; font-size: 15px; font-weight: 600; text-decoration: none; border-radius: 8px;">
+                <svg width="18" height="18" viewBox="0 0 300 300" fill="white"><path d="M232.3 30c9.5 15.7 13.8 31.9 13.8 52.1 0 64.9-55.4 149.3-100.4 208.5H57.4L18 38.5l80.2-7.6 22.1 88.7c20.6-37.8 46-97.4 46-137.3 0-22.1-3.8-37.2-9.7-49.3L232.3 30z"/></svg>
+                Pay with Venmo
+            </a>
+        </div>
+        @endif
+
         <script>
             (async () => {
                 const stripe = Stripe('{{ config("services.stripe.key") }}');
