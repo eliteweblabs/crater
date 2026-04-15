@@ -177,7 +177,16 @@
         @endif
 
         @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
-        <div id="stripe-checkout" style="margin-top: 40px;"></div>
+        <div style="margin-top: 40px; padding: 30px; background: #f9f9f9; border-radius: 8px;">
+            <h2 style="font-size: 20px; margin-bottom: 20px; color: #333;">Pay Invoice</h2>
+            <form id="payment-form">
+                <div id="payment-element" style="margin-bottom: 20px;"></div>
+                <div id="payment-message" style="display:none; color: #d32f2f; margin-bottom: 12px; font-size: 14px; padding: 10px; background: #ffebee; border-radius: 4px;"></div>
+                <button id="pay-btn" type="submit" class="btn btn-primary">
+                    Pay ${{ number_format($invoice->due_amount / 100, 2) }}
+                </button>
+            </form>
+        </div>
 
         @if(env('VENMO_HANDLE'))
         <div style="margin-top: 16px; text-align: center;">
@@ -191,32 +200,59 @@
         @endif
 
         <script>
-            (async () => {
-                const stripe = Stripe('{{ config("services.stripe.key") }}');
+        (async () => {
+            const stripe = Stripe('{{ config("services.stripe.key") }}');
+            const msg = document.getElementById('payment-message');
+            const btn = document.getElementById('pay-btn');
+            const originalLabel = btn.textContent.trim();
 
-                const checkout = await stripe.initEmbeddedCheckout({
-                    fetchClientSecret: async () => {
-                        const res = await fetch(
-                            '/api/invoices/{{ $invoice->unique_hash }}/checkout-session',
-                            {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                                },
-                            }
-                        );
-                        const data = await res.json();
-                        if (data.error) {
-                            console.error('Payment init error:', data.error);
-                            return null;
-                        }
-                        return data.clientSecret;
+            const res = await fetch('/api/invoices/{{ $invoice->unique_hash }}/payment-intent', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                },
+            });
+            const data = await res.json();
+
+            if (data.error) {
+                msg.textContent = data.error;
+                msg.style.display = 'block';
+                btn.disabled = true;
+                return;
+            }
+
+            const elements = stripe.elements({
+                clientSecret: data.clientSecret,
+                appearance: { theme: 'stripe' },
+            });
+
+            const paymentElement = elements.create('payment', {
+                wallets: { applePay: 'never', googlePay: 'never' },
+            });
+            paymentElement.mount('#payment-element');
+
+            document.getElementById('payment-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                btn.disabled = true;
+                btn.textContent = 'Processing…';
+                msg.style.display = 'none';
+
+                const { error } = await stripe.confirmPayment({
+                    elements,
+                    confirmParams: {
+                        return_url: '{{ url("/invoices/{$invoice->unique_hash}?payment=success") }}',
                     },
                 });
 
-                checkout.mount('#stripe-checkout');
-            })();
+                if (error) {
+                    msg.textContent = error.message;
+                    msg.style.display = 'block';
+                    btn.disabled = false;
+                    btn.textContent = originalLabel;
+                }
+            });
+        })();
         </script>
         @endif
 

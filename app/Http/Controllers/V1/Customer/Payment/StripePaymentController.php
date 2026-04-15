@@ -279,7 +279,7 @@ class StripePaymentController extends Controller
             $paymentIntent = \Stripe\PaymentIntent::create([
                 'amount'               => (int) $invoice->due_amount,
                 'currency'             => strtolower($invoice->currency->code),
-                'payment_method_types' => ['card'],
+                'payment_method_types' => ['card', 'cashapp', 'us_bank_account'],
                 'receipt_email'        => $invoice->customer->email ?? null,
                 'description'          => 'Invoice #' . $invoice->invoice_number,
                 'metadata'             => [
