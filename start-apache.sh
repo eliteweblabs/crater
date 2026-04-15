@@ -176,6 +176,26 @@ php artisan config:clear 2>/dev/null || true
 php artisan view:clear 2>/dev/null || true
 php artisan cache:clear 2>/dev/null || true
 
+# Sync ADMIN_PASSWORD env var → database user record on every deploy
+if [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
+    echo "Syncing admin password for ${ADMIN_EMAIL}..."
+    php -r '
+require "/var/www/html/vendor/autoload.php";
+$app = require_once "/var/www/html/bootstrap/app.php";
+$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+$email    = getenv("ADMIN_EMAIL");
+$password = getenv("ADMIN_PASSWORD");
+$user = Crater\Models\User::where("email", $email)->first();
+if ($user) {
+    $user->password = Illuminate\Support\Facades\Hash::make($password);
+    $user->save();
+    echo "Password synced for " . $email . PHP_EOL;
+} else {
+    echo "Admin user not found: " . $email . PHP_EOL;
+}
+' 2>&1 || echo "Password sync skipped (app not ready yet)"
+fi
+
 # Auto-migrate if database is empty
 if [ "$AUTO_MIGRATE" = "true" ]; then
     echo "AUTO_MIGRATE enabled - running migrations and seeds..."
