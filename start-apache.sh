@@ -181,28 +181,48 @@ if [ -n "$ADMIN_PASSWORD" ]; then
     echo "Syncing admin password (len=${#ADMIN_PASSWORD})..."
     # Unset the shell-exported DB vars so the PHP bootstrap reads from .env,
     # which holds the real connection (written by the Crater installation wizard).
-    # Run in a subshell so the unset doesn't affect Apache's env
-    (
-        unset DB_CONNECTION DB_HOST DB_PORT DB_DATABASE DB_USERNAME DB_PASSWORD
-        php -r '
-require "/var/www/html/vendor/autoload.php";
-$app = require_once "/var/www/html/bootstrap/app.php";
-$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
-$password = getenv("ADMIN_PASSWORD");
-echo "PW_LEN=" . strlen($password) . " DB=" . config("database.connections.mysql.host") . "/" . config("database.connections.mysql.database") . PHP_EOL;
-$targetEmail = getenv("ADMIN_EMAIL");
-$user = $targetEmail ? Crater\Models\User::where("email", $targetEmail)->first() : null;
-if (!$user) { $user = Crater\Models\User::orderBy("id")->first(); }
-if ($user) {
-    $user->password = $password;
-    $user->save();
-    $verify = Illuminate\Support\Facades\Hash::check($password, $user->fresh()->password);
-    echo "Password synced for " . $user->email . " (verify=" . ($verify?"ok":"FAIL") . ")" . PHP_EOL;
-} else {
-    echo "No users found in database." . PHP_EOL;
+    # Read DB settings directly from .env (first occurrence of each key)
+    # so we always hit the real application database, regardless of shell env vars.
+    php -r '
+$env = file_get_contents("/var/www/html/.env");
+function envVal($key, $default = "") {
+    global $env;
+    if (preg_match("/^" . preg_quote($key, "/") . "=(.+)/m", $env, $m)) {
+        return trim($m[1]);
+    }
+    return $default;
+}
+$host  = envVal("DB_HOST",     "mysql");
+$port  = envVal("DB_PORT",     "3306");
+$db    = envVal("DB_DATABASE", "railway");
+$user  = envVal("DB_USERNAME", "root");
+$pass  = envVal("DB_PASSWORD", "");
+echo "Connecting to $host/$db" . PHP_EOL;
+try {
+    $pdo = new PDO("mysql:host=$host;port=$port;dbname=$db;charset=utf8", $user, $pass);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $password = getenv("ADMIN_PASSWORD");
+    $hash = password_hash($password, PASSWORD_BCRYPT);
+    // Find admin user: prefer ADMIN_EMAIL, fall back to first user
+    $targetEmail = getenv("ADMIN_EMAIL");
+    $stmt = $pdo->prepare("SELECT id, email FROM users WHERE email = ? LIMIT 1");
+    $stmt->execute([$targetEmail]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        $row = $pdo->query("SELECT id, email FROM users ORDER BY id LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+    }
+    if ($row) {
+        $upd = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
+        $upd->execute([$hash, $row["id"]]);
+        $verify = password_verify($password, $hash);
+        echo "Password synced for " . $row["email"] . " (verify=" . ($verify ? "ok" : "FAIL") . ")" . PHP_EOL;
+    } else {
+        echo "No users found in $db." . PHP_EOL;
+    }
+} catch (Exception $e) {
+    echo "Password sync error: " . $e->getMessage() . PHP_EOL;
 }
 ' 2>&1 || echo "Password sync skipped"
-    )
 fi
 
 # Auto-migrate if database is empty
