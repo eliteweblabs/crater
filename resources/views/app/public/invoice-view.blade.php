@@ -300,5 +300,66 @@
     </div>
     @endif
 
+    @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
+    {{-- Sticky Apple Pay button — only renders on devices that support it --}}
+    <div id="apple-pay-bar" style="display:none; position:fixed; bottom:0; left:0; right:0; padding:12px 16px 20px; background:#fff; box-shadow:0 -2px 12px rgba(0,0,0,0.12); z-index:9999;">
+        <div id="apple-pay-btn" style="height:55px; border-radius:12px; overflow:hidden;"></div>
+    </div>
+
+    <script>
+    (async () => {
+        const stripe   = Stripe('{{ config("services.stripe.key") }}');
+        const elements = stripe.elements();
+
+        const pr = stripe.paymentRequest({
+            country: 'US',
+            currency: '{{ strtolower($invoice->currency->code ?? "usd") }}',
+            total: {
+                label: 'Invoice #{{ $invoice->invoice_number }}',
+                amount: {{ (int)$invoice->due_amount }},
+            },
+            requestPayerName:  true,
+            requestPayerEmail: true,
+        });
+
+        const btn = elements.create('paymentRequestButton', {
+            paymentRequest: pr,
+            style: { paymentRequestButton: { type: 'buy', theme: 'dark', height: '55px' } },
+        });
+
+        const result = await pr.canMakePayment();
+        if (result && result.applePay) {
+            btn.mount('#apple-pay-btn');
+            document.getElementById('apple-pay-bar').style.display = 'block';
+            // Push page content up so the sticky bar doesn't cover the bottom
+            document.body.style.paddingBottom = '100px';
+        }
+
+        pr.on('paymentmethod', async (ev) => {
+            const res = await fetch('/api/invoices/{{ $invoice->unique_hash }}/payment-intent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+            });
+            const { clientSecret, error } = await res.json();
+
+            if (error) { ev.complete('fail'); return; }
+
+            const { error: confirmError } = await stripe.confirmCardPayment(
+                clientSecret,
+                { payment_method: ev.paymentMethod.id },
+                { handleActions: false }
+            );
+
+            if (confirmError) {
+                ev.complete('fail');
+            } else {
+                ev.complete('success');
+                window.location.href = '/invoices/{{ $invoice->unique_hash }}?payment=success';
+            }
+        });
+    })();
+    </script>
+    @endif
+
 </body>
 </html>

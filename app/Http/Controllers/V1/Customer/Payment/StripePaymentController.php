@@ -257,6 +257,56 @@ class StripePaymentController extends Controller
     }
 
     /**
+     * Create a PaymentIntent for Apple Pay / Payment Request Button
+     * Used by the sticky Apple Pay button on the public invoice view
+     */
+    public function createPaymentIntent(Request $request, Invoice $invoice)
+    {
+        try {
+            $invoice->loadMissing(['customer', 'company', 'currency']);
+
+            if ($invoice->paid_status === 'PAID') {
+                return response()->json(['error' => 'Invoice is already paid'], 400);
+            }
+
+            $stripeSecret = config('services.stripe.secret');
+            if (!$stripeSecret) {
+                return response()->json(['error' => 'Payment not configured'], 500);
+            }
+
+            Stripe::setApiKey($stripeSecret);
+
+            $paymentIntent = \Stripe\PaymentIntent::create([
+                'amount'               => (int) $invoice->due_amount,
+                'currency'             => strtolower($invoice->currency->code),
+                'payment_method_types' => ['card'],
+                'receipt_email'        => $invoice->customer->email ?? null,
+                'description'          => 'Invoice #' . $invoice->invoice_number,
+                'metadata'             => [
+                    'invoice_id'  => $invoice->id,
+                    'company_id'  => $invoice->company_id,
+                    'customer_id' => $invoice->customer_id,
+                ],
+            ]);
+
+            Transaction::createTransaction([
+                'transaction_id'   => $paymentIntent->id,
+                'type'             => 'stripe',
+                'status'           => Transaction::PENDING,
+                'transaction_date' => now(),
+                'company_id'       => $invoice->company_id,
+                'invoice_id'       => $invoice->id,
+            ]);
+
+            return response()->json(['clientSecret' => $paymentIntent->client_secret]);
+
+        } catch (\Exception $e) {
+            \Log::error('Apple Pay PaymentIntent error: ' . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * Handle Stripe webhook events
      */
     public function handleWebhook(Request $request)
@@ -286,12 +336,19 @@ class StripePaymentController extends Controller
             // Handle the event
             if ($event['type'] === 'checkout.session.completed') {
                 $session = $event['data']['object'];
-                
-                // Get invoice from metadata
                 $invoice_id = $session['metadata']['invoice_id'] ?? $session['client_reference_id'];
-                
                 if ($invoice_id) {
                     $this->fulfillPayment($invoice_id, $session);
+                }
+            } elseif ($event['type'] === 'payment_intent.succeeded') {
+                $pi = $event['data']['object'];
+                $invoice_id = $pi['metadata']['invoice_id'] ?? null;
+                if ($invoice_id) {
+                    $this->fulfillPayment($invoice_id, [
+                        'id'           => $pi['id'],
+                        'amount_total' => $pi['amount'],
+                        'metadata'     => $pi['metadata'],
+                    ]);
                 }
             }
 

@@ -122,6 +122,7 @@ Route::get('/invoices/{invoice:unique_hash}/pay', [\Crater\Http\Controllers\V1\C
 
 // API endpoint for embedded checkout
 Route::post('/api/invoices/{invoice:unique_hash}/checkout-session', [\Crater\Http\Controllers\V1\Customer\Payment\StripePaymentController::class, 'createEmbeddedCheckoutSession']);
+Route::post('/api/invoices/{invoice:unique_hash}/payment-intent', [\Crater\Http\Controllers\V1\Customer\Payment\StripePaymentController::class, 'createPaymentIntent']);
 
 // Public test endpoint for OpenClaw token verification (no auth)
 Route::get('/test/openclaw-token', function () {
