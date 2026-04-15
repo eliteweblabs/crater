@@ -267,15 +267,9 @@ echo "============================================"
 a2dismod mpm_event mpm_worker 2>/dev/null || true
 a2enmod mpm_prefork 2>/dev/null || true
 
-# Pass Railway env vars explicitly into Apache/PHP workers
+# Add aliases for assets/fonts/img so /assets/ maps to /build/assets/ etc.
 if [ -f /etc/apache2/sites-enabled/000-default.conf ]; then
     sed -i '/<\/VirtualHost>/i \    Alias /assets /var/www/html/public/build/assets\n    Alias /fonts /var/www/html/public/build/fonts\n    Alias /img /var/www/html/public/build/img\n    <Directory /var/www/html/public/build>\n        Require all granted\n    </Directory>' /etc/apache2/sites-enabled/000-default.conf
-    # PassEnv makes Railway env vars available to mod_php scripts
-    for VAR in ADMIN_RESET_TOKEN ADMIN_PASSWORD ADMIN_EMAIL STRIPE_KEY STRIPE_SECRET STRIPE_WEBHOOK_SECRET; do
-        if [ -n "$(eval echo \$$VAR)" ]; then
-            sed -i "/<\/VirtualHost>/i \\    PassEnv $VAR" /etc/apache2/sites-enabled/000-default.conf
-        fi
-    done
 fi
 
 # Match Listen and VirtualHost to Railway's PORT (image defaults to 8080)
