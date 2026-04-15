@@ -173,6 +173,7 @@ php artisan storage:link 2>/dev/null || true
 
 # Clear caches
 php artisan config:clear 2>/dev/null || true
+php artisan view:clear 2>/dev/null || true
 php artisan cache:clear 2>/dev/null || true
 
 # Auto-migrate if database is empty
