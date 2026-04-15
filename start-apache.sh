@@ -191,7 +191,7 @@ $targetEmail = getenv("ADMIN_EMAIL");
 $user = $targetEmail ? Crater\Models\User::where("email", $targetEmail)->first() : null;
 if (!$user) { $user = Crater\Models\User::orderBy("id")->first(); }
 if ($user) {
-    $user->password = $password;  // mutator calls bcrypt() automatically
+    $user->password = Illuminate\Support\Facades\Hash::make($password);
     $user->save();
     $verify = Illuminate\Support\Facades\Hash::check($password, $user->fresh()->password);
     echo "Password synced for " . $user->email . " (verify=" . ($verify?"ok":"FAIL") . ")" . PHP_EOL;
