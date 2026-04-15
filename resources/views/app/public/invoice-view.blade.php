@@ -301,6 +301,14 @@
     @endif
 
     @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
+    {{-- Shown when Apple Pay is unavailable in the current browser --}}
+    <div id="apple-pay-hint" style="display:none; margin-top:16px; padding:12px 16px; background:#f5f5f7; border-radius:8px; text-align:center;">
+        <span style="font-size:13px; color:#666;">
+            🍎 Want to pay with Apple Pay?
+            <strong style="color:#333;">Open this invoice in Safari</strong> on your iPhone, iPad, or Mac.
+        </span>
+    </div>
+
     {{-- Sticky Apple Pay button — only renders on devices that support it --}}
     <div id="apple-pay-bar" style="display:none; position:fixed; bottom:0; left:0; right:0; padding:12px 16px 20px; background:#fff; box-shadow:0 -2px 12px rgba(0,0,0,0.12); z-index:9999;">
         <div id="apple-pay-btn" style="height:55px; border-radius:12px; overflow:hidden;"></div>
@@ -331,8 +339,9 @@
         if (result && result.applePay) {
             btn.mount('#apple-pay-btn');
             document.getElementById('apple-pay-bar').style.display = 'block';
-            // Push page content up so the sticky bar doesn't cover the bottom
             document.body.style.paddingBottom = '100px';
+        } else {
+            document.getElementById('apple-pay-hint').style.display = 'block';
         }
 
         pr.on('paymentmethod', async (ev) => {
