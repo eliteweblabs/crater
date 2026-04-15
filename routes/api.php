@@ -210,6 +210,8 @@ Route::prefix('/v1')->group(function () {
             'env_db_lines' => $envLines,
             'config_cache_exists' => file_exists(base_path('bootstrap/cache/config.php')),
             'env_file_mtime' => file_exists($envFile) ? date('Y-m-d H:i:s', filemtime($envFile)) : 'missing',
+            'getenv_reset_token_set' => !empty(getenv('ADMIN_RESET_TOKEN')),
+            'getenv_admin_email' => getenv('ADMIN_EMAIL') ?: '(not in getenv)',
             'database_created_file' => \Storage::disk('local')->has('database_created'),
             // Debug: show what Laravel thinks the DB config is
             'config_db_host' => config('database.connections.mysql.host'),
