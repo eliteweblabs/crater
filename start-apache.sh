@@ -179,30 +179,29 @@ php artisan cache:clear 2>/dev/null || true
 # Sync ADMIN_PASSWORD env var → database user record on every deploy
 if [ -n "$ADMIN_PASSWORD" ]; then
     echo "Syncing admin password (len=${#ADMIN_PASSWORD})..."
-    # Unset the shell-exported DB vars so the PHP bootstrap reads from .env,
-    # which holds the real connection (written by the Crater installation wizard).
-    # Run in a subshell so the unset doesn't affect Apache's env
-    (
-        unset DB_CONNECTION DB_HOST DB_PORT DB_DATABASE DB_USERNAME DB_PASSWORD
-        php -r '
+    php -r '
 require "/var/www/html/vendor/autoload.php";
 $app = require_once "/var/www/html/bootstrap/app.php";
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+$db   = config("database.connections.mysql.database");
+$host = config("database.connections.mysql.host");
+echo "DB: " . $host . "/" . $db . PHP_EOL;
 $password = getenv("ADMIN_PASSWORD");
-echo "PW_LEN=" . strlen($password) . " DB=" . config("database.connections.mysql.host") . "/" . config("database.connections.mysql.database") . PHP_EOL;
+echo "PW_LEN=" . strlen($password) . " PW_FIRST3=" . substr($password, 0, 3) . PHP_EOL;
 $targetEmail = getenv("ADMIN_EMAIL");
 $user = $targetEmail ? Crater\Models\User::where("email", $targetEmail)->first() : null;
 if (!$user) { $user = Crater\Models\User::orderBy("id")->first(); }
 if ($user) {
-    $user->password = $password;
+    $user->password = $password;  // mutator calls bcrypt() automatically
     $user->save();
     $verify = Illuminate\Support\Facades\Hash::check($password, $user->fresh()->password);
     echo "Password synced for " . $user->email . " (verify=" . ($verify?"ok":"FAIL") . ")" . PHP_EOL;
 } else {
     echo "No users found in database." . PHP_EOL;
+    $count = Crater\Models\User::count();
+    echo "User count: " . $count . PHP_EOL;
 }
-' 2>&1 || echo "Password sync skipped"
-    )
+' 2>&1 || echo "Password sync skipped (app not ready yet)"
 fi
 
 # Auto-migrate if database is empty
