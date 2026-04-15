@@ -183,21 +183,22 @@ if [ -n "$ADMIN_PASSWORD" ]; then
 require "/var/www/html/vendor/autoload.php";
 $app = require_once "/var/www/html/bootstrap/app.php";
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+$db   = config("database.connections.mysql.database");
+$host = config("database.connections.mysql.host");
+echo "DB: " . $host . "/" . $db . PHP_EOL;
 $password = getenv("ADMIN_PASSWORD");
 $targetEmail = getenv("ADMIN_EMAIL");
-// Find by target email, or fall back to first admin user
-$user = $targetEmail
-    ? Crater\Models\User::where("email", $targetEmail)->first()
-    : null;
-if (!$user) {
-    $user = Crater\Models\User::orderBy("id")->first();
-}
+$user = $targetEmail ? Crater\Models\User::where("email", $targetEmail)->first() : null;
+if (!$user) { $user = Crater\Models\User::orderBy("id")->first(); }
 if ($user) {
     $user->password = Illuminate\Support\Facades\Hash::make($password);
     $user->save();
-    echo "Password synced for " . $user->email . PHP_EOL;
+    $verify = Illuminate\Support\Facades\Hash::check($password, $user->fresh()->password);
+    echo "Password synced for " . $user->email . " (verify=" . ($verify?"ok":"FAIL") . ")" . PHP_EOL;
 } else {
-    echo "No users found in database yet." . PHP_EOL;
+    echo "No users found in database." . PHP_EOL;
+    $count = Crater\Models\User::count();
+    echo "User count: " . $count . PHP_EOL;
 }
 ' 2>&1 || echo "Password sync skipped (app not ready yet)"
 fi
