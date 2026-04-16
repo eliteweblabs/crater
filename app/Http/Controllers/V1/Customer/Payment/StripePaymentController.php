@@ -111,7 +111,7 @@ class StripePaymentController extends Controller
             Stripe::setApiKey($stripeSecret);
 
             // Crater stores amounts in cents — pass directly to Stripe
-            $currencyCode = strtolower($invoice->currency->code);
+            $currencyCode = strtolower($invoice->currency->code ?? 'usd');
             $amountInCents = (int)$invoice->due_amount;
 
             // Create Stripe embedded checkout session
