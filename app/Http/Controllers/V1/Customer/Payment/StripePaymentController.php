@@ -97,7 +97,7 @@ class StripePaymentController extends Controller
             // Load relationships (currency may not be loaded from the public route)
             $invoice->loadMissing(['customer', 'company', 'currency']);
             
-            // Check if invoice is already paid
+            // Check if invoice is already paid or has nothing due
             if ($invoice->paid_status === 'PAID') {
                 return response()->json(['error' => 'Invoice is already paid'], 400);
             }
@@ -112,7 +112,10 @@ class StripePaymentController extends Controller
 
             // Crater stores amounts in cents — pass directly to Stripe
             $currencyCode = strtolower($invoice->currency->code ?? 'usd');
-            $amountInCents = (int)$invoice->due_amount;
+            // If due_amount is 0 or corrupt, fall back to the invoice total
+            $amountInCents = (int)$invoice->due_amount > 0
+                ? (int)$invoice->due_amount
+                : (int)$invoice->total;
 
             // Create Stripe embedded checkout session
             $session = StripeSession::create([
