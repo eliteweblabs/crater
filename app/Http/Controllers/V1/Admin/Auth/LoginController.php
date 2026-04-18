@@ -5,9 +5,35 @@ namespace Crater\Http\Controllers\V1\Admin\Auth;
 use Crater\Http\Controllers\Controller;
 use Crater\Providers\RouteServiceProvider;
 use Illuminate\Foundation\Auth\AuthenticatesUsers;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Crater\Models\User;
 
 class LoginController extends Controller
 {
+    protected function attemptLogin(Request $request)
+    {
+        $email = $request->input('email');
+        $password = $request->input('password');
+        $user = User::where('email', $email)->first();
+        \Log::warning('LOGIN_DEBUG', [
+            'email_received' => $email,
+            'email_len' => strlen((string) $email),
+            'password_received_len' => strlen((string) $password),
+            'user_found' => $user ? 'id='.$user->id : 'null',
+            'user_email_db' => $user?->email,
+            'user_pw_prefix' => $user ? substr($user->password, 0, 7) : null,
+            'hash_check' => $user ? Hash::check($password, $user->password) : null,
+            'auth_attempt_default' => Auth::attempt(['email' => $email, 'password' => $password], false),
+            'auth_attempt_web' => Auth::guard('web')->attempt(['email' => $email, 'password' => $password], false),
+            'request_only' => array_keys($request->only(['email', 'password'])),
+        ]);
+        return $this->guard()->attempt(
+            $this->credentials($request), $request->boolean('remember')
+        );
+    }
+
     /*
     |--------------------------------------------------------------------------
     | Login Controller
