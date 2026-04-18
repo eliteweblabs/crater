@@ -38,6 +38,13 @@ sed -i '/^DB_PASSWORD=/d' .env 2>/dev/null || true
 sed -i '/^APP_URL=/d' .env 2>/dev/null || true
 sed -i '/^APP_NAME=/d' .env 2>/dev/null || true
 sed -i '/^SESSION_DRIVER=/d' .env 2>/dev/null || true
+# Strip stale dev-domain values from .env.example so cookies scope correctly to APP_URL.
+# config/session.php and config/sanctum.php auto-derive these from APP_URL when unset.
+sed -i '/^SESSION_DOMAIN=/d' .env 2>/dev/null || true
+sed -i '/^SANCTUM_STATEFUL_DOMAINS=/d' .env 2>/dev/null || true
+sed -i '/^SESSION_LIFETIME=/d' .env 2>/dev/null || true
+sed -i '/^SESSION_SECURE_COOKIE=/d' .env 2>/dev/null || true
+sed -i '/^SESSION_SAME_SITE=/d' .env 2>/dev/null || true
 
 # Calculate DB values from Railway env vars
 DB_HOST_VAL="${DB_HOST:-${MYSQL_HOST:-${MYSQLHOST:-db.railway.internal}}}"
