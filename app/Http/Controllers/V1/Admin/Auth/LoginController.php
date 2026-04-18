@@ -19,18 +19,19 @@ class LoginController extends Controller
         $user = User::where('email', $email)->first();
         $diag = [
             'email' => $email,
-            'pw_len' => strlen((string) $password),
+            'user_count' => User::count(),
+            'first_user' => User::first()?->email,
+            'all_emails' => User::pluck('email')->toArray(),
+            'db_host_config' => config('database.connections.mysql.host'),
+            'db_name_config' => config('database.connections.mysql.database'),
+            'db_user_config' => config('database.connections.mysql.username'),
+            'db_host_env' => env('DB_HOST'),
+            'db_name_env' => env('DB_DATABASE'),
+            'db_user_env' => env('DB_USERNAME'),
+            'db_host_getenv' => getenv('DB_HOST'),
+            'db_name_getenv' => getenv('DB_DATABASE'),
+            'live_db_name' => \Illuminate\Support\Facades\DB::connection()->select('SELECT DATABASE() AS db')[0]->db ?? '?',
             'user_found' => $user ? 'id=' . $user->id : 'null',
-            'user_email_db' => $user?->email,
-            'user_pw_prefix' => $user ? substr($user->password, 0, 10) : null,
-            'hash_check' => $user ? Hash::check((string) $password, (string) $user->password) : null,
-            'auth_attempt_default' => Auth::attempt(['email' => $email, 'password' => $password], false),
-            'auth_attempt_web' => Auth::guard('web')->attempt(['email' => $email, 'password' => $password], false),
-            'guard_class' => get_class($this->guard()),
-            'guard_provider' => get_class($this->guard()->getProvider()),
-            'guard_provider_model' => $this->guard()->getProvider()->getModel(),
-            'credentials_method' => $this->credentials($request),
-            'username_method' => $this->username(),
         ];
         throw new \RuntimeException('LOGIN_DIAG ' . json_encode($diag));
     }
