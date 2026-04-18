@@ -17,23 +17,18 @@ class LoginController extends Controller
         $email = $request->input('email');
         $password = $request->input('password');
         $user = User::where('email', $email)->first();
-        $envFiles = glob(base_path('.env*'));
         $diag = [
-            'email' => $email,
-            'user_count' => User::count(),
-            'all_emails' => User::pluck('email')->toArray(),
-            'live_db_host' => \Illuminate\Support\Facades\DB::connection()->getPdo()->getAttribute(\PDO::ATTR_CONNECTION_STATUS),
-            'live_db_name' => \Illuminate\Support\Facades\DB::connection()->select('SELECT DATABASE() AS db, USER() AS u, @@hostname AS h')[0],
-            'env_DB_HOST' => env('DB_HOST'),
-            'getenv_DB_HOST' => getenv('DB_HOST'),
-            '_ENV_DB_HOST' => $_ENV['DB_HOST'] ?? '(unset)',
-            '_SERVER_DB_HOST' => $_SERVER['DB_HOST'] ?? '(unset)',
-            '_ENV_DB_DATABASE' => $_ENV['DB_DATABASE'] ?? '(unset)',
-            '_SERVER_DB_DATABASE' => $_SERVER['DB_DATABASE'] ?? '(unset)',
-            'env_files_found' => $envFiles,
-            'env_file_used' => app()->environmentFile(),
+            'hostname' => gethostname(),
+            'php_sapi' => PHP_SAPI,
+            'container_id' => trim(@file_get_contents('/etc/hostname') ?: '?'),
+            'env_file_path' => base_path('.env'),
+            'env_file_mtime' => date('c', filemtime(base_path('.env'))),
+            'env_file_size' => filesize(base_path('.env')),
             'env_file_contents_db' => preg_grep('/^DB_/', file(base_path('.env'), FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES)),
-            'app_env' => env('APP_ENV'),
+            'proc_1_env_db' => array_filter(explode("\n", str_replace("\0", "\n", @file_get_contents('/proc/1/environ') ?: '')), fn($l) => str_starts_with($l, 'DB_')),
+            'proc_self_env_db' => array_filter(explode("\n", str_replace("\0", "\n", @file_get_contents('/proc/self/environ') ?: '')), fn($l) => str_starts_with($l, 'DB_')),
+            'user_count' => User::count(),
+            'first_user' => User::first()?->email,
         ];
         throw new \RuntimeException('LOGIN_DIAG ' . json_encode($diag));
     }
