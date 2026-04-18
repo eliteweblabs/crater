@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\DB;
+use Crater\Models\CompanySetting;
 use Crater\Models\Customer;
 use Crater\Models\Invoice;
 use Crater\Models\InvoiceItem;
@@ -26,82 +28,174 @@ Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $reque
         'status' => 'nullable|in:DRAFT,SENT,VIEWED,OVERDUE,COMPLETED',
     ]);
 
-    // Find or create customer
-    $customer = Customer::where('name', $validated['customer_name'])->first();
+    $companyId = 1;
+    $uniqueHash = \Illuminate\Support\Str::random(32);
+
+    // Resolve the company's configured currency so invoices are consistent
+    // with the admin UI (prevents the blank totals we saw before).
+    $companyCurrencyId = (int) (CompanySetting::getSetting('currency', $companyId) ?? 1);
+    $taxPerItem = CompanySetting::getSetting('tax_per_item', $companyId) ?? 'NO';
+    $discountPerItem = CompanySetting::getSetting('discount_per_item', $companyId) ?? 'NO';
+
+    // Find or create customer — inherit the company's currency so exchange_rate = 1
+    $customer = Customer::where('name', $validated['customer_name'])
+        ->where('company_id', $companyId)
+        ->first();
     if (!$customer) {
         $customer = Customer::create([
             'name' => $validated['customer_name'],
             'email' => $validated['customer_email'] ?? null,
-            'company_id' => 1,
+            'company_id' => $companyId,
             'contact_name' => $validated['customer_name'],
-            'currency_id' => 1,
+            'currency_id' => $companyCurrencyId,
         ]);
+    } elseif (!$customer->currency_id) {
+        $customer->currency_id = $companyCurrencyId;
+        $customer->save();
     }
 
-    // Calculate totals
+    // Openclaw/Telegram/CLAW send prices in whole-dollar units; Crater stores
+    // amounts as integer cents. Normalize once here and use everywhere below.
     $subTotal = 0;
     foreach ($validated['items'] as $item) {
-        $subTotal += ($item['price'] * 100) * $item['quantity'];
+        $subTotal += ((int) round($item['price'] * 100)) * $item['quantity'];
     }
+    $subTotal = (int) round($subTotal);
 
-    // Create invoice with unique hash for public link
-    $uniqueHash = \Illuminate\Support\Str::random(32);
-    
-    // Get proper invoice number from serial number formatter
-    $invoiceModel = new Invoice();
-    $serial = (new SerialNumberFormatter())
-        ->setModel($invoiceModel)
-        ->setCompany(1)
-        ->setNextNumbers();
-    $invoiceNumber = $serial->getNextNumber();
-    
-    $invoice = Invoice::create([
-        'invoice_date' => now()->format('Y-m-d'),
-        'due_date' => now()->addDays(30)->format('Y-m-d'),
-        'invoice_number' => $invoiceNumber,
-        'customer_id' => $customer->id,
-        'company_id' => 1,
-        'sub_total' => $subTotal,
-        'total' => $subTotal,
-        'tax' => 0,
-        'discount' => 0,
-        'discount_type' => 'fixed',
-        'discount_val' => 0,
-        'notes' => $validated['notes'] ?? '',
-        'status' => $validated['status'] ?? 'SENT',
-        'template_name' => 'invoice1',
-        'unique_hash' => $uniqueHash,
-    ]);
+    // If customer currency differs from company currency, exchange_rate should
+    // come from the caller — we don't have that info in openclaw payloads, so
+    // we assume 1 (they send amounts in the customer's currency).
+    $exchangeRate = 1;
+    $currencyId = (int) ($customer->currency_id ?: $companyCurrencyId);
 
-    // Add line items
-    foreach ($validated['items'] as $itemData) {
-        $price = $itemData['price'] * 100;
-        $total = $price * $itemData['quantity'];
-        
-        InvoiceItem::create([
-            'invoice_id' => $invoice->id,
-            'name' => $itemData['name'],
-            'description' => $itemData['description'] ?? '',
-            'quantity' => $itemData['quantity'],
-            'price' => $price,
-            'total' => $total,
+    // Atomically compute the next invoice number and persist the invoice.
+    // We lock existing rows for this company so two concurrent requests
+    // (e.g. CLAW + Telegram) can't both read the same MAX() and collide.
+    //
+    // We also compute the "next sequence" as the max of:
+    //   - MAX(sequence_number) — the canonical field
+    //   - the highest trailing integer parsed out of invoice_number
+    // …because older openclaw-created invoices were saved with a NULL
+    // sequence_number, which caused setNextSequenceNumber() to keep
+    // handing out the same value.
+    $created = DB::transaction(function () use (
+        $validated, $customer, $subTotal, $uniqueHash, $companyId,
+        $currencyId, $exchangeRate, $taxPerItem, $discountPerItem
+    ) {
+        $rows = DB::table('invoices')
+            ->where('company_id', $companyId)
+            ->lockForUpdate()
+            ->get(['sequence_number', 'invoice_number']);
+
+        $maxSeq = 0;
+        foreach ($rows as $row) {
+            if ($row->sequence_number !== null && (int) $row->sequence_number > $maxSeq) {
+                $maxSeq = (int) $row->sequence_number;
+            }
+            if ($row->invoice_number && preg_match('/(\d+)$/', $row->invoice_number, $m)) {
+                $parsed = (int) $m[1];
+                if ($parsed > $maxSeq) {
+                    $maxSeq = $parsed;
+                }
+            }
+        }
+        $nextSeq = $maxSeq + 1;
+
+        $maxCustSeq = (int) (DB::table('invoices')
+            ->where('company_id', $companyId)
+            ->where('customer_id', $customer->id)
+            ->lockForUpdate()
+            ->max('customer_sequence_number') ?? 0);
+        $nextCustSeq = $maxCustSeq + 1;
+
+        $invoiceModel = new Invoice();
+        $serial = (new SerialNumberFormatter())
+            ->setModel($invoiceModel)
+            ->setCompany($companyId);
+        $serial->nextSequenceNumber = $nextSeq;
+        $serial->nextCustomerSequenceNumber = $nextCustSeq;
+        $invoiceNumber = $serial->getNextNumber();
+
+        if (Invoice::where('company_id', $companyId)->where('invoice_number', $invoiceNumber)->exists()) {
+            throw new \RuntimeException("Computed duplicate invoice_number {$invoiceNumber}; retrying.");
+        }
+
+        // Use the first admin user as the creator so the admin UI shows
+        // a valid creator instead of "Unknown".
+        $creatorId = (int) (DB::table('users')->orderBy('id')->value('id') ?? 1);
+
+        $invoice = Invoice::create([
+            'invoice_date' => now()->format('Y-m-d'),
+            'due_date' => now()->addDays(30)->format('Y-m-d'),
+            'invoice_number' => $invoiceNumber,
+            'sequence_number' => $nextSeq,
+            'customer_sequence_number' => $nextCustSeq,
+            'customer_id' => $customer->id,
+            'company_id' => $companyId,
+            'creator_id' => $creatorId,
+            'currency_id' => $currencyId,
+            'exchange_rate' => $exchangeRate,
+            'sub_total' => $subTotal,
+            'total' => $subTotal,
+            'due_amount' => $subTotal,
+            'base_sub_total' => $subTotal * $exchangeRate,
+            'base_total' => $subTotal * $exchangeRate,
+            'base_due_amount' => $subTotal * $exchangeRate,
+            'tax' => 0,
+            'base_tax' => 0,
             'discount' => 0,
             'discount_type' => 'fixed',
             'discount_val' => 0,
-            'tax' => 0,
-            'company_id' => 1,
-            'created_at' => now(),
-            'updated_at' => now(),
+            'base_discount_val' => 0,
+            'tax_per_item' => $taxPerItem,
+            'discount_per_item' => $discountPerItem,
+            'paid_status' => Invoice::STATUS_UNPAID,
+            'notes' => $validated['notes'] ?? '',
+            // Default to DRAFT so invoices created via CLAW/Telegram aren't
+            // silently marked as "sent to the client." Callers can pass
+            // status=SENT explicitly when they actually emailed it out.
+            'status' => $validated['status'] ?? Invoice::STATUS_DRAFT,
+            'template_name' => 'invoice1',
+            'unique_hash' => $uniqueHash,
         ]);
-    }
+
+        foreach ($validated['items'] as $itemData) {
+            $price = (int) round($itemData['price'] * 100);
+            $total = (int) round($price * $itemData['quantity']);
+
+            InvoiceItem::create([
+                'invoice_id' => $invoice->id,
+                'name' => $itemData['name'],
+                'description' => $itemData['description'] ?? '',
+                'quantity' => $itemData['quantity'],
+                'price' => $price,
+                'total' => $total,
+                'base_price' => $price * $exchangeRate,
+                'base_total' => $total * $exchangeRate,
+                'base_discount_val' => 0,
+                'base_tax' => 0,
+                'discount' => 0,
+                'discount_type' => 'fixed',
+                'discount_val' => 0,
+                'tax' => 0,
+                'exchange_rate' => $exchangeRate,
+                'currency_id' => $currencyId,
+                'company_id' => $companyId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        return $invoice;
+    });
 
     return response()->json([
         'success' => true,
-        'invoice_id' => $invoice->id,
-        'invoice_number' => $invoice->invoice_number,
+        'invoice_id' => $created->id,
+        'invoice_number' => $created->invoice_number,
         'customer' => $customer->name,
         'total' => $subTotal / 100,
-        'admin_url' => url("/admin/invoices/{$invoice->id}/view"),
+        'admin_url' => url("/admin/invoices/{$created->id}/view"),
         'sms_link' => url("/invoices/{$uniqueHash}"),
         'public_url' => url("/invoices/{$uniqueHash}"),
         'pdf_url' => url("/invoices/pdf/{$uniqueHash}"),
@@ -161,15 +255,329 @@ Route::delete('/openclaw/invoice/{id}', function (Illuminate\Http\Request $reque
     ]);
 });
 
-// Debug endpoint to check env var (public - no auth needed)
-Route::get('/openclaw/debug', function () {
-    $token = env('OPENCLAW_API_TOKEN');
+// List all invoices (auth required) — used for cleanup / visibility
+// GET /api/openclaw/invoices?company_id=1
+Route::get('/openclaw/invoices', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $companyId = (int) ($request->input('company_id') ?? 1);
+
+    $invoices = Invoice::where('company_id', $companyId)
+        ->with('customer:id,name')
+        ->orderByDesc('invoice_date')
+        ->orderByDesc('id')
+        ->get([
+            'id', 'invoice_number', 'sequence_number', 'customer_id',
+            'invoice_date', 'status', 'paid_status',
+            'total', 'due_amount', 'unique_hash',
+        ])
+        ->map(function ($inv) {
+            return [
+                'id' => $inv->id,
+                'invoice_number' => $inv->invoice_number,
+                'sequence_number' => $inv->sequence_number,
+                'invoice_date' => optional($inv->invoice_date)->format('Y-m-d'),
+                'customer_id' => $inv->customer_id,
+                'customer_name' => $inv->customer->name ?? null,
+                'status' => $inv->status,
+                'paid_status' => $inv->paid_status,
+                'total_cents' => (int) $inv->total,
+                'total' => round(((int) $inv->total) / 100, 2),
+                'due_cents' => (int) $inv->due_amount,
+                'due' => round(((int) $inv->due_amount) / 100, 2),
+                'public_url' => $inv->unique_hash ? url('/invoices/'.$inv->unique_hash) : null,
+            ];
+        });
+
     return response()->json([
-        'token_exists' => !empty($token),
-        'token_length' => strlen($token ?? ''),
-        'token_first_8' => substr($token ?? '', 0, 8),
-        'env_check' => env('APP_ENV'),
+        'company_id' => $companyId,
+        'count' => $invoices->count(),
+        'invoices' => $invoices,
     ]);
+});
+
+// Nuke-and-pave reset: wipes all invoices, items, taxes, payments,
+// transactions, and recurring invoices for a company. Preserves users,
+// customers, companies, and settings. Safe ONLY because no real payments
+// have been collected yet. Requires explicit confirmation in the body.
+//
+// POST /api/openclaw/reset-invoices
+// Body: { "company_id": 1, "confirm": "YES_DELETE_EVERYTHING", "dry_run": true }
+Route::post('/openclaw/reset-invoices', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    if ($request->input('confirm') !== 'YES_DELETE_EVERYTHING') {
+        return response()->json([
+            'error' => 'Refused: missing confirm=YES_DELETE_EVERYTHING in body',
+        ], 400);
+    }
+
+    $companyId = (int) ($request->input('company_id') ?? 1);
+    $dryRun = filter_var($request->input('dry_run', false), FILTER_VALIDATE_BOOLEAN);
+
+    $report = DB::transaction(function () use ($companyId, $dryRun) {
+        $counts = [
+            'invoices' => DB::table('invoices')->where('company_id', $companyId)->count(),
+            'invoice_items' => DB::table('invoice_items')->where('company_id', $companyId)->count(),
+            'payments' => DB::table('payments')->where('company_id', $companyId)->count(),
+            'transactions' => DB::table('transactions')->where('company_id', $companyId)->count(),
+            'recurring_invoices' => DB::table('recurring_invoices')->where('company_id', $companyId)->count(),
+            'estimates' => DB::table('estimates')->where('company_id', $companyId)->count(),
+            'estimate_items' => DB::table('estimate_items')->where('company_id', $companyId)->count(),
+        ];
+
+        if (! $dryRun) {
+            // Order matters: delete children first.
+            DB::table('taxes')
+                ->whereIn('invoice_id', function ($q) use ($companyId) {
+                    $q->select('id')->from('invoices')->where('company_id', $companyId);
+                })->delete();
+            DB::table('taxes')
+                ->whereIn('estimate_id', function ($q) use ($companyId) {
+                    $q->select('id')->from('estimates')->where('company_id', $companyId);
+                })->delete();
+            DB::table('invoice_items')->where('company_id', $companyId)->delete();
+            DB::table('estimate_items')->where('company_id', $companyId)->delete();
+            DB::table('transactions')->where('company_id', $companyId)->delete();
+            DB::table('payments')->where('company_id', $companyId)->delete();
+            DB::table('recurring_invoices')->where('company_id', $companyId)->delete();
+            DB::table('invoices')->where('company_id', $companyId)->delete();
+            DB::table('estimates')->where('company_id', $companyId)->delete();
+        }
+
+        return [
+            'company_id' => $companyId,
+            'dry_run' => $dryRun,
+            'deleted_counts' => $counts,
+        ];
+    });
+
+    return response()->json(['success' => true] + $report);
+});
+
+// One-shot repair endpoint for invoices created by older openclaw/CLAW/Telegram
+// runs. Heals the following known issues caused by the previous endpoint's
+// missing fields:
+//   - NULL sequence_number / customer_sequence_number (root cause of duplicate
+//     invoice_number values — e.g. two "INV-000013" entries).
+//   - Colliding invoice_numbers (renumbered to MAX+1).
+//   - due_amount == 0 on UNPAID invoices where total > 0 (shows "$0.00" in the
+//     admin "Amount Due" column).
+//   - NULL / 0 base_total, base_sub_total, base_due_amount, base_tax,
+//     base_discount_val, exchange_rate, currency_id, creator_id, paid_status.
+//   - Invoice items with 0 base_price / base_total / exchange_rate /
+//     currency_id (which prevent the admin item totals from rendering).
+//
+// POST /api/openclaw/repair-invoice-numbers
+// Body: { "company_id": 1, "dry_run": true, "only": "numbers|totals|all" }
+Route::post('/openclaw/repair-invoice-numbers', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $companyId = (int) ($request->input('company_id') ?? 1);
+    $dryRun = filter_var($request->input('dry_run', false), FILTER_VALIDATE_BOOLEAN);
+    $only = $request->input('only', 'all');
+
+    $report = DB::transaction(function () use ($companyId, $dryRun, $only) {
+        $companyCurrencyId = (int) (CompanySetting::getSetting('currency', $companyId) ?? 1);
+        $defaultCreatorId = (int) (DB::table('users')->orderBy('id')->value('id') ?? 1);
+
+        $invoices = Invoice::where('company_id', $companyId)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        // ---- Pass 1: compute max sequence number from all sources ----
+        $maxSeq = 0;
+        foreach ($invoices as $inv) {
+            if ($inv->sequence_number !== null && (int) $inv->sequence_number > $maxSeq) {
+                $maxSeq = (int) $inv->sequence_number;
+            }
+            if ($inv->invoice_number && preg_match('/(\d+)$/', $inv->invoice_number, $m)) {
+                $parsed = (int) $m[1];
+                if ($parsed > $maxSeq) {
+                    $maxSeq = $parsed;
+                }
+            }
+        }
+
+        $seenInvoiceNumbers = [];
+        $customerCounters = [];
+        $fixed = [];
+        $itemFixedCount = 0;
+
+        foreach ($invoices as $inv) {
+            $change = [];
+
+            // ---- Number/sequence repairs ----
+            if ($only === 'all' || $only === 'numbers') {
+                if (! empty($inv->invoice_number) && isset($seenInvoiceNumbers[$inv->invoice_number])) {
+                    $maxSeq += 1;
+                    $newInvoiceNumber = 'INV-'.str_pad($maxSeq, 6, '0', STR_PAD_LEFT);
+                    $change['old_invoice_number'] = $inv->invoice_number;
+                    $change['new_invoice_number'] = $newInvoiceNumber;
+                    $inv->invoice_number = $newInvoiceNumber;
+                    $inv->sequence_number = $maxSeq;
+                } elseif ($inv->sequence_number === null) {
+                    if ($inv->invoice_number && preg_match('/(\d+)$/', $inv->invoice_number, $m)) {
+                        $inv->sequence_number = (int) $m[1];
+                    } else {
+                        $maxSeq += 1;
+                        $inv->sequence_number = $maxSeq;
+                    }
+                    $change['new_sequence_number'] = $inv->sequence_number;
+                }
+
+                if ($inv->customer_sequence_number === null) {
+                    $cid = (int) $inv->customer_id;
+                    if (! isset($customerCounters[$cid])) {
+                        $customerCounters[$cid] = (int) (Invoice::where('company_id', $companyId)
+                            ->where('customer_id', $cid)
+                            ->max('customer_sequence_number') ?? 0);
+                    }
+                    $customerCounters[$cid] += 1;
+                    $inv->customer_sequence_number = $customerCounters[$cid];
+                    $change['new_customer_sequence_number'] = $inv->customer_sequence_number;
+                }
+            }
+
+            // ---- Totals / currency / base_* repairs ----
+            if ($only === 'all' || $only === 'totals') {
+                $exchangeRate = (float) ($inv->exchange_rate ?: 1);
+                if ($exchangeRate <= 0) {
+                    $exchangeRate = 1.0;
+                    $inv->exchange_rate = 1;
+                    $change['new_exchange_rate'] = 1;
+                }
+
+                if (empty($inv->currency_id)) {
+                    $inv->currency_id = $companyCurrencyId;
+                    $change['new_currency_id'] = $companyCurrencyId;
+                }
+
+                if (empty($inv->creator_id)) {
+                    $inv->creator_id = $defaultCreatorId;
+                    $change['new_creator_id'] = $defaultCreatorId;
+                }
+
+                // paid_status must be one of UNPAID/PARTIALLY_PAID/PAID.
+                // If due_amount is 0 OR equals total, and there are no payments,
+                // derive from total vs. paid to avoid mislabeling.
+                if (empty($inv->paid_status)) {
+                    $inv->paid_status = Invoice::STATUS_UNPAID;
+                    $change['new_paid_status'] = Invoice::STATUS_UNPAID;
+                }
+
+                // Repair due_amount when it looks corrupt. Safe rule: if the
+                // invoice is marked UNPAID AND no payment records exist for
+                // it, due_amount MUST equal total. This catches both the
+                // "due = 0" case (Levines, Sullivan) and the "due < total"
+                // case caused by the duplicate-ID bug (Paradigm Landscape
+                // showing $110 due / $150 total).
+                if ((int) $inv->total > 0
+                    && $inv->paid_status === Invoice::STATUS_UNPAID
+                    && (int) $inv->due_amount !== (int) $inv->total
+                ) {
+                    $hasPayments = DB::table('payments')
+                        ->where('invoice_id', $inv->id)
+                        ->exists();
+                    if (! $hasPayments) {
+                        $change['old_due_amount'] = (int) $inv->due_amount;
+                        $inv->due_amount = $inv->total;
+                        $change['new_due_amount'] = (int) $inv->due_amount;
+                    }
+                }
+
+                // Backfill base_* fields using exchange_rate
+                $baseMap = [
+                    'base_total' => (int) $inv->total * $exchangeRate,
+                    'base_sub_total' => (int) $inv->sub_total * $exchangeRate,
+                    'base_due_amount' => (int) $inv->due_amount * $exchangeRate,
+                    'base_tax' => (int) $inv->tax * $exchangeRate,
+                    'base_discount_val' => (int) $inv->discount_val * $exchangeRate,
+                ];
+                foreach ($baseMap as $field => $shouldBe) {
+                    if ((int) $inv->{$field} === 0 && (int) $shouldBe !== 0) {
+                        $inv->{$field} = $shouldBe;
+                        $change['new_'.$field] = $shouldBe;
+                    }
+                }
+
+                // ---- Item repairs: base_price, base_total, exchange_rate, currency_id ----
+                $items = $inv->items()->get();
+                foreach ($items as $item) {
+                    $itemChange = [];
+                    $itemRate = (float) ($item->exchange_rate ?: $exchangeRate);
+                    if ($itemRate <= 0) {
+                        $itemRate = 1.0;
+                    }
+                    if ((float) ($item->exchange_rate ?? 0) <= 0) {
+                        $item->exchange_rate = $itemRate;
+                        $itemChange['exchange_rate'] = $itemRate;
+                    }
+                    if (empty($item->currency_id)) {
+                        $item->currency_id = $inv->currency_id;
+                        $itemChange['currency_id'] = $inv->currency_id;
+                    }
+                    if ((int) $item->base_price === 0 && (int) $item->price !== 0) {
+                        $item->base_price = (int) $item->price * $itemRate;
+                        $itemChange['base_price'] = $item->base_price;
+                    }
+                    if ((int) $item->base_total === 0 && (int) $item->total !== 0) {
+                        $item->base_total = (int) $item->total * $itemRate;
+                        $itemChange['base_total'] = $item->base_total;
+                    }
+                    if ((int) $item->base_discount_val === 0 && (int) $item->discount_val !== 0) {
+                        $item->base_discount_val = (int) $item->discount_val * $itemRate;
+                        $itemChange['base_discount_val'] = $item->base_discount_val;
+                    }
+                    if ((int) $item->base_tax === 0 && (int) $item->tax !== 0) {
+                        $item->base_tax = (int) $item->tax * $itemRate;
+                        $itemChange['base_tax'] = $item->base_tax;
+                    }
+                    if (empty($item->discount_type)) {
+                        $item->discount_type = 'fixed';
+                        $itemChange['discount_type'] = 'fixed';
+                    }
+                    if (! empty($itemChange)) {
+                        $itemFixedCount += 1;
+                        if (! $dryRun) {
+                            $item->save();
+                        }
+                    }
+                }
+            }
+
+            if (! empty($change)) {
+                $change['id'] = $inv->id;
+                $change['invoice_number'] = $inv->invoice_number;
+                $fixed[] = $change;
+                if (! $dryRun) {
+                    $inv->save();
+                }
+            }
+
+            $seenInvoiceNumbers[$inv->invoice_number] = true;
+        }
+
+        return [
+            'company_id' => $companyId,
+            'dry_run' => $dryRun,
+            'scope' => $only,
+            'total_invoices' => $invoices->count(),
+            'fixed_invoice_count' => count($fixed),
+            'fixed_item_count' => $itemFixedCount,
+            'max_sequence_number' => $maxSeq,
+            'changes' => $fixed,
+        ];
+    });
+
+    return response()->json(['success' => true] + $report);
 });
 
 // Create recurring invoice endpoint for OpenClaw

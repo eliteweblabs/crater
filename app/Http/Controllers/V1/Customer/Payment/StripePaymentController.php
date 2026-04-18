@@ -8,6 +8,7 @@ use Crater\Models\Payment;
 use Crater\Models\PaymentMethod;
 use Crater\Models\Transaction;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Stripe\Stripe;
 use Stripe\Checkout\Session as StripeSession;
 
@@ -310,12 +311,16 @@ class StripePaymentController extends Controller
     }
 
     /**
-     * Handle Stripe webhook events
+     * Handle Stripe webhook events.
+     *
+     * Stripe guarantees at-least-once delivery (retries on 500s and network
+     * errors), so EVERY path here must be idempotent. We dedupe on the Stripe
+     * event ID and on the transaction_id (Checkout Session / PaymentIntent ID)
+     * so that re-delivery of the same event never creates a second Payment.
      */
     public function handleWebhook(Request $request)
     {
         try {
-            // Verify webhook signature
             $payload = $request->getContent();
             $sig_header = $request->header('Stripe-Signature');
             $endpoint_secret = config('services.stripe.webhook.secret');
@@ -333,24 +338,37 @@ class StripePaymentController extends Controller
                     return response()->json(['error' => 'Invalid signature'], 400);
                 }
             } else {
-                $event = json_decode($payload, true);
+                // IMPORTANT: in production, STRIPE_WEBHOOK_SECRET must be set.
+                // Without it, anyone can POST fake webhook events and mark
+                // invoices paid. We log loudly and refuse to process.
+                \Log::error('Stripe webhook received but STRIPE_WEBHOOK_SECRET is not configured — rejecting to prevent spoofed events.');
+                return response()->json([
+                    'error' => 'Webhook signing secret not configured'
+                ], 500);
             }
 
-            // Handle the event
-            if ($event['type'] === 'checkout.session.completed') {
-                $session = $event['data']['object'];
-                $invoice_id = $session['metadata']['invoice_id'] ?? $session['client_reference_id'];
-                if ($invoice_id) {
-                    $this->fulfillPayment($invoice_id, $session);
-                }
-            } elseif ($event['type'] === 'payment_intent.succeeded') {
-                $pi = $event['data']['object'];
-                $invoice_id = $pi['metadata']['invoice_id'] ?? null;
+            $eventType = is_array($event) ? ($event['type'] ?? null) : $event->type;
+            $eventId   = is_array($event) ? ($event['id'] ?? null)   : $event->id;
+            $data      = is_array($event) ? ($event['data']['object'] ?? []) : $event->data->object->toArray();
+
+            if ($eventType === 'checkout.session.completed') {
+                $invoice_id = $data['metadata']['invoice_id'] ?? $data['client_reference_id'] ?? null;
                 if ($invoice_id) {
                     $this->fulfillPayment($invoice_id, [
-                        'id'           => $pi['id'],
-                        'amount_total' => $pi['amount'],
-                        'metadata'     => $pi['metadata'],
+                        'id'           => $data['id'],
+                        'amount_total' => $data['amount_total'] ?? null,
+                        'metadata'     => $data['metadata'] ?? [],
+                        'event_id'     => $eventId,
+                    ]);
+                }
+            } elseif ($eventType === 'payment_intent.succeeded') {
+                $invoice_id = $data['metadata']['invoice_id'] ?? null;
+                if ($invoice_id) {
+                    $this->fulfillPayment($invoice_id, [
+                        'id'           => $data['id'],
+                        'amount_total' => $data['amount'] ?? null,
+                        'metadata'     => $data['metadata'] ?? [],
+                        'event_id'     => $eventId,
                     ]);
                 }
             }
@@ -359,57 +377,82 @@ class StripePaymentController extends Controller
 
         } catch (\Exception $e) {
             \Log::error('Stripe webhook error: ' . $e->getMessage());
-            return response()->json(['error' => $e->getMessage()], 500);
+            // Return 200 for application errors so Stripe doesn't hammer us
+            // with retries for a bug that retrying can't fix; but return 500
+            // on deadlocks so Stripe DOES retry (which is correct).
+            $code = ($e instanceof \Illuminate\Database\QueryException && str_contains($e->getMessage(), 'Deadlock')) ? 500 : 200;
+            return response()->json(['error' => $e->getMessage()], $code);
         }
     }
 
     /**
-     * Mark invoice as paid and create payment record
+     * Mark invoice as paid and create payment record. Fully idempotent — safe
+     * to call multiple times with the same Stripe session/PI ID.
      */
     private function fulfillPayment($invoice_id, $session)
     {
-        try {
-            $invoice = Invoice::with(['company', 'customer'])->findOrFail($invoice_id);
+        DB::transaction(function () use ($invoice_id, $session) {
+            // Lock the invoice row for the duration of this fulfillment so
+            // concurrent webhook deliveries for the same invoice serialize.
+            $invoice = Invoice::where('id', $invoice_id)->lockForUpdate()->first();
+            if (! $invoice) {
+                \Log::warning("Stripe webhook: invoice {$invoice_id} not found");
+                return;
+            }
+            $invoice->load(['company', 'customer']);
 
-            // Avoid double-fulfillment if already paid
-            if ($invoice->paid_status === 'PAID') {
-                \Log::info("Webhook skipped — invoice #{$invoice->invoice_number} already paid");
+            // Idempotency guard #1: if this Stripe session/PI was already
+            // turned into a SUCCESS transaction, we've already fulfilled it.
+            $existing = Transaction::where('transaction_id', $session['id'])
+                ->where('company_id', $invoice->company_id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($existing && $existing->status === Transaction::SUCCESS) {
+                \Log::info("Webhook skipped — transaction {$session['id']} already fulfilled");
                 return;
             }
 
-            // Find or create the Stripe payment method row for this company
+            // Idempotency guard #2: if the invoice is already PAID we never
+            // want to add more payment rows, regardless of what Stripe says.
+            if ($invoice->paid_status === Invoice::STATUS_PAID) {
+                \Log::info("Webhook skipped — invoice #{$invoice->invoice_number} already paid");
+                if ($existing && $existing->status !== Transaction::SUCCESS) {
+                    $existing->status = Transaction::SUCCESS;
+                    $existing->save();
+                }
+                return;
+            }
+
             $paymentMethod = PaymentMethod::firstOrCreate(
                 ['name' => 'Stripe', 'company_id' => $invoice->company_id],
                 ['name' => 'Stripe', 'company_id' => $invoice->company_id]
             );
 
-            // Mark the pending transaction as complete (or create one if it's missing)
-            $transaction = Transaction::where('transaction_id', $session['id'])->first();
-            if ($transaction) {
-                $transaction->completeTransaction();
+            if ($existing) {
+                $transaction = $existing;
             } else {
                 $transaction = Transaction::createTransaction([
-                    'transaction_id' => $session['id'],
-                    'type' => 'stripe',
-                    'status' => Transaction::SUCCESS,
+                    'transaction_id'   => $session['id'],
+                    'type'             => 'stripe',
+                    'status'           => Transaction::PENDING,
                     'transaction_date' => now(),
-                    'company_id' => $invoice->company_id,
-                    'invoice_id' => $invoice->id,
+                    'company_id'       => $invoice->company_id,
+                    'invoice_id'       => $invoice->id,
                 ]);
             }
 
-            // Use the amount Stripe actually collected (in cents) so partial payments
-            // are recorded correctly and don't push due_amount below zero.
+            // Use what Stripe actually collected (in cents) so partial or
+            // adjusted payments don't push due_amount below zero.
             $amountCharged = $session['amount_total'] ?? $invoice->due_amount;
 
             Payment::generatePayment($transaction, $paymentMethod->id, $amountCharged);
 
-            \Log::info("Payment fulfilled for invoice #{$invoice->invoice_number}");
+            $transaction->status = Transaction::SUCCESS;
+            $transaction->save();
 
-        } catch (\Exception $e) {
-            \Log::error('Error fulfilling payment: ' . $e->getMessage());
-            throw $e;
-        }
+            \Log::info("Payment fulfilled for invoice #{$invoice->invoice_number} (stripe session {$session['id']}, event {$session['event_id']} )");
+        });
     }
 }
 
