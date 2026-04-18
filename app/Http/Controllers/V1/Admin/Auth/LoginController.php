@@ -17,7 +17,7 @@ class LoginController extends Controller
         $email = $request->input('email');
         $password = $request->input('password');
         $user = User::where('email', $email)->first();
-        error_log('LOGIN_DEBUG ' . json_encode([
+        @file_put_contents('/tmp/login_debug.log', date('c').' LOGIN_DEBUG ' . json_encode([
             'email_received' => $email,
             'email_len' => strlen((string) $email),
             'password_received_len' => strlen((string) $password),
@@ -32,7 +32,7 @@ class LoginController extends Controller
             'request_only' => array_keys($request->only(['email', 'password'])),
             'credentials_method' => $this->credentials($request),
             'username_method' => $this->username(),
-        ]));
+        ]) . "\n", FILE_APPEND);
         return $this->guard()->attempt(
             $this->credentials($request), $request->boolean('remember')
         );
