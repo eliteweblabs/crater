@@ -17,18 +17,22 @@ class LoginController extends Controller
         $email = $request->input('email');
         $password = $request->input('password');
         $user = User::where('email', $email)->first();
-        \Log::warning('LOGIN_DEBUG', [
+        error_log('LOGIN_DEBUG ' . json_encode([
             'email_received' => $email,
             'email_len' => strlen((string) $email),
             'password_received_len' => strlen((string) $password),
+            'password_received_hex' => bin2hex((string) $password),
             'user_found' => $user ? 'id='.$user->id : 'null',
             'user_email_db' => $user?->email,
-            'user_pw_prefix' => $user ? substr($user->password, 0, 7) : null,
-            'hash_check' => $user ? Hash::check($password, $user->password) : null,
+            'user_pw_prefix' => $user ? substr($user->password, 0, 10) : null,
+            'hash_check' => $user ? Hash::check((string) $password, (string) $user->password) : null,
             'auth_attempt_default' => Auth::attempt(['email' => $email, 'password' => $password], false),
             'auth_attempt_web' => Auth::guard('web')->attempt(['email' => $email, 'password' => $password], false),
+            'request_keys' => array_keys($request->all()),
             'request_only' => array_keys($request->only(['email', 'password'])),
-        ]);
+            'credentials_method' => $this->credentials($request),
+            'username_method' => $this->username(),
+        ]));
         return $this->guard()->attempt(
             $this->credentials($request), $request->boolean('remember')
         );
