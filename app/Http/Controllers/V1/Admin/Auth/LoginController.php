@@ -12,6 +12,11 @@ use Crater\Models\User;
 
 class LoginController extends Controller
 {
+    public function login(Request $request)
+    {
+        throw new \RuntimeException('LOGIN_METHOD_HIT keys=' . json_encode(array_keys($request->all())));
+    }
+
     protected function attemptLogin(Request $request)
     {
         $email = $request->input('email');
