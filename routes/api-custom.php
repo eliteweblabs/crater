@@ -1040,6 +1040,235 @@ Route::post('/openclaw/record-payment', function (Illuminate\Http\Request $reque
     ]);
 });
 
+// List line item templates for OpenClaw
+// GET /api/openclaw/line-items?company_id=1&q=optional-search
+Route::get('/openclaw/line-items', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $companyId = (int) ($request->input('company_id') ?? 1);
+    $q         = trim((string) $request->input('q', ''));
+
+    $query = \Crater\Models\Item::with(['unit', 'currency'])
+        ->where('company_id', $companyId)
+        ->orderBy('name');
+
+    if ($q !== '') {
+        $query->where('name', 'LIKE', "%{$q}%");
+    }
+
+    $items = $query->get()->map(function ($item) {
+        return [
+            'id'           => $item->id,
+            'name'         => $item->name,
+            'description'  => $item->description,
+            'price'        => round(((int) $item->price) / 100, 2),
+            'price_cents'  => (int) $item->price,
+            'unit'         => $item->unit ? $item->unit->name : null,
+            'currency'     => $item->currency ? [
+                'code'   => $item->currency->code,
+                'symbol' => $item->currency->symbol,
+            ] : null,
+            'tax_per_item' => (bool) $item->tax_per_item,
+        ];
+    });
+
+    return response()->json([
+        'company_id' => $companyId,
+        'count'      => $items->count(),
+        'line_items' => $items,
+    ]);
+});
+
+// Add line items to an existing invoice
+// POST /api/openclaw/invoice/{id}/items
+// Body: { "items": [{ "name": "...", "quantity": 1, "price": 50.00, "description": "..." }] }
+Route::post('/openclaw/invoice/{id}/items', function (Illuminate\Http\Request $request, $id) {
+    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $invoice = Invoice::find($id);
+    if (!$invoice) {
+        return response()->json(['error' => 'Invoice not found'], 404);
+    }
+
+    $validated = $request->validate([
+        'items'               => 'required|array|min:1',
+        'items.*.name'        => 'required|string',
+        'items.*.quantity'    => 'required|numeric|min:0.01',
+        'items.*.price'       => 'required|numeric|min:0',
+        'items.*.description' => 'nullable|string',
+    ]);
+
+    $exchangeRate = (float) ($invoice->exchange_rate ?: 1);
+    $currencyId   = (int) $invoice->currency_id;
+    $companyId    = (int) $invoice->company_id;
+    $addedCents   = 0;
+
+    $newItems = DB::transaction(function () use (
+        $validated, $invoice, $exchangeRate, $currencyId, $companyId, &$addedCents
+    ) {
+        $created = [];
+        foreach ($validated['items'] as $itemData) {
+            $priceCents = (int) round($itemData['price'] * 100);
+            $totalCents = (int) round($priceCents * $itemData['quantity']);
+            $addedCents += $totalCents;
+
+            $row = InvoiceItem::create([
+                'invoice_id'        => $invoice->id,
+                'name'              => $itemData['name'],
+                'description'       => $itemData['description'] ?? '',
+                'quantity'          => $itemData['quantity'],
+                'price'             => $priceCents,
+                'total'             => $totalCents,
+                'base_price'        => (int) round($priceCents * $exchangeRate),
+                'base_total'        => (int) round($totalCents * $exchangeRate),
+                'discount'          => 0,
+                'discount_type'     => 'fixed',
+                'discount_val'      => 0,
+                'base_discount_val' => 0,
+                'tax'               => 0,
+                'base_tax'          => 0,
+                'exchange_rate'     => $exchangeRate,
+                'currency_id'       => $currencyId,
+                'company_id'        => $companyId,
+                'created_at'        => now(),
+                'updated_at'        => now(),
+            ]);
+            $created[] = $row;
+        }
+
+        // Update the invoice totals — due_amount grows by the same delta
+        // so any partial payments already recorded are preserved.
+        $invoice->sub_total      = (int) $invoice->sub_total + $addedCents;
+        $invoice->total          = (int) $invoice->total + $addedCents;
+        $invoice->due_amount     = (int) $invoice->due_amount + $addedCents;
+        $invoice->base_sub_total = (int) round($invoice->sub_total * $exchangeRate);
+        $invoice->base_total     = (int) round($invoice->total * $exchangeRate);
+        $invoice->base_due_amount= (int) round($invoice->due_amount * $exchangeRate);
+        $invoice->save();
+
+        return $created;
+    });
+
+    return response()->json([
+        'success'         => true,
+        'invoice_id'      => $invoice->id,
+        'invoice_number'  => $invoice->invoice_number,
+        'items_added'     => count($newItems),
+        'amount_added'    => round($addedCents / 100, 2),
+        'new_total'       => round(((int) $invoice->total) / 100, 2),
+        'new_due'         => round(((int) $invoice->due_amount) / 100, 2),
+        'items'           => array_map(fn ($i) => [
+            'id'          => $i->id,
+            'name'        => $i->name,
+            'quantity'    => (float) $i->quantity,
+            'price'       => round(((int) $i->price) / 100, 2),
+            'total'       => round(((int) $i->total) / 100, 2),
+        ], $newItems),
+        'admin_url'       => url("/admin/invoices/{$invoice->id}/view"),
+    ]);
+});
+
+// List recurring invoices with schedule info
+// GET /api/openclaw/recurring-invoices?company_id=1&status=ACTIVE
+Route::get('/openclaw/recurring-invoices', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $companyId = (int) ($request->input('company_id') ?? 1);
+    $status    = strtoupper((string) $request->input('status', ''));
+
+    $query = RecurringInvoice::with(['customer:id,name,email,phone', 'items', 'currency'])
+        ->where('company_id', $companyId)
+        ->orderBy('starts_at');
+
+    if (in_array($status, ['ACTIVE', 'ON_HOLD', 'COMPLETED'])) {
+        $query->where('status', $status);
+    }
+
+    // Human-readable label for common cron patterns
+    $humanFrequency = function (string $cron): string {
+        $map = [
+            '* * * * *'     => 'Every minute',
+            '0 * * * *'     => 'Hourly',
+            '0 0 * * *'     => 'Daily',
+            '0 0 * * 1'     => 'Weekly (Monday)',
+            '0 0 * * 0'     => 'Weekly (Sunday)',
+            '0 0 1 * *'     => 'Monthly (1st)',
+            '0 0 15 * *'    => 'Monthly (15th)',
+            '0 0 1 1 *'     => 'Annually (Jan 1)',
+            '0 0 1 4 *'     => 'Annually (Apr 1)',
+        ];
+        if (isset($map[$cron])) {
+            return $map[$cron];
+        }
+        // Detect simple monthly patterns: "0 0 D * *"
+        if (preg_match('/^0 0 (\d+) \* \*$/', $cron, $m)) {
+            return "Monthly ({$m[1]}th)";
+        }
+        // Detect simple weekly: "0 0 * * D"
+        $days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        if (preg_match('/^0 0 \* \* (\d)$/', $cron, $m) && isset($days[(int) $m[1]])) {
+            return "Weekly ({$days[(int) $m[1]]})";
+        }
+        return $cron;
+    };
+
+    $records = $query->get()->map(function ($ri) use ($humanFrequency) {
+        return [
+            'id'               => $ri->id,
+            'status'           => $ri->status,
+            'send_automatically' => (bool) $ri->send_automatically,
+            'starts_at'        => optional($ri->starts_at)->format('Y-m-d'),
+            'next_invoice_at'  => $ri->next_invoice_at
+                                    ? \Carbon\Carbon::parse($ri->next_invoice_at)->format('Y-m-d')
+                                    : null,
+            'frequency'        => $ri->frequency,
+            'frequency_human'  => $humanFrequency((string) $ri->frequency),
+            'limit_by'         => $ri->limit_by,
+            'limit_count'      => $ri->limit_count,
+            'limit_date'       => $ri->limit_date
+                                    ? \Carbon\Carbon::parse($ri->limit_date)->format('Y-m-d')
+                                    : null,
+            'currency'         => $ri->currency ? [
+                'code'   => $ri->currency->code,
+                'symbol' => $ri->currency->symbol,
+            ] : null,
+            'sub_total'        => round(((int) $ri->sub_total) / 100, 2),
+            'total'            => round(((int) $ri->total) / 100, 2),
+            'notes'            => $ri->notes,
+            'customer'         => $ri->customer ? [
+                'id'    => $ri->customer->id,
+                'name'  => $ri->customer->name,
+                'email' => $ri->customer->email,
+                'phone' => $ri->customer->phone,
+            ] : null,
+            'items'            => $ri->items->map(fn ($item) => [
+                'id'          => $item->id,
+                'name'        => $item->name,
+                'description' => $item->description,
+                'quantity'    => (float) $item->quantity,
+                'price'       => round(((int) $item->price) / 100, 2),
+                'total'       => round(((int) $item->total) / 100, 2),
+            ])->values(),
+            'invoice_count'    => DB::table('invoices')
+                                    ->where('recurring_invoice_id', $ri->id)
+                                    ->count(),
+            'admin_url'        => url("/admin/recurring-invoices/{$ri->id}/view"),
+        ];
+    });
+
+    return response()->json([
+        'company_id'        => $companyId,
+        'count'             => $records->count(),
+        'recurring_invoices'=> $records,
+    ]);
+});
+
 // Create recurring invoice endpoint for OpenClaw
 // POST /api/openclaw/create-recurring-invoice
 Route::post('/openclaw/create-recurring-invoice', function (Illuminate\Http\Request $request) {
