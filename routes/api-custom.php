@@ -6,8 +6,11 @@ use Crater\Models\CompanySetting;
 use Crater\Models\Customer;
 use Crater\Models\Invoice;
 use Crater\Models\InvoiceItem;
+use Crater\Models\Payment;
+use Crater\Models\PaymentMethod;
 use Crater\Models\RecurringInvoice;
 use Crater\Services\SerialNumberFormatter;
+use Vinkla\Hashids\Facades\Hashids;
 // Simple invoice creation endpoint for OpenClaw
 // POST /api/openclaw/create-invoice
 Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $request) {
@@ -298,6 +301,103 @@ Route::get('/openclaw/invoices', function (Illuminate\Http\Request $request) {
     ]);
 });
 
+// List customers for a company.
+// GET /api/openclaw/customers?company_id=1&q=optional-search
+Route::get('/openclaw/customers', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $companyId = (int) ($request->input('company_id') ?? 1);
+    $q = trim((string) $request->input('q', ''));
+
+    $query = Customer::where('company_id', $companyId)
+        ->orderBy('name');
+
+    if ($q !== '') {
+        $query->where(function ($w) use ($q) {
+            $w->where('name', 'LIKE', "%{$q}%")
+              ->orWhere('contact_name', 'LIKE', "%{$q}%")
+              ->orWhere('email', 'LIKE', "%{$q}%")
+              ->orWhere('phone', 'LIKE', "%{$q}%");
+        });
+    }
+
+    $customers = $query->get([
+        'id', 'name', 'contact_name', 'email', 'phone', 'company_id', 'created_at',
+    ])->map(function ($c) {
+        return [
+            'id' => $c->id,
+            'name' => $c->name,
+            'contact_name' => $c->contact_name,
+            'email' => $c->email,
+            'phone' => $c->phone,
+            'admin_url' => url("/admin/customers/{$c->id}/view"),
+        ];
+    });
+
+    return response()->json([
+        'company_id' => $companyId,
+        'count' => $customers->count(),
+        'customers' => $customers,
+    ]);
+});
+
+// Fetch a single invoice (with items) by id.
+// GET /api/openclaw/invoice/{id}
+Route::get('/openclaw/invoice/{id}', function (Illuminate\Http\Request $request, $id) {
+    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $invoice = Invoice::with(['items', 'customer:id,name,email,phone'])->find($id);
+    if (!$invoice) {
+        return response()->json(['error' => 'Invoice not found'], 404);
+    }
+
+    $hash = $invoice->unique_hash;
+
+    return response()->json([
+        'id' => $invoice->id,
+        'invoice_number' => $invoice->invoice_number,
+        'sequence_number' => $invoice->sequence_number,
+        'invoice_date' => optional($invoice->invoice_date)->format('Y-m-d'),
+        'due_date' => optional($invoice->due_date)->format('Y-m-d'),
+        'status' => $invoice->status,
+        'paid_status' => $invoice->paid_status,
+        'currency_id' => $invoice->currency_id,
+        'sub_total_cents' => (int) $invoice->sub_total,
+        'total_cents' => (int) $invoice->total,
+        'due_cents' => (int) $invoice->due_amount,
+        'sub_total' => round(((int) $invoice->sub_total) / 100, 2),
+        'total' => round(((int) $invoice->total) / 100, 2),
+        'due' => round(((int) $invoice->due_amount) / 100, 2),
+        'notes' => $invoice->notes,
+        'customer' => $invoice->customer ? [
+            'id' => $invoice->customer->id,
+            'name' => $invoice->customer->name,
+            'email' => $invoice->customer->email,
+            'phone' => $invoice->customer->phone,
+        ] : null,
+        'items' => $invoice->items->map(function ($item) {
+            return [
+                'id' => $item->id,
+                'name' => $item->name,
+                'description' => $item->description,
+                'quantity' => (float) $item->quantity,
+                'price_cents' => (int) $item->price,
+                'price' => round(((int) $item->price) / 100, 2),
+                'total_cents' => (int) $item->total,
+                'total' => round(((int) $item->total) / 100, 2),
+            ];
+        })->values(),
+        'admin_url' => url("/admin/invoices/{$invoice->id}/view"),
+        'public_url' => $hash ? url("/invoices/{$hash}") : null,
+        'pdf_url' => $hash ? url("/invoices/pdf/{$hash}") : null,
+        'payment_url' => $hash ? url("/invoices/{$hash}/pay") : null,
+    ]);
+});
+
 // Nuke-and-pave reset: wipes all invoices, items, taxes, payments,
 // transactions, and recurring invoices for a company. Preserves users,
 // customers, companies, and settings. Safe ONLY because no real payments
@@ -578,6 +678,329 @@ Route::post('/openclaw/repair-invoice-numbers', function (Illuminate\Http\Reques
     });
 
     return response()->json(['success' => true] + $report);
+});
+
+// Record an offline payment for OpenClaw
+// POST /api/openclaw/record-payment
+//
+// Flow:
+//   1. Fuzzy-search customer by name (same LIKE matching used everywhere).
+//      • No match  → create customer + auto-draft invoice, then record payment.
+//      • 2+ matches → return needs_selection:customer so caller can be more specific.
+//   2. Resolve invoice (skip if invoice_id supplied directly).
+//      • 0 open invoices → create a DRAFT invoice for the amount, then record payment.
+//      • 1 open invoice  → apply payment to it.
+//      • 2+ open invoices → return needs_selection:invoice with the list; caller
+//                           re-sends with invoice_id chosen.
+Route::post('/openclaw/record-payment', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $validated = $request->validate([
+        'customer_name' => 'required|string',
+        'amount'        => 'required|numeric|min:0.01',
+        'payment_mode'  => 'nullable|in:CASH,CHECK,CREDIT_CARD,BANK_TRANSFER,OTHER',
+        'payment_date'  => 'nullable|date',
+        'notes'         => 'nullable|string',
+        'invoice_id'    => 'nullable|integer',
+    ]);
+
+    $companyId   = 1;
+    $amountCents = (int) round($validated['amount'] * 100);
+    $paymentDate = $validated['payment_date'] ?? now()->format('Y-m-d');
+    $q           = trim($validated['customer_name']);
+
+    // If payment_mode was not supplied, ask before proceeding
+    if (empty($validated['payment_mode'])) {
+        return response()->json([
+            'needs_selection' => true,
+            'selection_type'  => 'payment_mode',
+            'message'         => 'How was this payment received? Re-send with payment_mode set to one of the options.',
+            'options'         => [
+                ['value' => 'CASH',          'label' => 'Cash'],
+                ['value' => 'CHECK',         'label' => 'Check'],
+                ['value' => 'CREDIT_CARD',   'label' => 'Credit Card'],
+                ['value' => 'BANK_TRANSFER', 'label' => 'Bank Transfer'],
+                ['value' => 'OTHER',         'label' => 'Other'],
+            ],
+        ], 300);
+    }
+
+    $paymentMode = $validated['payment_mode'];
+
+    // ── 1. Resolve customer ───────────────────────────────────────────────────
+    $customers = Customer::where('company_id', $companyId)
+        ->where(function ($w) use ($q) {
+            $w->where('name', 'LIKE', "%{$q}%")
+              ->orWhere('contact_name', 'LIKE', "%{$q}%")
+              ->orWhere('email', 'LIKE', "%{$q}%")
+              ->orWhere('phone', 'LIKE', "%{$q}%");
+        })
+        ->get();
+
+    $customerCreated = false;
+    if ($customers->count() === 0) {
+        $companyCurrencyId = (int) (CompanySetting::getSetting('currency', $companyId) ?? 1);
+        $customer = Customer::create([
+            'name'         => $q,
+            'contact_name' => $q,
+            'company_id'   => $companyId,
+            'currency_id'  => $companyCurrencyId,
+        ]);
+        $customerCreated = true;
+    } elseif ($customers->count() === 1) {
+        $customer = $customers->first();
+    } else {
+        return response()->json([
+            'needs_selection' => true,
+            'selection_type'  => 'customer',
+            'message'         => "Multiple customers matched \"{$q}\". Re-send with a more specific customer_name.",
+            'customers'       => $customers->map(fn ($c) => [
+                'id'           => $c->id,
+                'name'         => $c->name,
+                'contact_name' => $c->contact_name,
+                'email'        => $c->email,
+                'phone'        => $c->phone,
+                'admin_url'    => url("/admin/customers/{$c->id}/view"),
+            ])->values(),
+        ], 300);
+    }
+
+    // ── 2. Resolve payment method (optional — null if not configured) ─────────
+    $paymentMethodId = optional(
+        PaymentMethod::where('company_id', $companyId)->where('type', $paymentMode)->first()
+    )->id;
+
+    // ── 3. Resolve invoice ────────────────────────────────────────────────────
+    $invoiceCreated = false;
+
+    if (!empty($validated['invoice_id'])) {
+        $invoice = Invoice::where('company_id', $companyId)
+            ->where('customer_id', $customer->id)
+            ->find($validated['invoice_id']);
+        if (!$invoice) {
+            return response()->json(['error' => 'Invoice not found for this customer'], 404);
+        }
+    } else {
+        $openInvoices = Invoice::where('company_id', $companyId)
+            ->where('customer_id', $customer->id)
+            ->whereIn('paid_status', [Invoice::STATUS_UNPAID, Invoice::STATUS_PARTIALLY_PAID])
+            ->orderByDesc('invoice_date')
+            ->orderByDesc('id')
+            ->get(['id', 'invoice_number', 'invoice_date', 'total', 'due_amount', 'status', 'paid_status']);
+
+        if ($openInvoices->count() > 1) {
+            return response()->json([
+                'needs_selection' => true,
+                'selection_type'  => 'invoice',
+                'message'         => 'Multiple open invoices found. Re-send with invoice_id to specify which one to apply the payment to.',
+                'customer'        => ['id' => $customer->id, 'name' => $customer->name],
+                'open_invoices'   => $openInvoices->map(fn ($inv) => [
+                    'id'             => $inv->id,
+                    'invoice_number' => $inv->invoice_number,
+                    'invoice_date'   => optional($inv->invoice_date)->format('Y-m-d'),
+                    'total'          => round(((int) $inv->total) / 100, 2),
+                    'due'            => round(((int) $inv->due_amount) / 100, 2),
+                    'status'         => $inv->status,
+                    'paid_status'    => $inv->paid_status,
+                    'admin_url'      => url("/admin/invoices/{$inv->id}/view"),
+                ])->values(),
+            ], 300);
+        }
+
+        if ($openInvoices->count() === 1) {
+            $invoice = Invoice::find($openInvoices->first()->id);
+        } else {
+            // 0 open invoices — create a DRAFT invoice as a placeholder
+            $invoice = DB::transaction(function () use (
+                $customer, $amountCents, $companyId, $paymentDate, $validated
+            ) {
+                $companyCurrencyId = (int) (CompanySetting::getSetting('currency', $companyId) ?? 1);
+                $taxPerItem        = CompanySetting::getSetting('tax_per_item', $companyId) ?? 'NO';
+                $discountPerItem   = CompanySetting::getSetting('discount_per_item', $companyId) ?? 'NO';
+                $currencyId        = (int) ($customer->currency_id ?: $companyCurrencyId);
+                $exchangeRate      = 1;
+                $uniqueHash        = \Illuminate\Support\Str::random(32);
+                $creatorId         = (int) (DB::table('users')->orderBy('id')->value('id') ?? 1);
+
+                // Sequence numbers — same locking pattern as create-invoice
+                $rows = DB::table('invoices')
+                    ->where('company_id', $companyId)
+                    ->lockForUpdate()
+                    ->get(['sequence_number', 'invoice_number']);
+
+                $maxSeq = 0;
+                foreach ($rows as $row) {
+                    if ($row->sequence_number !== null && (int) $row->sequence_number > $maxSeq) {
+                        $maxSeq = (int) $row->sequence_number;
+                    }
+                    if ($row->invoice_number && preg_match('/(\d+)$/', $row->invoice_number, $m)) {
+                        if ((int) $m[1] > $maxSeq) {
+                            $maxSeq = (int) $m[1];
+                        }
+                    }
+                }
+                $nextSeq = $maxSeq + 1;
+
+                $maxCustSeq = (int) (DB::table('invoices')
+                    ->where('company_id', $companyId)
+                    ->where('customer_id', $customer->id)
+                    ->lockForUpdate()
+                    ->max('customer_sequence_number') ?? 0);
+                $nextCustSeq = $maxCustSeq + 1;
+
+                $invoiceModel = new Invoice();
+                $serial = (new SerialNumberFormatter())
+                    ->setModel($invoiceModel)
+                    ->setCompany($companyId);
+                $serial->nextSequenceNumber         = $nextSeq;
+                $serial->nextCustomerSequenceNumber = $nextCustSeq;
+                $invoiceNumber = $serial->getNextNumber();
+
+                $inv = Invoice::create([
+                    'invoice_date'             => $paymentDate,
+                    'due_date'                 => $paymentDate,
+                    'invoice_number'           => $invoiceNumber,
+                    'sequence_number'          => $nextSeq,
+                    'customer_sequence_number' => $nextCustSeq,
+                    'customer_id'              => $customer->id,
+                    'company_id'               => $companyId,
+                    'creator_id'               => $creatorId,
+                    'currency_id'              => $currencyId,
+                    'exchange_rate'            => $exchangeRate,
+                    'sub_total'                => $amountCents,
+                    'total'                    => $amountCents,
+                    'due_amount'               => $amountCents,
+                    'base_sub_total'           => $amountCents,
+                    'base_total'               => $amountCents,
+                    'base_due_amount'          => $amountCents,
+                    'tax'                      => 0,
+                    'base_tax'                 => 0,
+                    'discount'                 => 0,
+                    'discount_type'            => 'fixed',
+                    'discount_val'             => 0,
+                    'base_discount_val'        => 0,
+                    'tax_per_item'             => $taxPerItem,
+                    'discount_per_item'        => $discountPerItem,
+                    'paid_status'              => Invoice::STATUS_UNPAID,
+                    'notes'                    => $validated['notes'] ?? '',
+                    'status'                   => Invoice::STATUS_DRAFT,
+                    'template_name'            => 'invoice1',
+                    'unique_hash'              => $uniqueHash,
+                ]);
+
+                InvoiceItem::create([
+                    'invoice_id'       => $inv->id,
+                    'name'             => 'Offline Payment',
+                    'description'      => '',
+                    'quantity'         => 1,
+                    'price'            => $amountCents,
+                    'total'            => $amountCents,
+                    'base_price'       => $amountCents,
+                    'base_total'       => $amountCents,
+                    'base_discount_val'=> 0,
+                    'base_tax'         => 0,
+                    'discount'         => 0,
+                    'discount_type'    => 'fixed',
+                    'discount_val'     => 0,
+                    'tax'              => 0,
+                    'exchange_rate'    => $exchangeRate,
+                    'currency_id'      => $currencyId,
+                    'company_id'       => $companyId,
+                    'created_at'       => now(),
+                    'updated_at'       => now(),
+                ]);
+
+                return $inv;
+            });
+            $invoiceCreated = true;
+        }
+    }
+
+    // ── 4. Record the payment ─────────────────────────────────────────────────
+    $payment = DB::transaction(function () use (
+        $customer, $invoice, $amountCents, $paymentDate,
+        $paymentMethodId, $companyId, $validated
+    ) {
+        // Sequence numbers for payment — same locking pattern as invoices
+        $payRows = DB::table('payments')
+            ->where('company_id', $companyId)
+            ->lockForUpdate()
+            ->get(['sequence_number', 'payment_number']);
+
+        $maxPaySeq = 0;
+        foreach ($payRows as $row) {
+            if ($row->sequence_number !== null && (int) $row->sequence_number > $maxPaySeq) {
+                $maxPaySeq = (int) $row->sequence_number;
+            }
+            if ($row->payment_number && preg_match('/(\d+)$/', $row->payment_number, $m)) {
+                if ((int) $m[1] > $maxPaySeq) {
+                    $maxPaySeq = (int) $m[1];
+                }
+            }
+        }
+        $nextPaySeq = $maxPaySeq + 1;
+
+        $maxCustPaySeq = (int) (DB::table('payments')
+            ->where('company_id', $companyId)
+            ->where('customer_id', $customer->id)
+            ->lockForUpdate()
+            ->max('customer_sequence_number') ?? 0);
+        $nextCustPaySeq = $maxCustPaySeq + 1;
+
+        $paymentModel = new Payment();
+        $serial = (new SerialNumberFormatter())
+            ->setModel($paymentModel)
+            ->setCompany($companyId);
+        $serial->nextSequenceNumber         = $nextPaySeq;
+        $serial->nextCustomerSequenceNumber = $nextCustPaySeq;
+        $paymentNumber = $serial->getNextNumber();
+
+        $creatorId    = (int) (DB::table('users')->orderBy('id')->value('id') ?? 1);
+        $exchangeRate = (float) ($invoice->exchange_rate ?: 1);
+        $currencyId   = (int) ($invoice->currency_id ?: (CompanySetting::getSetting('currency', $companyId) ?? 1));
+
+        $pay = Payment::create([
+            'payment_number'           => $paymentNumber,
+            'payment_date'             => $paymentDate,
+            'amount'                   => $amountCents,
+            'base_amount'              => (int) round($amountCents * $exchangeRate),
+            'notes'                    => $validated['notes'] ?? '',
+            'invoice_id'               => $invoice->id,
+            'customer_id'              => $customer->id,
+            'company_id'               => $companyId,
+            'creator_id'               => $creatorId,
+            'user_id'                  => $creatorId,
+            'payment_method_id'        => $paymentMethodId,
+            'currency_id'              => $currencyId,
+            'exchange_rate'            => $exchangeRate,
+            'sequence_number'          => $nextPaySeq,
+            'customer_sequence_number' => $nextCustPaySeq,
+        ]);
+
+        $pay->unique_hash = Hashids::connection(Payment::class)->encode($pay->id);
+        $pay->save();
+
+        $invoice->subtractInvoicePayment($amountCents);
+
+        return $pay;
+    });
+
+    return response()->json([
+        'success'           => true,
+        'payment_id'        => $payment->id,
+        'payment_number'    => $payment->payment_number,
+        'amount'            => $validated['amount'],
+        'payment_mode'      => $paymentMode,
+        'invoice_id'        => $invoice->id,
+        'invoice_number'    => $invoice->invoice_number,
+        'invoice_created'   => $invoiceCreated,
+        'customer_created'  => $customerCreated,
+        'customer'          => ['id' => $customer->id, 'name' => $customer->name],
+        'admin_payment_url' => url("/admin/payments/{$payment->id}/view"),
+        'admin_invoice_url' => url("/admin/invoices/{$invoice->id}/view"),
+    ]);
 });
 
 // Create recurring invoice endpoint for OpenClaw
