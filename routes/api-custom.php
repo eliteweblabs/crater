@@ -283,3 +283,109 @@ Route::post('/openclaw/create-recurring-invoice', function (Illuminate\Http\Requ
         'frequency' => $recurringInvoice->frequency,
     ]);
 });
+// List all customers (OpenClaw endpoint)
+Route::get('/openclaw/customers', function () {
+    if (request()->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+    
+    $customers = \Crater\Models\Customer::with(['company', 'billingAddress', 'shippingAddress'])
+        ->orderBy('name')
+        ->get();
+    
+    return response()->json([
+        'data' => $customers->map(function ($c) {
+            return [
+                'id' => $c->id,
+                'name' => $c->name,
+                'email' => $c->email,
+                'phone' => $c->phone,
+                'company_name' => $c->company?->name,
+                'billing_address' => $c->billingAddress?->address,
+                'shipping_address' => $c->shippingAddress?->address,
+                'created_at' => $c->created_at,
+            ];
+        })
+    ]);
+});
+
+// List all line items (OpenClaw endpoint)
+Route::get('/openclaw/line-items', function () {
+    if (request()->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+    
+    $items = \Crater\Models\LineItem::orderBy('name')->get();
+    
+    return response()->json([
+        'data' => $items->map(function ($i) {
+            return [
+                'id' => $i->id,
+                'name' => $i->name,
+                'description' => $i->description,
+                'price' => $i->price,
+                'quantity' => $i->quantity,
+                'unit' => $i->unit,
+            ];
+        })
+    ]);
+});
+
+// Add line items to invoice (OpenClaw endpoint)
+Route::post('/openclaw/invoice/{id}/items', function (Illuminate\Http\Request $request, $id) {
+    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+    
+    $invoice = \Crater\Models\Invoice::findOrFail($id);
+    $validated = $request->validate([
+        'items' => 'required|array',
+        'items.*.name' => 'required|string',
+        'items.*.price' => 'required|numeric',
+        'items.*.quantity' => 'required|numeric',
+    ]);
+    
+    foreach ($validated['items'] as $item) {
+        $lineItem = \Crater\Models\LineItem::create([
+            'name' => $item['name'],
+            'description' => $item['description'] ?? '',
+            'price' => $item['price'],
+            'quantity' => $item['quantity'],
+            'company_id' => $invoice->company_id,
+        ]);
+        
+        $invoice->items()->attach($lineItem->id, [
+            'quantity' => $item['quantity'],
+            'price' => $item['price'],
+        ]);
+    }
+    
+    return response()->json([
+        'invoice_number' => $invoice->invoice_number,
+        'items_count' => count($validated['items']),
+    ]);
+});
+
+// List recurring invoices (OpenClaw endpoint)
+Route::get('/openclaw/recurring-invoices', function () {
+    if (request()->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+    
+    $recurring = \Crater\Models\RecurringInvoice::with(['customer', 'items'])
+        ->orderBy('id')
+        ->get();
+    
+    return response()->json([
+        'data' => $recurring->map(function ($r) {
+            return [
+                'id' => $r->id,
+                'customer_name' => $r->customer?->name,
+                'schedule' => $r->schedule,
+                'custom_recurring_human_readable' => $r->custom_recurring_human_readable,
+                'status' => $r->status,
+                'next_send_date' => $r->next_send_date,
+            ];
+        })
+    ]);
+});
