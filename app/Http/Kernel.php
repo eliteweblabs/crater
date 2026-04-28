@@ -37,14 +37,12 @@ class Kernel extends HttpKernel
             // \Illuminate\Session\Middleware\AuthenticateSession::class,
             \Illuminate\View\Middleware\ShareErrorsFromSession::class,
             \Crater\Http\Middleware\VerifyCsrfToken::class,
-            \Crater\Http\Middleware\AutoAuthenticateAdmin::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
         ],
 
         'api' => [
             \Crater\Http\Middleware\ForceStatefulRequests::class,
             EnsureFrontendRequestsAreStateful::class,
-            \Crater\Http\Middleware\AutoAuthenticateAdmin::class,
             'throttle:180,1',
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
         ],

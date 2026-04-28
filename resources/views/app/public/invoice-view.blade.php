@@ -21,8 +21,11 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Invoice {{ $invoice->invoice_number }}">
     <meta name="twitter:description" content="{{ $invoice->customer->name }} - Due {{ $invoice->formattedDueDate }}">
-    
+
+    @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
     <script src="https://js.stripe.com/v3/"></script>
+    @endif
+
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; }
@@ -173,8 +176,48 @@
         </div>
         @endif
 
-        @if($invoice->paid_status !== 'PAID')
-        <div id="checkout" style="margin-top: 40px;"></div>
+        @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
+        <div id="stripe-checkout" style="margin-top: 40px;"></div>
+
+        @if(env('VENMO_HANDLE'))
+        <div style="margin-top: 16px; text-align: center;">
+            <a href="https://venmo.com/?txn=pay&recipients={{ env('VENMO_HANDLE') }}&amount={{ number_format($invoice->total / 100, 2) }}&note=Invoice+{{ $invoice->invoice_number }}"
+               target="_blank"
+               style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: #008CFF; color: #fff; font-size: 15px; font-weight: 600; text-decoration: none; border-radius: 8px;">
+                <svg width="18" height="18" viewBox="0 0 300 300" fill="white"><path d="M232.3 30c9.5 15.7 13.8 31.9 13.8 52.1 0 64.9-55.4 149.3-100.4 208.5H57.4L18 38.5l80.2-7.6 22.1 88.7c20.6-37.8 46-97.4 46-137.3 0-22.1-3.8-37.2-9.7-49.3L232.3 30z"/></svg>
+                Pay with Venmo
+            </a>
+        </div>
+        @endif
+
+        <script>
+            (async () => {
+                const stripe = Stripe('{{ config("services.stripe.key") }}');
+
+                const checkout = await stripe.initEmbeddedCheckout({
+                    fetchClientSecret: async () => {
+                        const res = await fetch(
+                            '/api/invoices/{{ $invoice->unique_hash }}/checkout-session',
+                            {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                },
+                            }
+                        );
+                        const data = await res.json();
+                        if (data.error) {
+                            console.error('Payment init error:', data.error);
+                            return null;
+                        }
+                        return data.clientSecret;
+                    },
+                });
+
+                checkout.mount('#stripe-checkout');
+            })();
+        </script>
         @endif
 
         @if(env('VENMO_HANDLE'))
@@ -257,32 +300,6 @@
     </div>
     @endif
 
-    @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
-    <script>
-        const stripe = Stripe('{{ config("services.stripe.key") }}');
-        
-        fetch('{{ url("/api/invoices/{$invoice->unique_hash}/checkout-session") }}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(r => r.json())
-        .then(async data => {
-            if (data.clientSecret) {
-                const checkout = await stripe.initEmbeddedCheckout({
-                    clientSecret: data.clientSecret
-                });
-                checkout.mount('#checkout');
-            } else if (data.error) {
-                document.getElementById('checkout').innerHTML = `<p style="color: #d32f2f;">Error: ${data.error}</p>`;
-            }
-        })
-        .catch(error => {
-            console.error('Checkout error:', error);
-            document.getElementById('checkout').innerHTML = `<p style="color: #d32f2f;">Unable to load payment form. Please try again.</p>`;
-        });
-    </script>
-    @endif
+
 </body>
 </html>

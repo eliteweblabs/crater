@@ -17,7 +17,7 @@ class ProfileController extends Controller
 
         $customer->update($request->validated());
 
-        if (isset($request->is_customer_avatar_removed) && (bool) $request->is_customer_avatar_removed) {
+        if (filter_var($request->is_customer_avatar_removed, FILTER_VALIDATE_BOOLEAN)) {
             $customer->clearMediaCollection('customer_avatar');
         }
         if ($customer && $request->hasFile('customer_avatar')) {

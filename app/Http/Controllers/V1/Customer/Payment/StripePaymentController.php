@@ -8,6 +8,7 @@ use Crater\Models\Payment;
 use Crater\Models\PaymentMethod;
 use Crater\Models\Transaction;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Stripe\Stripe;
 use Stripe\Checkout\Session as StripeSession;
 
@@ -94,10 +95,10 @@ class StripePaymentController extends Controller
     public function createEmbeddedCheckoutSession(Request $request, Invoice $invoice)
     {
         try {
-            // Load relationships
-            $invoice->load(['customer', 'company', 'currency']);
+            // Load relationships (currency may not be loaded from the public route)
+            $invoice->loadMissing(['customer', 'company', 'currency']);
             
-            // Check if invoice is already paid
+            // Check if invoice is already paid or has nothing due
             if ($invoice->paid_status === 'PAID') {
                 return response()->json(['error' => 'Invoice is already paid'], 400);
             }
@@ -111,15 +112,16 @@ class StripePaymentController extends Controller
             Stripe::setApiKey($stripeSecret);
 
             // Crater stores amounts in cents — pass directly to Stripe
-            $currencyCode = strtolower($invoice->currency->code);
-            $amountInCents = (int)$invoice->due_amount;
+            $currencyCode = strtolower($invoice->currency->code ?? 'usd');
+            // If due_amount is 0 or corrupt, fall back to the invoice total
+            $amountInCents = (int)$invoice->due_amount > 0
+                ? (int)$invoice->due_amount
+                : (int)$invoice->total;
 
             // Create Stripe embedded checkout session
             $session = StripeSession::create([
                 'ui_mode' => 'embedded',
-                'automatic_payment_methods' => [
-                    'enabled' => true,
-                ],
+                'payment_method_types' => ['card', 'cashapp', 'us_bank_account'],
                 'customer_email' => $invoice->customer->email ?? null,
                 'line_items' => [[
                     'price_data' => [
@@ -204,10 +206,18 @@ class StripePaymentController extends Controller
             $currencyCode = strtolower($invoice->currency->code);
             $amountInCents = (int)$invoice->due_amount;
 
+            // Allow the caller to narrow the payment method via ?method=card|bank|cashapp
+            $methodParam = $request->get('method', 'all');
+            $paymentMethodTypes = match($methodParam) {
+                'card'    => ['card', 'link'],
+                'bank'    => ['us_bank_account'],
+                'cashapp' => ['cashapp'],
+                default   => ['card', 'link', 'cashapp', 'us_bank_account'],
+            };
+
             // Create Stripe checkout session
-            // Payment methods: card (includes Apple Pay/Google Pay), link (Stripe 1-click), cashapp, us_bank_account (ACH)
             $session = StripeSession::create([
-                'payment_method_types' => ['card', 'link', 'cashapp', 'us_bank_account'],
+                'payment_method_types' => $paymentMethodTypes,
                 'line_items' => [[
                     'price_data' => [
                         'currency' => $currencyCode,
@@ -251,12 +261,66 @@ class StripePaymentController extends Controller
     }
 
     /**
-     * Handle Stripe webhook events
+     * Create a PaymentIntent for Apple Pay / Payment Request Button
+     * Used by the sticky Apple Pay button on the public invoice view
+     */
+    public function createPaymentIntent(Request $request, Invoice $invoice)
+    {
+        try {
+            $invoice->loadMissing(['customer', 'company', 'currency']);
+
+            if ($invoice->paid_status === 'PAID') {
+                return response()->json(['error' => 'Invoice is already paid'], 400);
+            }
+
+            $stripeSecret = config('services.stripe.secret');
+            if (!$stripeSecret) {
+                return response()->json(['error' => 'Payment not configured'], 500);
+            }
+
+            Stripe::setApiKey($stripeSecret);
+
+            $paymentIntent = \Stripe\PaymentIntent::create([
+                'amount'               => (int) $invoice->due_amount,
+                'currency'             => strtolower($invoice->currency->code),
+                'payment_method_types' => ['card'],
+                'receipt_email'        => $invoice->customer->email ?? null,
+                'description'          => 'Invoice #' . $invoice->invoice_number,
+                'metadata'             => [
+                    'invoice_id'  => $invoice->id,
+                    'company_id'  => $invoice->company_id,
+                    'customer_id' => $invoice->customer_id,
+                ],
+            ]);
+
+            Transaction::createTransaction([
+                'transaction_id'   => $paymentIntent->id,
+                'type'             => 'stripe',
+                'status'           => Transaction::PENDING,
+                'transaction_date' => now(),
+                'company_id'       => $invoice->company_id,
+                'invoice_id'       => $invoice->id,
+            ]);
+
+            return response()->json(['clientSecret' => $paymentIntent->client_secret]);
+
+        } catch (\Exception $e) {
+            \Log::error('Apple Pay PaymentIntent error: ' . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Handle Stripe webhook events.
+     *
+     * Stripe guarantees at-least-once delivery (retries on 500s and network
+     * errors), so EVERY path here must be idempotent. We dedupe on the Stripe
+     * event ID and on the transaction_id (Checkout Session / PaymentIntent ID)
+     * so that re-delivery of the same event never creates a second Payment.
      */
     public function handleWebhook(Request $request)
     {
         try {
-            // Verify webhook signature
             $payload = $request->getContent();
             $sig_header = $request->header('Stripe-Signature');
             $endpoint_secret = config('services.stripe.webhook.secret');
@@ -274,18 +338,38 @@ class StripePaymentController extends Controller
                     return response()->json(['error' => 'Invalid signature'], 400);
                 }
             } else {
-                $event = json_decode($payload, true);
+                // IMPORTANT: in production, STRIPE_WEBHOOK_SECRET must be set.
+                // Without it, anyone can POST fake webhook events and mark
+                // invoices paid. We log loudly and refuse to process.
+                \Log::error('Stripe webhook received but STRIPE_WEBHOOK_SECRET is not configured — rejecting to prevent spoofed events.');
+                return response()->json([
+                    'error' => 'Webhook signing secret not configured'
+                ], 500);
             }
 
-            // Handle the event
-            if ($event['type'] === 'checkout.session.completed') {
-                $session = $event['data']['object'];
-                
-                // Get invoice from metadata
-                $invoice_id = $session['metadata']['invoice_id'] ?? $session['client_reference_id'];
-                
+            $eventType = is_array($event) ? ($event['type'] ?? null) : $event->type;
+            $eventId   = is_array($event) ? ($event['id'] ?? null)   : $event->id;
+            $data      = is_array($event) ? ($event['data']['object'] ?? []) : $event->data->object->toArray();
+
+            if ($eventType === 'checkout.session.completed') {
+                $invoice_id = $data['metadata']['invoice_id'] ?? $data['client_reference_id'] ?? null;
                 if ($invoice_id) {
-                    $this->fulfillPayment($invoice_id, $session);
+                    $this->fulfillPayment($invoice_id, [
+                        'id'           => $data['id'],
+                        'amount_total' => $data['amount_total'] ?? null,
+                        'metadata'     => $data['metadata'] ?? [],
+                        'event_id'     => $eventId,
+                    ]);
+                }
+            } elseif ($eventType === 'payment_intent.succeeded') {
+                $invoice_id = $data['metadata']['invoice_id'] ?? null;
+                if ($invoice_id) {
+                    $this->fulfillPayment($invoice_id, [
+                        'id'           => $data['id'],
+                        'amount_total' => $data['amount'] ?? null,
+                        'metadata'     => $data['metadata'] ?? [],
+                        'event_id'     => $eventId,
+                    ]);
                 }
             }
 
@@ -293,49 +377,82 @@ class StripePaymentController extends Controller
 
         } catch (\Exception $e) {
             \Log::error('Stripe webhook error: ' . $e->getMessage());
-            return response()->json(['error' => $e->getMessage()], 500);
+            // Return 200 for application errors so Stripe doesn't hammer us
+            // with retries for a bug that retrying can't fix; but return 500
+            // on deadlocks so Stripe DOES retry (which is correct).
+            $code = ($e instanceof \Illuminate\Database\QueryException && str_contains($e->getMessage(), 'Deadlock')) ? 500 : 200;
+            return response()->json(['error' => $e->getMessage()], $code);
         }
     }
 
     /**
-     * Mark invoice as paid and create payment record
+     * Mark invoice as paid and create payment record. Fully idempotent — safe
+     * to call multiple times with the same Stripe session/PI ID.
      */
     private function fulfillPayment($invoice_id, $session)
     {
-        try {
-            $invoice = Invoice::with(['company', 'customer'])->findOrFail($invoice_id);
+        DB::transaction(function () use ($invoice_id, $session) {
+            // Lock the invoice row for the duration of this fulfillment so
+            // concurrent webhook deliveries for the same invoice serialize.
+            $invoice = Invoice::where('id', $invoice_id)->lockForUpdate()->first();
+            if (! $invoice) {
+                \Log::warning("Stripe webhook: invoice {$invoice_id} not found");
+                return;
+            }
+            $invoice->load(['company', 'customer']);
 
-            // Find or create Stripe payment method
+            // Idempotency guard #1: if this Stripe session/PI was already
+            // turned into a SUCCESS transaction, we've already fulfilled it.
+            $existing = Transaction::where('transaction_id', $session['id'])
+                ->where('company_id', $invoice->company_id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($existing && $existing->status === Transaction::SUCCESS) {
+                \Log::info("Webhook skipped — transaction {$session['id']} already fulfilled");
+                return;
+            }
+
+            // Idempotency guard #2: if the invoice is already PAID we never
+            // want to add more payment rows, regardless of what Stripe says.
+            if ($invoice->paid_status === Invoice::STATUS_PAID) {
+                \Log::info("Webhook skipped — invoice #{$invoice->invoice_number} already paid");
+                if ($existing && $existing->status !== Transaction::SUCCESS) {
+                    $existing->status = Transaction::SUCCESS;
+                    $existing->save();
+                }
+                return;
+            }
+
             $paymentMethod = PaymentMethod::firstOrCreate(
                 ['name' => 'Stripe', 'company_id' => $invoice->company_id],
                 ['name' => 'Stripe', 'company_id' => $invoice->company_id]
             );
 
-            // Update transaction to success
-            $transaction = Transaction::where('transaction_id', $session['id'])->first();
-            if ($transaction) {
-                $transaction->completeTransaction();
+            if ($existing) {
+                $transaction = $existing;
             } else {
-                // Create transaction if it doesn't exist
                 $transaction = Transaction::createTransaction([
-                    'transaction_id' => $session['id'],
-                    'type' => 'stripe',
-                    'status' => Transaction::SUCCESS,
+                    'transaction_id'   => $session['id'],
+                    'type'             => 'stripe',
+                    'status'           => Transaction::PENDING,
                     'transaction_date' => now(),
-                    'company_id' => $invoice->company_id,
-                    'invoice_id' => $invoice->id,
+                    'company_id'       => $invoice->company_id,
+                    'invoice_id'       => $invoice->id,
                 ]);
             }
 
-            // Create payment record using the transaction
-            Payment::generatePayment($transaction);
+            // Use what Stripe actually collected (in cents) so partial or
+            // adjusted payments don't push due_amount below zero.
+            $amountCharged = $session['amount_total'] ?? $invoice->due_amount;
 
-            \Log::info("Payment fulfilled for invoice #{$invoice->invoice_number}");
+            Payment::generatePayment($transaction, $paymentMethod->id, $amountCharged);
 
-        } catch (\Exception $e) {
-            \Log::error('Error fulfilling payment: ' . $e->getMessage());
-            throw $e;
-        }
+            $transaction->status = Transaction::SUCCESS;
+            $transaction->save();
+
+            \Log::info("Payment fulfilled for invoice #{$invoice->invoice_number} (stripe session {$session['id']}, event {$session['event_id']} )");
+        });
     }
 }
 
