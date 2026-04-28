@@ -301,7 +301,7 @@ Route::get('/openclaw/invoices', function (Illuminate\Http\Request $request) {
     ]);
 });
 
-// List customers for a company.
+// Export customers with full profile data.
 // GET /api/openclaw/customers?company_id=1&q=optional-search
 Route::get('/openclaw/customers', function (Illuminate\Http\Request $request) {
     if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
@@ -311,7 +311,8 @@ Route::get('/openclaw/customers', function (Illuminate\Http\Request $request) {
     $companyId = (int) ($request->input('company_id') ?? 1);
     $q = trim((string) $request->input('q', ''));
 
-    $query = Customer::where('company_id', $companyId)
+    $query = Customer::with(['billingAddress.country', 'shippingAddress.country', 'currency'])
+        ->where('company_id', $companyId)
         ->orderBy('name');
 
     if ($q !== '') {
@@ -323,23 +324,59 @@ Route::get('/openclaw/customers', function (Illuminate\Http\Request $request) {
         });
     }
 
-    $customers = $query->get([
-        'id', 'name', 'contact_name', 'email', 'phone', 'company_id', 'created_at',
-    ])->map(function ($c) {
+    $customers = $query->get()->map(function ($c) {
+        // Invoice summary — aggregated in PHP to avoid N+1 per field
+        $invoices     = DB::table('invoices')->where('customer_id', $c->id)->get(['total', 'due_amount', 'paid_status']);
+        $totalBilled  = $invoices->sum('total');
+        $totalDue     = $invoices->sum('due_amount');
+
+        $formatAddr = function ($addr) {
+            if (!$addr) return null;
+            return [
+                'name'             => $addr->name,
+                'address_street_1' => $addr->address_street_1,
+                'address_street_2' => $addr->address_street_2,
+                'city'             => $addr->city,
+                'state'            => $addr->state,
+                'zip'              => $addr->zip,
+                'country'          => $addr->country ? $addr->country->name : null,
+                'country_code'     => $addr->country ? $addr->country->code : null,
+                'phone'            => $addr->phone,
+                'fax'              => $addr->fax,
+            ];
+        };
+
         return [
-            'id' => $c->id,
-            'name' => $c->name,
-            'contact_name' => $c->contact_name,
-            'email' => $c->email,
-            'phone' => $c->phone,
-            'admin_url' => url("/admin/customers/{$c->id}/view"),
+            'id'             => $c->id,
+            'name'           => $c->name,
+            'contact_name'   => $c->contact_name,
+            'company_name'   => $c->company_name,
+            'email'          => $c->email,
+            'phone'          => $c->phone,
+            'website'        => $c->website,
+            'enable_portal'  => (bool) $c->enable_portal,
+            'currency'       => $c->currency ? [
+                'code'   => $c->currency->code,
+                'name'   => $c->currency->name,
+                'symbol' => $c->currency->symbol,
+            ] : null,
+            'billing_address'  => $formatAddr($c->billingAddress),
+            'shipping_address' => $formatAddr($c->shippingAddress),
+            'invoice_summary'  => [
+                'count'        => $invoices->count(),
+                'total_billed' => round($totalBilled / 100, 2),
+                'total_paid'   => round(($totalBilled - $totalDue) / 100, 2),
+                'total_due'    => round($totalDue / 100, 2),
+            ],
+            'created_at'  => optional($c->created_at)->format('Y-m-d'),
+            'admin_url'   => url("/admin/customers/{$c->id}/view"),
         ];
     });
 
     return response()->json([
         'company_id' => $companyId,
-        'count' => $customers->count(),
-        'customers' => $customers,
+        'count'      => $customers->count(),
+        'customers'  => $customers,
     ]);
 });
 
