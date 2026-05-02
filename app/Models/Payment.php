@@ -367,8 +367,38 @@ class Payment extends Model implements HasMedia
 
         $logo = $company->logo_path;
 
+        // The receipt embeds the invoice (items table + totals) so the customer
+        // can see the updated balance after this payment is applied. We need the
+        // same view data that the invoice items partial expects.
+        $invoice = $this->invoice;
+        $customFields = collect();
+        $taxes = collect();
+
+        if ($invoice) {
+            $customFields = CustomField::where('model_type', 'Item')->get();
+
+            if ($invoice->tax_per_item === 'YES') {
+                foreach ($invoice->items as $item) {
+                    foreach ($item->taxes as $tax) {
+                        $found = $taxes->filter(function ($t) use ($tax) {
+                            return $t->tax_type_id == $tax->tax_type_id;
+                        })->first();
+
+                        if ($found) {
+                            $found->amount += $tax->amount;
+                        } else {
+                            $taxes->push($tax);
+                        }
+                    }
+                }
+            }
+        }
+
         view()->share([
             'payment' => $this,
+            'invoice' => $invoice,
+            'customFields' => $customFields,
+            'taxes' => $taxes,
             'company_address' => $this->getCompanyAddress(),
             'billing_address' => $this->getCustomerBillingAddress(),
             'notes' => $this->getNotes(),
