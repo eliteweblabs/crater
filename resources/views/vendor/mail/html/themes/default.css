@@ -247,11 +247,12 @@ img {
 
 .button-green,
 .button-success {
-    background-color: #C050C8;
-    border-top: 12px solid #C050C8;
-    border-right: 24px solid #C050C8;
-    border-bottom: 12px solid #C050C8;
-    border-left: 24px solid #C050C8;
+    background-color: #A855F7;
+    background-image: linear-gradient(to right, #A855F7, #F72585);
+    border-top: 12px solid #A855F7;
+    border-right: 24px solid #F72585;
+    border-bottom: 12px solid #F72585;
+    border-left: 24px solid #A855F7;
 }
 
 .button-red,
