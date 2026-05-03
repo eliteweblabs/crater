@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "091f8444d8deaf007af4e38e0ec64bea",
+    "content-hash": "65f2c1e26cb0840e151c8a1ed9f94baf",
     "packages": [
         {
             "name": "asm89/stack-cors",
@@ -1324,6 +1324,60 @@
                 }
             ],
             "time": "2020-12-29T14:50:06+00:00"
+        },
+        {
+            "name": "eliteweblabs/crater-extensions",
+            "version": "dev-main",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/eliteweblabs/crater-extensions.git",
+                "reference": "0f3c8995eab38a5e30a8dd4538e76b9200c2aa39"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/eliteweblabs/crater-extensions/zipball/0f3c8995eab38a5e30a8dd4538e76b9200c2aa39",
+                "reference": "0f3c8995eab38a5e30a8dd4538e76b9200c2aa39",
+                "shasum": ""
+            },
+            "require": {
+                "guzzlehttp/guzzle": "^6.5 || ^7.0",
+                "illuminate/database": "^8.0 || ^9.0 || ^10.0 || ^11.0",
+                "illuminate/http": "^8.0 || ^9.0 || ^10.0 || ^11.0",
+                "illuminate/support": "^8.0 || ^9.0 || ^10.0 || ^11.0",
+                "php": "^7.4 || ^8.0 || ^8.1 || ^8.2 || ^8.3 || ^8.4"
+            },
+            "require-dev": {
+                "orchestra/testbench": "^6.0 || ^7.0 || ^8.0",
+                "phpunit/phpunit": "^9.0 || ^10.0"
+            },
+            "default-branch": true,
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "EliteWebLabs\\CraterExtensions\\CraterExtensionsServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "EliteWebLabs\\CraterExtensions\\": "src/"
+                }
+            },
+            "autoload-dev": {
+                "psr-4": {
+                    "EliteWebLabs\\CraterExtensions\\Tests\\": "tests/"
+                }
+            },
+            "license": [
+                "AGPL-3.0-or-later"
+            ],
+            "description": "API keys, webhooks, and other extensions for self-hosted Crater installations.",
+            "support": {
+                "source": "https://github.com/eliteweblabs/crater-extensions/tree/main",
+                "issues": "https://github.com/eliteweblabs/crater-extensions/issues"
+            },
+            "time": "2026-05-03T17:45:01+00:00"
         },
         {
             "name": "facade/ignition-contracts",
@@ -12166,7 +12220,9 @@
     ],
     "aliases": [],
     "minimum-stability": "dev",
-    "stability-flags": {},
+    "stability-flags": {
+        "eliteweblabs/crater-extensions": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
