@@ -75,8 +75,12 @@ return [
 
         /**
          * Whether to enable font subsetting or not.
+         *
+         * Enabled to embed only the glyphs actually used in each PDF
+         * instead of the full ~700KB DejaVu TTF files per weight,
+         * cutting invoice PDFs from ~1.3MB to ~30KB.
          */
-        "enable_font_subsetting" => false,
+        "enable_font_subsetting" => true,
 
         /**
          * The PDF rendering backend to use
