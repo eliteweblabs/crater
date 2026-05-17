@@ -593,3 +593,19 @@ Route::prefix('/v1')->group(function () {
 Route::post('/webhook/stripe', [StripePaymentController::class, 'handleWebhook']);
 
 Route::get('/cron', CronJobController::class)->middleware('cron-job');
+
+// Create missing webhook subscriptions table
+Route::get('/create-webhook-table', function() {
+    DB::statement("CREATE TABLE IF NOT EXISTS crater_ext_webhook_subscriptions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL,
+        url VARCHAR(255) NOT NULL,
+        event VARCHAR(100) NOT NULL,
+        active TINYINT(1) DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX (company_id),
+        INDEX (active)
+    )");
+    return ['success' => true, 'message' => 'Table created'];
+});
