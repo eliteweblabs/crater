@@ -5,22 +5,52 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Invoice {{ $invoice->invoice_number }}</title>
     
-    <!-- OG Meta Tags for Social Sharing - Uses Client's Logo! -->
+    @php
+        $ogCustomerAvatar = is_string($invoice->customer->avatar ?? null) && $invoice->customer->avatar !== ''
+            ? $invoice->customer->avatar
+            : null;
+        $ogCompanyLogo = $invoice->company && $invoice->company->logo
+            ? (preg_match('#^https?://#i', $invoice->company->logo)
+                ? $invoice->company->logo
+                : asset(ltrim($invoice->company->logo, '/')))
+            : null;
+        $ogImage = $ogCustomerAvatar ?: $ogCompanyLogo;
+        if ($ogImage) {
+            $ogImage = preg_replace('#^http://#i', 'https://', $ogImage);
+        }
+        $ogImageExt = $ogImage ? strtolower(pathinfo(parse_url($ogImage, PHP_URL_PATH) ?? '', PATHINFO_EXTENSION)) : '';
+        $ogImageType = [
+            'png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg',
+            'gif' => 'image/gif', 'webp' => 'image/webp', 'svg' => 'image/svg+xml',
+        ][$ogImageExt] ?? null;
+
+        $ogAmount = '$'.number_format(($invoice->total ?? 0) / 100, 2);
+        $ogStatus = $invoice->paid_status === 'PAID' ? 'Paid' : 'Due '.$invoice->formattedDueDate;
+        $ogTitle = $invoice->company->name." \u{2014} Invoice ".$invoice->invoice_number." \u{2014} ".$ogAmount;
+        $ogDesc = $invoice->customer->name." \u{2014} ".$ogStatus;
+    @endphp
+
+    <!-- Open Graph / iMessage / Twitter link previews -->
     <meta property="og:type" content="website">
-    <meta property="og:title" content="Invoice {{ $invoice->invoice_number }} - ${{ number_format($invoice->total / 100, 2) }}">
-    <meta property="og:description" content="{{ $invoice->customer->name }} - Due {{ $invoice->formattedDueDate }}">
-    @if($invoice->customer->avatar)
-    <meta property="og:image" content="{{ $invoice->customer->avatar }}">
-    @elseif($invoice->company && $invoice->company->logo)
-    <meta property="og:image" content="{{ asset('uploads/'.$invoice->company->logo) }}">
-    @endif
+    <meta property="og:site_name" content="{{ $invoice->company->name }}">
+    <meta property="og:title" content="{{ $ogTitle }}">
+    <meta property="og:description" content="{{ $ogDesc }}">
     <meta property="og:url" content="{{ url()->current() }}">
-    <meta property="og:site_name" content="{{ $invoice->customer->name }}">
-    
-    <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Invoice {{ $invoice->invoice_number }}">
-    <meta name="twitter:description" content="{{ $invoice->customer->name }} - Due {{ $invoice->formattedDueDate }}">
+    @if($ogImage)
+    <meta property="og:image" content="{{ $ogImage }}">
+    <meta property="og:image:secure_url" content="{{ $ogImage }}">
+    @if($ogImageType)
+    <meta property="og:image:type" content="{{ $ogImageType }}">
+    @endif
+    <meta property="og:image:alt" content="{{ $invoice->company->name }} logo">
+    @endif
+
+    <meta name="twitter:card" content="{{ $ogImage ? 'summary_large_image' : 'summary' }}">
+    <meta name="twitter:title" content="{{ $ogTitle }}">
+    <meta name="twitter:description" content="{{ $ogDesc }}">
+    @if($ogImage)
+    <meta name="twitter:image" content="{{ $ogImage }}">
+    @endif
 
     @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
     <script src="https://js.stripe.com/v3/"></script>
