@@ -28,8 +28,18 @@ class StripePaymentController extends Controller
                 // Load relationships if not already loaded
                 $invoice->load(['customer', 'company']);
             }
-            
-            // Check if invoice is already paid
+
+            // Self-heal any drift between invoice.due_amount and
+            // (total - sum(payments)) BEFORE we read due_amount to tell Stripe
+            // what to charge. Without this we can either undercharge a
+            // partially-paid invoice or — worse — mark it PAID for less than
+            // the total. See Invoice::recomputeFromPayments() for the full
+            // explanation.
+            $invoice->recomputeFromPayments();
+
+            // Check if invoice is already paid (after reconciliation, so we
+            // don't reject a customer who's trying to pay an invoice whose
+            // stale paid_status is wrong in either direction).
             if ($invoice->paid_status === 'PAID') {
                 return response()->json(['error' => 'Invoice is already paid'], 400);
             }
@@ -97,7 +107,12 @@ class StripePaymentController extends Controller
         try {
             // Load relationships (currency may not be loaded from the public route)
             $invoice->loadMissing(['customer', 'company', 'currency']);
-            
+
+            // Self-heal due_amount / paid_status from the canonical
+            // sum(payments) before we charge the customer. See
+            // Invoice::recomputeFromPayments() for why this matters.
+            $invoice->recomputeFromPayments();
+
             // Check if invoice is already paid or has nothing due
             if ($invoice->paid_status === 'PAID') {
                 return response()->json(['error' => 'Invoice is already paid'], 400);
@@ -179,9 +194,13 @@ class StripePaymentController extends Controller
             } else {
                 $invoice->load(['customer', 'company', 'currency', 'emailLogs']);
             }
-            
+
             // Build a safe fallback URL using the public invoice view
             $invoiceViewUrl = url("/invoices/{$invoice->unique_hash}");
+
+            // Self-heal due_amount / paid_status from the canonical
+            // sum(payments) before we charge the customer.
+            $invoice->recomputeFromPayments();
 
             // Check if invoice is already paid
             if ($invoice->paid_status === 'PAID') {
@@ -268,6 +287,10 @@ class StripePaymentController extends Controller
     {
         try {
             $invoice->loadMissing(['customer', 'company', 'currency']);
+
+            // Self-heal due_amount / paid_status from the canonical
+            // sum(payments) before charging.
+            $invoice->recomputeFromPayments();
 
             if ($invoice->paid_status === 'PAID') {
                 return response()->json(['error' => 'Invoice is already paid'], 400);

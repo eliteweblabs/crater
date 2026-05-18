@@ -376,31 +376,37 @@ class Invoice extends Model implements HasMedia
             ->setNextNumbers();
 
         $data = $request->getInvoicePayload();
-        $oldTotal = $this->total;
 
-        $total_paid_amount = $this->total - $this->due_amount;
+        // Canonical "paid amount" is sum(payments). Reading it from the
+        // payments table self-heals any drift that may exist between
+        // due_amount and (total - paid) on this row.
+        $totalPaid = (int) $this->payments()->sum('amount');
 
-        if ($total_paid_amount > 0 && $this->customer_id !== $request->customer_id) {
+        if ($totalPaid > 0 && $this->customer_id !== $request->customer_id) {
             return 'customer_cannot_be_changed_after_payment_is_added';
         }
 
-        if ($request->total < $total_paid_amount) {
+        if ((int) round($request->total) < $totalPaid) {
             return 'total_invoice_amount_must_be_more_than_paid_amount';
         }
 
-        if ($oldTotal != $request->total) {
-            $oldTotal = (int) round($request->total) - (int) $oldTotal;
-        } else {
-            $oldTotal = 0;
-        }
-
-        $data['due_amount'] = ($this->due_amount + $oldTotal);
-        $data['base_due_amount'] = $data['due_amount'] * $data['exchange_rate'];
+        // Reconcile due_amount from the source of truth (total - sum(payments))
+        // instead of carrying forward whatever the previous (possibly drifted)
+        // due_amount was. Without this, an invoice that was ever in a bad
+        // (total != due_amount + paid) state would stay in that bad state
+        // through every subsequent edit, and the next payment would mark it
+        // PAID even though the customer underpaid. See bug "$135 paid on a
+        // $175 invoice marked as fully paid" for the original incident.
+        $data['due_amount']               = max(0, (int) round($request->total) - $totalPaid);
+        $data['base_due_amount']          = $data['due_amount'] * $data['exchange_rate'];
         $data['customer_sequence_number'] = $serial->nextCustomerSequenceNumber;
 
-        $this->changeInvoiceStatus($data['due_amount']);
-
         $this->update($data);
+
+        // Recompute status/paid_status against the now-current total and the
+        // canonical sum(payments). This also handles the edge case where
+        // editing items pushes the total below what's already been paid.
+        $this->refresh()->recomputeFromPayments();
 
         $company_currency = CompanySetting::getSetting('currency', $request->header('company'));
 
@@ -713,6 +719,55 @@ class Invoice extends Model implements HasMedia
         }
 
         $this->save();
+    }
+
+    /**
+     * Reconcile due_amount / base_due_amount / paid_status / status against
+     * the canonical source of truth: the rows in the `payments` table.
+     *
+     * `due_amount` is a denormalized cache of `total - sum(payments)`. The
+     * pieces of the code that mutate it (addInvoicePayment / subtractInvoicePayment,
+     * Payment::deletePayments, openclaw record-payment, etc.) all compute deltas
+     * locally, which silently propagates any drift that may already be on the
+     * row. Once `due_amount` has drifted from `total - sum(payments)`, every
+     * downstream consumer is wrong:
+     *
+     *   - Stripe Checkout charges the wrong amount
+     *     ({@see \Crater\Http\Controllers\V1\Customer\Payment\StripePaymentController}),
+     *   - the invoice can be marked PAID before the customer has actually paid
+     *     the full total ({@see self::changeInvoiceStatus()} treats
+     *     `due_amount == 0` as "fully paid" regardless of total),
+     *   - the embedded receipt PDF reports a $0 balance due even though money
+     *     is still owed.
+     *
+     * Call this helper anywhere we mutate either side of the equation
+     * (item edits → total changes; payment create / update / delete →
+     * sum(payments) changes) to bring the row back into a consistent state.
+     */
+    public function recomputeFromPayments()
+    {
+        $totalPaid    = (int) $this->payments()->sum('amount');
+        $invoiceTotal = (int) $this->total;
+        $exchangeRate = (float) ($this->exchange_rate ?: 1);
+
+        $this->due_amount      = max(0, $invoiceTotal - $totalPaid);
+        $this->base_due_amount = (int) round($this->due_amount * $exchangeRate);
+
+        if ($invoiceTotal > 0 && $totalPaid >= $invoiceTotal) {
+            $this->status      = self::STATUS_COMPLETED;
+            $this->paid_status = self::STATUS_PAID;
+            $this->overdue     = false;
+        } elseif ($totalPaid <= 0) {
+            $this->status      = $this->getPreviousStatus();
+            $this->paid_status = self::STATUS_UNPAID;
+        } else {
+            $this->status      = $this->getPreviousStatus();
+            $this->paid_status = self::STATUS_PARTIALLY_PAID;
+        }
+
+        $this->save();
+
+        return $this;
     }
 
     public static function deleteInvoices($ids)

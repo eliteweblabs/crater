@@ -51,6 +51,44 @@ class Payment extends Model implements HasMedia
 
         static::updated(function ($payment) {
             GeneratePaymentPdfJob::dispatch($payment, true);
+
+            // If a payment was moved from one invoice to another, the saved
+            // hook below only knows about the new invoice_id, so the
+            // ex-invoice would keep counting a payment it no longer has.
+            // Reconcile the original invoice here.
+            $originalInvoiceId = $payment->getOriginal('invoice_id');
+            if ($originalInvoiceId && $originalInvoiceId !== $payment->invoice_id) {
+                $previousInvoice = Invoice::find($originalInvoiceId);
+                if ($previousInvoice) {
+                    $previousInvoice->recomputeFromPayments();
+                }
+            }
+        });
+
+        // Whenever a payment row is persisted or removed, reconcile the
+        // linked invoice's due_amount / paid_status against the (now-changed)
+        // sum of payments. This is a defense-in-depth pass that runs AFTER
+        // the call sites that already do their own delta math
+        // (subtractInvoicePayment / addInvoicePayment), so any pre-existing
+        // drift between invoice.due_amount and (total - sum(payments)) gets
+        // self-healed on the next write to the row instead of being preserved
+        // forever. See \Crater\Models\Invoice::recomputeFromPayments().
+        static::saved(function ($payment) {
+            if ($payment->invoice_id) {
+                $invoice = Invoice::find($payment->invoice_id);
+                if ($invoice) {
+                    $invoice->recomputeFromPayments();
+                }
+            }
+        });
+
+        static::deleted(function ($payment) {
+            if ($payment->invoice_id) {
+                $invoice = Invoice::find($payment->invoice_id);
+                if ($invoice) {
+                    $invoice->recomputeFromPayments();
+                }
+            }
         });
     }
 
@@ -374,6 +412,15 @@ class Payment extends Model implements HasMedia
         $customFields = collect();
         $taxes = collect();
 
+        // Compute the true balance due from the canonical source of truth
+        // (total - sum(payments)) rather than reading the invoice's cached
+        // due_amount. This way, even if due_amount is briefly stale (an
+        // earlier code path mutated total without touching due_amount, an
+        // out-of-band DB write, etc.), the receipt never lies about how
+        // much the customer still owes.
+        $computedBalance = 0;
+        $totalPaid       = 0;
+
         if ($invoice) {
             $customFields = CustomField::where('model_type', 'Item')->get();
 
@@ -392,17 +439,22 @@ class Payment extends Model implements HasMedia
                     }
                 }
             }
+
+            $totalPaid       = (int) $invoice->payments()->sum('amount');
+            $computedBalance = max(0, (int) $invoice->total - $totalPaid);
         }
 
         view()->share([
-            'payment' => $this,
-            'invoice' => $invoice,
-            'customFields' => $customFields,
-            'taxes' => $taxes,
-            'company_address' => $this->getCompanyAddress(),
-            'billing_address' => $this->getCustomerBillingAddress(),
-            'notes' => $this->getNotes(),
-            'logo' => $logo ?? null,
+            'payment'           => $this,
+            'invoice'           => $invoice,
+            'customFields'      => $customFields,
+            'taxes'             => $taxes,
+            'company_address'   => $this->getCompanyAddress(),
+            'billing_address'   => $this->getCustomerBillingAddress(),
+            'notes'             => $this->getNotes(),
+            'logo'              => $logo ?? null,
+            'computed_balance'  => $computedBalance,
+            'total_paid'        => $totalPaid,
         ]);
 
         if (request()->has('preview')) {
