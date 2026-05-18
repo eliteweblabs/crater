@@ -446,7 +446,10 @@
         <div class="receipt-title-bar">
             <span class="receipt-title">@lang('pdf_payment_receipt_label')</span>
             @if ($invoice)
-                @if ($invoice->due_amount <= 0)
+                {{-- Use the computed balance (total - sum(payments)) rather
+                     than $invoice->due_amount, which is a cache that has been
+                     known to drift. See Invoice::recomputeFromPayments(). --}}
+                @if ($computed_balance <= 0)
                     <span class="receipt-status-badge receipt-status-badge--paid">
                         @lang('pdf_paid_in_full')
                     </span>
@@ -521,7 +524,11 @@
                     <tr class="balance-due-row">
                         <td class="balance-due-label">@lang('pdf_balance_due')</td>
                         <td class="balance-due-value">
-                            {!! format_money_pdf($invoice->due_amount, $payment->customer->currency) !!}
+                            {{-- Computed live as total - sum(payments) so a
+                                 stale invoice.due_amount cache cannot
+                                 misrepresent how much the customer still owes
+                                 on the receipt they receive. --}}
+                            {!! format_money_pdf($computed_balance, $payment->customer->currency) !!}
                         </td>
                     </tr>
                 </table>
