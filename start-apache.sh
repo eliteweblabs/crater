@@ -45,6 +45,11 @@ sed -i '/^SANCTUM_STATEFUL_DOMAINS=/d' .env 2>/dev/null || true
 sed -i '/^SESSION_LIFETIME=/d' .env 2>/dev/null || true
 sed -i '/^SESSION_SECURE_COOKIE=/d' .env 2>/dev/null || true
 sed -i '/^SESSION_SAME_SITE=/d' .env 2>/dev/null || true
+sed -i '/^CONTACT_API_URL=/d' .env 2>/dev/null || true
+sed -i '/^CONTACT_API_KEY=/d' .env 2>/dev/null || true
+sed -i '/^CONTACT_API_ENABLED=/d' .env 2>/dev/null || true
+sed -i '/^CONTACT_API_TIMEOUT=/d' .env 2>/dev/null || true
+sed -i '/^CONTACT_API_SYSTEM_NAME=/d' .env 2>/dev/null || true
 
 # Calculate DB values from Railway env vars
 DB_HOST_VAL="${DB_HOST:-${MYSQL_HOST:-${MYSQLHOST:-db.railway.internal}}}"
@@ -79,6 +84,13 @@ echo "SESSION_SAME_SITE=lax" >> .env
 echo "STRIPE_KEY=${STRIPE_KEY}" >> .env
 echo "STRIPE_SECRET=${STRIPE_SECRET}" >> .env
 echo "STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}" >> .env
+
+# Contact API (master identity service)
+echo "CONTACT_API_URL=${CONTACT_API_URL}" >> .env
+echo "CONTACT_API_KEY=${CONTACT_API_KEY}" >> .env
+if [ -n "$CONTACT_API_ENABLED" ];     then echo "CONTACT_API_ENABLED=${CONTACT_API_ENABLED}" >> .env; fi
+if [ -n "$CONTACT_API_TIMEOUT" ];     then echo "CONTACT_API_TIMEOUT=${CONTACT_API_TIMEOUT}" >> .env; fi
+if [ -n "$CONTACT_API_SYSTEM_NAME" ]; then echo "CONTACT_API_SYSTEM_NAME=${CONTACT_API_SYSTEM_NAME}" >> .env; fi
 
 # Mail
 echo "MAIL_MAILER=${MAIL_MAILER:-smtp}" >> .env
