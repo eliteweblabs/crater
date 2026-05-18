@@ -2,6 +2,8 @@
 
 namespace Crater\Providers;
 
+use Crater\Models\Customer;
+use Crater\Observers\CustomerContactSyncObserver;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
@@ -17,6 +19,10 @@ class AppServiceProvider extends ServiceProvider
     {
         Paginator::useBootstrapThree();
         $this->loadJsonTranslationsFrom(resource_path('scripts/locales'));
+
+        if (config('contact_api.enabled')) {
+            Customer::observe(CustomerContactSyncObserver::class);
+        }
 
         // Only try to add menus if database is ready
         if (!\Storage::disk('local')->has('database_created')) {
