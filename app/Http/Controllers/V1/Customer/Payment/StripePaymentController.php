@@ -7,6 +7,7 @@ use Crater\Models\Invoice;
 use Crater\Models\Payment;
 use Crater\Models\PaymentMethod;
 use Crater\Models\Transaction;
+use Crater\Services\ContactApiClient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Stripe\Stripe;
@@ -53,7 +54,7 @@ class StripePaymentController extends Controller
 
             // Create Stripe checkout session
             // Payment methods: card (includes Apple Pay/Google Pay), link (Stripe 1-click), cashapp, us_bank_account (ACH)
-            $session = StripeSession::create([
+            $session = StripeSession::create($this->buildCheckoutSessionParams($invoice, [
                 'payment_method_types' => ['card', 'link', 'cashapp', 'us_bank_account'],
                 'line_items' => [[
                     'price_data' => [
@@ -75,7 +76,7 @@ class StripePaymentController extends Controller
                     'company_id' => $invoice->company_id,
                     'customer_id' => $invoice->customer_id,
                 ],
-            ]);
+            ]));
 
             // Create a pending transaction
             Transaction::createTransaction([
@@ -134,10 +135,9 @@ class StripePaymentController extends Controller
                 : (int)$invoice->total;
 
             // Create Stripe embedded checkout session
-            $session = StripeSession::create([
+            $session = StripeSession::create($this->buildCheckoutSessionParams($invoice, [
                 'ui_mode' => 'embedded',
                 'payment_method_types' => ['card', 'cashapp', 'us_bank_account'],
-                'customer_email' => $invoice->customer->email ?? null,
                 'line_items' => [[
                     'price_data' => [
                         'currency' => $currencyCode,
@@ -157,7 +157,7 @@ class StripePaymentController extends Controller
                     'company_id' => $invoice->company_id,
                     'customer_id' => $invoice->customer_id,
                 ],
-            ]);
+            ]));
 
             // Create a pending transaction
             Transaction::createTransaction([
@@ -235,7 +235,7 @@ class StripePaymentController extends Controller
             };
 
             // Create Stripe checkout session
-            $session = StripeSession::create([
+            $session = StripeSession::create($this->buildCheckoutSessionParams($invoice, [
                 'payment_method_types' => $paymentMethodTypes,
                 'line_items' => [[
                     'price_data' => [
@@ -257,7 +257,7 @@ class StripePaymentController extends Controller
                     'company_id' => $invoice->company_id,
                     'customer_id' => $invoice->customer_id,
                 ],
-            ]);
+            ]));
 
             // Create a pending transaction
             Transaction::createTransaction([
@@ -378,22 +378,30 @@ class StripePaymentController extends Controller
                 $invoice_id = $data['metadata']['invoice_id'] ?? $data['client_reference_id'] ?? null;
                 if ($invoice_id) {
                     $this->fulfillPayment($invoice_id, [
-                        'id'           => $data['id'],
-                        'amount_total' => $data['amount_total'] ?? null,
-                        'metadata'     => $data['metadata'] ?? [],
-                        'event_id'     => $eventId,
+                        'id'              => $data['id'],
+                        'amount_total'    => $data['amount_total'] ?? null,
+                        'metadata'        => $data['metadata'] ?? [],
+                        'event_id'        => $eventId,
+                        'stripe_customer' => $data['customer'] ?? null,
                     ]);
                 }
             } elseif ($eventType === 'payment_intent.succeeded') {
                 $invoice_id = $data['metadata']['invoice_id'] ?? null;
                 if ($invoice_id) {
                     $this->fulfillPayment($invoice_id, [
-                        'id'           => $data['id'],
-                        'amount_total' => $data['amount'] ?? null,
-                        'metadata'     => $data['metadata'] ?? [],
-                        'event_id'     => $eventId,
+                        'id'              => $data['id'],
+                        'amount_total'    => $data['amount'] ?? null,
+                        'metadata'        => $data['metadata'] ?? [],
+                        'event_id'        => $eventId,
+                        'stripe_customer' => $data['customer'] ?? null,
                     ]);
                 }
+            } elseif ($eventType === 'customer.created') {
+                // Scenario A: Stripe customer created outside of any Crater invoice
+                // flow (e.g. Stripe Payment Link, direct subscription, Dashboard).
+                // Resolve them against the master so they don't become an
+                // identity orphan.
+                $this->linkStandaloneStripeCustomer($data);
             }
 
             return response()->json(['received' => true]);
@@ -474,8 +482,110 @@ class StripePaymentController extends Controller
             $transaction->status = Transaction::SUCCESS;
             $transaction->save();
 
+            $this->linkStripeCustomerToMaster($invoice, $session['stripe_customer'] ?? null);
+
             \Log::info("Payment fulfilled for invoice #{$invoice->invoice_number} (stripe session {$session['id']}, event {$session['event_id']} )");
         });
+    }
+
+    /**
+     * Common Checkout Session params: always attach the customer's email and
+     * tell Stripe to always create a Customer object. This guarantees the
+     * webhook will carry a stable `data.customer` we can link to the master
+     * identity record. Without `customer_creation: always`, Stripe may skip
+     * creating a Customer for some payment methods and we lose the link.
+     */
+    private function buildCheckoutSessionParams(Invoice $invoice, array $params): array
+    {
+        $email = $invoice->customer->email ?? null;
+        if ($email && empty($params['customer_email']) && empty($params['customer'])) {
+            $params['customer_email'] = $email;
+        }
+        if (empty($params['customer'])) {
+            $params['customer_creation'] = 'always';
+        }
+        return $params;
+    }
+
+    /**
+     * Link the auto-created Stripe customer to the master identity contact.
+     * Best-effort: contact-api outages or missing contact_uid silently no-op.
+     */
+    private function linkStripeCustomerToMaster(Invoice $invoice, ?string $stripeCustomerId): void
+    {
+        if (empty($stripeCustomerId) || empty($invoice->customer) || empty($invoice->customer->contact_uid)) {
+            return;
+        }
+
+        try {
+            app(ContactApiClient::class)->link(
+                $invoice->customer->contact_uid,
+                'stripe',
+                $stripeCustomerId,
+                [
+                    'email'      => $invoice->customer->email,
+                    'invoice_id' => $invoice->id,
+                    'source'     => 'checkout.session',
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Log::warning('[contact-api] stripe link from invoice failed', [
+                'invoice_id'        => $invoice->id,
+                'stripe_customer'   => $stripeCustomerId,
+                'error'             => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Handle `customer.created` events that did NOT come from a Crater
+     * invoice flow. Resolve against contact-api, link if a match exists,
+     * otherwise create a new master contact and link.
+     */
+    private function linkStandaloneStripeCustomer(array $data): void
+    {
+        $api = app(ContactApiClient::class);
+        if (!$api->isEnabled() || empty($data['id'])) {
+            return;
+        }
+
+        // Skip if this Stripe customer was created moments ago by an active
+        // Crater checkout flow — the checkout.session.completed handler will
+        // already link it with full invoice context.
+        $hasInvoiceMetadata = !empty(($data['metadata'] ?? [])['invoice_id'])
+            || !empty(($data['metadata'] ?? [])['crater_invoice_id']);
+        if ($hasInvoiceMetadata) {
+            return;
+        }
+
+        try {
+            $name  = $data['name']  ?? null;
+            $email = $data['email'] ?? null;
+            $phone = $data['phone'] ?? null;
+
+            $res = $api->resolve($name, $email, $phone);
+            $match = $res['match'] ?? 'none';
+            $uid   = null;
+
+            if (in_array($match, ['exact', 'likely'], true)) {
+                $uid = data_get($res, 'contact.uid');
+            } else {
+                $created = $api->create($name, $email, $phone, null);
+                $uid = data_get($created, 'contact.uid') ?? data_get($created, 'uid');
+            }
+
+            if ($uid) {
+                $api->link($uid, 'stripe', $data['id'], [
+                    'email'  => $email,
+                    'source' => 'stripe.customer.created',
+                ]);
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('[contact-api] standalone stripe customer sync failed', [
+                'stripe_customer' => $data['id'] ?? null,
+                'error'           => $e->getMessage(),
+            ]);
+        }
     }
 }
 
