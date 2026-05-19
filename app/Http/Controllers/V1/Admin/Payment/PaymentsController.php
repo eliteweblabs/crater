@@ -68,6 +68,17 @@ class PaymentsController extends Controller
         return new PaymentResource($payment);
     }
 
+    public function destroy(Payment $payment)
+    {
+        $this->authorize('delete', $payment);
+
+        Payment::deletePayments([$payment->id]);
+
+        return response()->json([
+            'success' => true,
+        ]);
+    }
+
     public function delete(DeletePaymentsRequest $request)
     {
         $this->authorize('delete multiple payments');

@@ -1334,6 +1334,92 @@ Route::post('/openclaw/create-recurring-invoice', function (Illuminate\Http\Requ
         'frequency' => $recurringInvoice->frequency,
     ]);
 });
+// Repair payment sequence numbers and format for a company.
+// Fixes NULL sequence_number rows and gaps caused by the migration backfill
+// bug (if ($estimates) instead of if ($payments)) or stale UI numbers.
+//
+// POST /api/openclaw/repair-payment-numbers
+// Body: { "company_id": 1, "dry_run": true }
+Route::post('/openclaw/repair-payment-numbers', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $companyId = (int) ($request->input('company_id') ?? 1);
+    $dryRun = filter_var($request->input('dry_run', false), FILTER_VALIDATE_BOOLEAN);
+
+    $report = DB::transaction(function () use ($companyId, $dryRun) {
+        $payments = \Crater\Models\Payment::where('company_id', $companyId)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        // Compute the true max sequence from both the integer field and the
+        // trailing digits of payment_number (mirrors api-custom invoice logic).
+        $maxSeq = 0;
+        foreach ($payments as $p) {
+            if ($p->sequence_number !== null && (int) $p->sequence_number > $maxSeq) {
+                $maxSeq = (int) $p->sequence_number;
+            }
+            if ($p->payment_number && preg_match('/(\d+)$/', $p->payment_number, $m)) {
+                $parsed = (int) $m[1];
+                if ($parsed > $maxSeq) {
+                    $maxSeq = $parsed;
+                }
+            }
+        }
+
+        $customerCounters = [];
+        $fixed = [];
+
+        foreach ($payments as $p) {
+            $change = [];
+
+            if ($p->sequence_number === null) {
+                if ($p->payment_number && preg_match('/(\d+)$/', $p->payment_number, $m)) {
+                    $p->sequence_number = (int) $m[1];
+                } else {
+                    $maxSeq += 1;
+                    $p->sequence_number = $maxSeq;
+                }
+                $change['new_sequence_number'] = $p->sequence_number;
+            }
+
+            if ($p->customer_sequence_number === null) {
+                $cid = (int) $p->customer_id;
+                if (! isset($customerCounters[$cid])) {
+                    $customerCounters[$cid] = (int) (\Crater\Models\Payment::where('company_id', $companyId)
+                        ->where('customer_id', $cid)
+                        ->max('customer_sequence_number') ?? 0);
+                }
+                $customerCounters[$cid] += 1;
+                $p->customer_sequence_number = $customerCounters[$cid];
+                $change['new_customer_sequence_number'] = $p->customer_sequence_number;
+            }
+
+            if (! empty($change)) {
+                $change['id'] = $p->id;
+                $change['payment_number'] = $p->payment_number;
+                $fixed[] = $change;
+                if (! $dryRun) {
+                    $p->save();
+                }
+            }
+        }
+
+        return [
+            'company_id' => $companyId,
+            'dry_run' => $dryRun,
+            'total_payments' => $payments->count(),
+            'fixed_count' => count($fixed),
+            'max_sequence_number' => $maxSeq,
+            'changes' => $fixed,
+        ];
+    });
+
+    return response()->json(['success' => true] + $report);
+});
+
 // List all customers (OpenClaw endpoint)
 Route::get('/openclaw/customers', function () {
     if (request()->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {

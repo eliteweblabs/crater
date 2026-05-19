@@ -200,6 +200,9 @@ class Payment extends Model implements HasMedia
 
         $payment->sequence_number = $serial->nextSequenceNumber;
         $payment->customer_sequence_number = $serial->nextCustomerSequenceNumber;
+        // Generate payment_number server-side so it always matches sequence_number
+        // and the current company format, regardless of what the UI prefilled.
+        $payment->payment_number = $serial->getNextNumber();
         $payment->save();
 
         $company_currency = CompanySetting::getSetting('currency', $request->header('company'));

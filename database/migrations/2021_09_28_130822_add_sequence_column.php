@@ -64,7 +64,7 @@ class AddSequenceColumn extends Migration
                 }
 
                 $payments = $customer->payments;
-                if ($estimates) {
+                if ($payments) {
                     $customerSequence = 1;
                     $payments->map(function ($payment) use ($customerSequence) {
                         $paymentNumber = explode("-", $payment->payment_number);
