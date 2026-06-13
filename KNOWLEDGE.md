@@ -1,8 +1,8 @@
 # Crater — Self-Hosted Invoicing
 
-OpenClaw-facing knowledge for the Crater invoicing service.
+Integration knowledge for the Crater invoicing service (Reave Business OS, Telegram bot, etc.).
 
-The deployed instance for this OpenClaw lives at the URL configured per-deployment
+The deployed instance lives at the URL configured per-deployment
 (typically `ap.<your-domain>` or `crater.<your-domain>`). All examples below use
 `{CRATER_URL}` as a placeholder.
 
@@ -12,8 +12,8 @@ Crater exposes two API surfaces:
 
 - **Standard Crater API** (`/api/v1/...`) — Bearer-token auth, used for read access
   to customers, invoices, recurring invoices, etc.
-- **OpenClaw extensions** (`/api/openclaw/...`) — `X-OpenClaw-Token` header auth,
-  task-oriented endpoints designed for the agent.
+- **Custom extensions** (`/api/custom/...`) — `X-Crater-Api-Token` header auth,
+  task-oriented endpoints designed for Reave / Telegram integrations.
 
 ### Authentication
 
@@ -21,12 +21,11 @@ Crater exposes two API surfaces:
 # Standard API
 Authorization: Bearer <token>
 
-# OpenClaw extensions
-X-OpenClaw-Token: <token>
+# Custom extensions
+X-Crater-Api-Token: <token>
 ```
 
-Both tokens are provisioned per-deployment via the Crater env vars
-(`OPENCLAW_API_TOKEN` etc. — see Environment Variables below).
+The custom API token is provisioned per-deployment via `CRATER_API_TOKEN` (see Environment Variables below).
 
 ## Standard API Endpoints
 
@@ -71,14 +70,16 @@ Frequencies use cron format:
 Always fetch current totals from the API at request time — never cache or hardcode
 amounts in agent context, since rates and clients change.
 
-## OpenClaw Extension Endpoints
+## Custom Extension Endpoints
+
+See `routes/api-custom.php` for the full list. Key routes:
 
 ### Create Invoice
 
 ```
-POST {CRATER_URL}/api/openclaw/create-invoice
+POST {CRATER_URL}/api/custom/create-invoice
 Headers:
-  X-OpenClaw-Token: <token>
+  X-Crater-Api-Token: <token>
   Content-Type: application/json
 
 {
@@ -99,9 +100,9 @@ recommended (used for contact resolution if the customer doesn't already exist).
 ### Record Offline Payment
 
 ```
-POST {CRATER_URL}/api/openclaw/record-payment
+POST {CRATER_URL}/api/custom/record-payment
 Headers:
-  X-OpenClaw-Token: <token>
+  X-Crater-Api-Token: <token>
   Content-Type: application/json
 
 {
@@ -113,31 +114,31 @@ Headers:
 
 `payment_mode` is one of `CASH`, `CHECK`, `CREDIT_CARD`, `BANK_TRANSFER`.
 
-### Get Clients (lightweight)
+### Customers (search / export)
 
 ```
-GET {CRATER_URL}/api/openclaw/clients
+GET {CRATER_URL}/api/custom/customers?q=
 Headers:
-  X-OpenClaw-Token: <token>
+  X-Crater-Api-Token: <token>
 ```
 
-Returns a flattened, paginated-handled list of all customers. Use this in
-preference to manually paginating `/api/v1/customers` when you just need a name
-list.
+Returns customers with billing profile and invoice summary. Optional `q` filter.
 
 ## Environment Variables
 
 | Var | Purpose |
 |---|---|
-| `OPENCLAW_API_TOKEN` | Auth token for `/api/openclaw/*` endpoints |
+| `CRATER_API_TOKEN` | Auth token for `/api/custom/*` endpoints (same value on Astro as `CRATER_API_TOKEN`) |
 | `STRIPE_KEY` | Stripe publishable key (Stripe integration) |
 | `STRIPE_SECRET` | Stripe secret key |
 
+**Migration:** if upgrading an older Crater deploy, set `CRATER_API_TOKEN` to the same secret previously used for custom API auth.
+
 ## Common Tasks
 
-- Create an invoice for a client (use `/api/openclaw/create-invoice`)
-- Record cash/check/transfer payment (use `/api/openclaw/record-payment`)
-- List upcoming recurring invoices (use `/api/v1/recurring-invoices`)
+- Create an invoice for a client (use `/api/custom/create-invoice`)
+- Record cash/check/transfer payment (use `/api/custom/record-payment`)
+- List upcoming recurring invoices (use `/api/v1/recurring-invoices` or `/api/custom/recurring-invoices`)
 - View invoice PDF (`/api/v1/invoices/{id}` includes a `pdf_url`)
 
 ## Common Pitfalls
@@ -145,12 +146,12 @@ list.
 1. **Missing data → check pagination.** Default page size is 10 customers.
    Always pass `per_page=50` (or higher) for list operations, and check `page=2+`.
 2. **Amounts are in cents on `/api/v1/*` responses.** Divide by 100 for dollar
-   display. The OpenClaw extension endpoints (`/api/openclaw/*`) accept and
-   return dollars to simplify agent code.
+   display. The custom extension endpoints (`/api/custom/*`) accept and
+   return dollars to simplify integration code.
 3. **Backend is MySQL** (Railway internal). The schema is large and joins
    are slow — prefer the API over direct DB queries for anything routine.
 4. **Stripe is built-in.** Online payments hit `/api/v1/payments` automatically;
-   offline payments must be recorded via `/api/openclaw/record-payment`.
+   offline payments must be recorded via `/api/custom/record-payment`.
 
 ## Related Files in This Repo
 
@@ -159,6 +160,3 @@ list.
 - `mavsafe-invoice-items.md` — MAVSAFE-specific line items
 - `STRIPE_SETUP.md`, `PUBLIC_PAYMENT_GUIDE.md`, `DATABASE_CLEAR_GUIDE.md`,
   `SETUP_OPTIONS.md`, `COMPANY_SLUG_FIX.md` — operational guides
-
-All `*.md` files at this repo root are auto-synced into every OpenClaw deployment
-that lists this repo in `KNOWLEDGE_SERVICES`.

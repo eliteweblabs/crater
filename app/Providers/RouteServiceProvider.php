@@ -52,7 +52,7 @@ class RouteServiceProvider extends ServiceProvider
                 ->namespace($this->namespace)
                 ->group(base_path('routes/api.php'));
 
-            // OpenClaw custom API routes
+            // Crater custom API routes
             if (file_exists(base_path('routes/api-custom.php'))) {
                 Route::prefix('api')
                     ->middleware('api')

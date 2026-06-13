@@ -11,11 +11,11 @@ use Crater\Models\PaymentMethod;
 use Crater\Models\RecurringInvoice;
 use Crater\Services\SerialNumberFormatter;
 use Vinkla\Hashids\Facades\Hashids;
-// Simple invoice creation endpoint for OpenClaw
-// POST /api/openclaw/create-invoice
-Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $request) {
+// Simple invoice creation endpoint for custom API
+// POST /api/custom/create-invoice
+Route::post('/custom/create-invoice', function (Illuminate\Http\Request $request) {
     // Simple auth token check
-    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
 
@@ -57,7 +57,7 @@ Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $reque
         $customer->save();
     }
 
-    // Openclaw/Telegram/CLAW send prices in whole-dollar units; Crater stores
+    // Telegram / Reave integrations send prices in whole-dollar units; Crater stores
     // amounts as integer cents. Normalize once here and use everywhere below.
     $subTotal = 0;
     foreach ($validated['items'] as $item) {
@@ -66,19 +66,19 @@ Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $reque
     $subTotal = (int) round($subTotal);
 
     // If customer currency differs from company currency, exchange_rate should
-    // come from the caller — we don't have that info in openclaw payloads, so
+    // come from the caller — we don't have that info in custom API payloads, so
     // we assume 1 (they send amounts in the customer's currency).
     $exchangeRate = 1;
     $currencyId = (int) ($customer->currency_id ?: $companyCurrencyId);
 
     // Atomically compute the next invoice number and persist the invoice.
     // We lock existing rows for this company so two concurrent requests
-    // (e.g. CLAW + Telegram) can't both read the same MAX() and collide.
+    // (e.g. Telegram + API) can't both read the same MAX() and collide.
     //
     // We also compute the "next sequence" as the max of:
     //   - MAX(sequence_number) — the canonical field
     //   - the highest trailing integer parsed out of invoice_number
-    // …because older openclaw-created invoices were saved with a NULL
+    // …because older custom API-created invoices were saved with a NULL
     // sequence_number, which caused setNextSequenceNumber() to keep
     // handing out the same value.
     $created = DB::transaction(function () use (
@@ -154,7 +154,7 @@ Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $reque
             'discount_per_item' => $discountPerItem,
             'paid_status' => Invoice::STATUS_UNPAID,
             'notes' => $validated['notes'] ?? '',
-            // Default to DRAFT so invoices created via CLAW/Telegram aren't
+            // Default to DRAFT so invoices created via Telegram aren't
             // silently marked as "sent to the client." Callers can pass
             // status=SENT explicitly when they actually emailed it out.
             'status' => $validated['status'] ?? Invoice::STATUS_DRAFT,
@@ -206,11 +206,11 @@ Route::post('/openclaw/create-invoice', function (Illuminate\Http\Request $reque
     ]);
 });
 
-// Update invoice endpoint for OpenClaw
-// PUT /api/openclaw/invoice/{id}
-Route::put('/openclaw/invoice/{id}', function (Illuminate\Http\Request $request, $id) {
+// Update invoice endpoint for custom API
+// PUT /api/custom/invoice/{id}
+Route::put('/custom/invoice/{id}', function (Illuminate\Http\Request $request, $id) {
     // Auth token check
-    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
 
@@ -240,11 +240,11 @@ Route::put('/openclaw/invoice/{id}', function (Illuminate\Http\Request $request,
     ]);
 });
 
-// Delete invoice endpoint for OpenClaw
-// DELETE /api/openclaw/invoice/{id}
-Route::delete('/openclaw/invoice/{id}', function (Illuminate\Http\Request $request, $id) {
+// Delete invoice endpoint for custom API
+// DELETE /api/custom/invoice/{id}
+Route::delete('/custom/invoice/{id}', function (Illuminate\Http\Request $request, $id) {
     // Auth token check
-    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
 
@@ -259,9 +259,9 @@ Route::delete('/openclaw/invoice/{id}', function (Illuminate\Http\Request $reque
 });
 
 // List all invoices (auth required) — used for cleanup / visibility
-// GET /api/openclaw/invoices?company_id=1
-Route::get('/openclaw/invoices', function (Illuminate\Http\Request $request) {
-    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+// GET /api/custom/invoices?company_id=1
+Route::get('/custom/invoices', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
 
@@ -302,9 +302,9 @@ Route::get('/openclaw/invoices', function (Illuminate\Http\Request $request) {
 });
 
 // Export customers with full profile data.
-// GET /api/openclaw/customers?company_id=1&q=optional-search
-Route::get('/openclaw/customers', function (Illuminate\Http\Request $request) {
-    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+// GET /api/custom/customers?company_id=1&q=optional-search
+Route::get('/custom/customers', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
 
@@ -381,9 +381,9 @@ Route::get('/openclaw/customers', function (Illuminate\Http\Request $request) {
 });
 
 // Fetch a single invoice (with items) by id.
-// GET /api/openclaw/invoice/{id}
-Route::get('/openclaw/invoice/{id}', function (Illuminate\Http\Request $request, $id) {
-    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+// GET /api/custom/invoice/{id}
+Route::get('/custom/invoice/{id}', function (Illuminate\Http\Request $request, $id) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
 
@@ -440,10 +440,10 @@ Route::get('/openclaw/invoice/{id}', function (Illuminate\Http\Request $request,
 // customers, companies, and settings. Safe ONLY because no real payments
 // have been collected yet. Requires explicit confirmation in the body.
 //
-// POST /api/openclaw/reset-invoices
+// POST /api/custom/reset-invoices
 // Body: { "company_id": 1, "confirm": "YES_DELETE_EVERYTHING", "dry_run": true }
-Route::post('/openclaw/reset-invoices', function (Illuminate\Http\Request $request) {
-    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+Route::post('/custom/reset-invoices', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
 
@@ -496,7 +496,7 @@ Route::post('/openclaw/reset-invoices', function (Illuminate\Http\Request $reque
     return response()->json(['success' => true] + $report);
 });
 
-// One-shot repair endpoint for invoices created by older openclaw/CLAW/Telegram
+// One-shot repair endpoint for invoices created by older custom API/Telegram
 // runs. Heals the following known issues caused by the previous endpoint's
 // missing fields:
 //   - NULL sequence_number / customer_sequence_number (root cause of duplicate
@@ -509,10 +509,10 @@ Route::post('/openclaw/reset-invoices', function (Illuminate\Http\Request $reque
 //   - Invoice items with 0 base_price / base_total / exchange_rate /
 //     currency_id (which prevent the admin item totals from rendering).
 //
-// POST /api/openclaw/repair-invoice-numbers
+// POST /api/custom/repair-invoice-numbers
 // Body: { "company_id": 1, "dry_run": true, "only": "numbers|totals|all" }
-Route::post('/openclaw/repair-invoice-numbers', function (Illuminate\Http\Request $request) {
-    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+Route::post('/custom/repair-invoice-numbers', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
 
@@ -717,8 +717,8 @@ Route::post('/openclaw/repair-invoice-numbers', function (Illuminate\Http\Reques
     return response()->json(['success' => true] + $report);
 });
 
-// Record an offline payment for OpenClaw
-// POST /api/openclaw/record-payment
+// Record an offline payment for custom API
+// POST /api/custom/record-payment
 //
 // Flow:
 //   1. Fuzzy-search customer by name (same LIKE matching used everywhere).
@@ -729,8 +729,8 @@ Route::post('/openclaw/repair-invoice-numbers', function (Illuminate\Http\Reques
 //      • 1 open invoice  → apply payment to it.
 //      • 2+ open invoices → return needs_selection:invoice with the list; caller
 //                           re-sends with invoice_id chosen.
-Route::post('/openclaw/record-payment', function (Illuminate\Http\Request $request) {
-    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+Route::post('/custom/record-payment', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
 
@@ -1040,10 +1040,10 @@ Route::post('/openclaw/record-payment', function (Illuminate\Http\Request $reque
     ]);
 });
 
-// List line item templates for OpenClaw
-// GET /api/openclaw/line-items?company_id=1&q=optional-search
-Route::get('/openclaw/line-items', function (Illuminate\Http\Request $request) {
-    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+// List line item templates for custom API
+// GET /api/custom/line-items?company_id=1&q=optional-search
+Route::get('/custom/line-items', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
 
@@ -1082,10 +1082,10 @@ Route::get('/openclaw/line-items', function (Illuminate\Http\Request $request) {
 });
 
 // Add line items to an existing invoice
-// POST /api/openclaw/invoice/{id}/items
+// POST /api/custom/invoice/{id}/items
 // Body: { "items": [{ "name": "...", "quantity": 1, "price": 50.00, "description": "..." }] }
-Route::post('/openclaw/invoice/{id}/items', function (Illuminate\Http\Request $request, $id) {
-    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+Route::post('/custom/invoice/{id}/items', function (Illuminate\Http\Request $request, $id) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
 
@@ -1173,9 +1173,9 @@ Route::post('/openclaw/invoice/{id}/items', function (Illuminate\Http\Request $r
 });
 
 // List recurring invoices with schedule info
-// GET /api/openclaw/recurring-invoices?company_id=1&status=ACTIVE
-Route::get('/openclaw/recurring-invoices', function (Illuminate\Http\Request $request) {
-    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+// GET /api/custom/recurring-invoices?company_id=1&status=ACTIVE
+Route::get('/custom/recurring-invoices', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
 
@@ -1269,11 +1269,11 @@ Route::get('/openclaw/recurring-invoices', function (Illuminate\Http\Request $re
     ]);
 });
 
-// Create recurring invoice endpoint for OpenClaw
-// POST /api/openclaw/create-recurring-invoice
-Route::post('/openclaw/create-recurring-invoice', function (Illuminate\Http\Request $request) {
+// Create recurring invoice endpoint for custom API
+// POST /api/custom/create-recurring-invoice
+Route::post('/custom/create-recurring-invoice', function (Illuminate\Http\Request $request) {
     // Auth token check
-    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
 
@@ -1338,10 +1338,10 @@ Route::post('/openclaw/create-recurring-invoice', function (Illuminate\Http\Requ
 // Fixes NULL sequence_number rows and gaps caused by the migration backfill
 // bug (if ($estimates) instead of if ($payments)) or stale UI numbers.
 //
-// POST /api/openclaw/repair-payment-numbers
+// POST /api/custom/repair-payment-numbers
 // Body: { "company_id": 1, "dry_run": true }
-Route::post('/openclaw/repair-payment-numbers', function (Illuminate\Http\Request $request) {
-    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+Route::post('/custom/repair-payment-numbers', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
 
@@ -1420,9 +1420,9 @@ Route::post('/openclaw/repair-payment-numbers', function (Illuminate\Http\Reques
     return response()->json(['success' => true] + $report);
 });
 
-// List all customers (OpenClaw endpoint)
-Route::get('/openclaw/customers', function () {
-    if (request()->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+// List all customers (custom API endpoint)
+Route::get('/custom/customers', function () {
+    if (request()->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
     
@@ -1446,9 +1446,9 @@ Route::get('/openclaw/customers', function () {
     ]);
 });
 
-// List all line items (OpenClaw endpoint)
-Route::get('/openclaw/line-items', function () {
-    if (request()->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+// List all line items (custom API endpoint)
+Route::get('/custom/line-items', function () {
+    if (request()->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
     
@@ -1468,9 +1468,9 @@ Route::get('/openclaw/line-items', function () {
     ]);
 });
 
-// Add line items to invoice (OpenClaw endpoint)
-Route::post('/openclaw/invoice/{id}/items', function (Illuminate\Http\Request $request, $id) {
-    if ($request->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+// Add line items to invoice (custom API endpoint)
+Route::post('/custom/invoice/{id}/items', function (Illuminate\Http\Request $request, $id) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
     
@@ -1503,9 +1503,9 @@ Route::post('/openclaw/invoice/{id}/items', function (Illuminate\Http\Request $r
     ]);
 });
 
-// List recurring invoices (OpenClaw endpoint)
-Route::get('/openclaw/recurring-invoices', function () {
-    if (request()->header('X-OpenClaw-Token') !== env('OPENCLAW_API_TOKEN')) {
+// List recurring invoices (custom API endpoint)
+Route::get('/custom/recurring-invoices', function () {
+    if (request()->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
     

@@ -456,7 +456,7 @@ class Invoice extends Model implements HasMedia
         $data['body'] = $this->getEmailString($data['body']);
         $data['attach']['data'] = ($this->getEmailAttachmentSetting()) ? $this->getPDFData() : null;
         
-        // Add public invoice URL (same as Telegram/OpenClaw)
+        // Add public invoice URL (same as Telegram / custom API)
         $data['invoice_url'] = url('/invoices/' . $this->unique_hash);
 
         return $data;
@@ -727,7 +727,7 @@ class Invoice extends Model implements HasMedia
      *
      * `due_amount` is a denormalized cache of `total - sum(payments)`. The
      * pieces of the code that mutate it (addInvoicePayment / subtractInvoicePayment,
-     * Payment::deletePayments, openclaw record-payment, etc.) all compute deltas
+     * Payment::deletePayments, custom API record-payment, etc.) all compute deltas
      * locally, which silently propagates any drift that may already be on the
      * row. Once `due_amount` has drifted from `total - sum(payments)`, every
      * downstream consumer is wrong:
