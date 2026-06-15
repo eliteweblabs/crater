@@ -1420,109 +1420,11 @@ Route::post('/custom/repair-payment-numbers', function (Illuminate\Http\Request 
     return response()->json(['success' => true] + $report);
 });
 
-// List all customers (custom API endpoint)
-Route::get('/custom/customers', function () {
-    if (request()->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
-        return response()->json(['error' => 'Unauthorized'], 401);
-    }
-    
-    $customers = \Crater\Models\Customer::with(['company', 'billingAddress', 'shippingAddress'])
-        ->orderBy('name')
-        ->get();
-    
-    return response()->json([
-        'data' => $customers->map(function ($c) {
-            return [
-                'id' => $c->id,
-                'name' => $c->name,
-                'email' => $c->email,
-                'phone' => $c->phone,
-                'company_name' => $c->company?->name,
-                'billing_address' => $c->billingAddress?->address,
-                'shipping_address' => $c->shippingAddress?->address,
-                'created_at' => $c->created_at,
-            ];
-        })
-    ]);
-});
-
-// List all line items (custom API endpoint)
-Route::get('/custom/line-items', function () {
-    if (request()->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
-        return response()->json(['error' => 'Unauthorized'], 401);
-    }
-    
-    $items = \Crater\Models\LineItem::orderBy('name')->get();
-    
-    return response()->json([
-        'data' => $items->map(function ($i) {
-            return [
-                'id' => $i->id,
-                'name' => $i->name,
-                'description' => $i->description,
-                'price' => $i->price,
-                'quantity' => $i->quantity,
-                'unit' => $i->unit,
-            ];
-        })
-    ]);
-});
-
-// Add line items to invoice (custom API endpoint)
-Route::post('/custom/invoice/{id}/items', function (Illuminate\Http\Request $request, $id) {
-    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
-        return response()->json(['error' => 'Unauthorized'], 401);
-    }
-    
-    $invoice = \Crater\Models\Invoice::findOrFail($id);
-    $validated = $request->validate([
-        'items' => 'required|array',
-        'items.*.name' => 'required|string',
-        'items.*.price' => 'required|numeric',
-        'items.*.quantity' => 'required|numeric',
-    ]);
-    
-    foreach ($validated['items'] as $item) {
-        $lineItem = \Crater\Models\LineItem::create([
-            'name' => $item['name'],
-            'description' => $item['description'] ?? '',
-            'price' => $item['price'],
-            'quantity' => $item['quantity'],
-            'company_id' => $invoice->company_id,
-        ]);
-        
-        $invoice->items()->attach($lineItem->id, [
-            'quantity' => $item['quantity'],
-            'price' => $item['price'],
-        ]);
-    }
-    
-    return response()->json([
-        'invoice_number' => $invoice->invoice_number,
-        'items_count' => count($validated['items']),
-    ]);
-});
-
-// List recurring invoices (custom API endpoint)
-Route::get('/custom/recurring-invoices', function () {
-    if (request()->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
-        return response()->json(['error' => 'Unauthorized'], 401);
-    }
-    
-    $recurring = \Crater\Models\RecurringInvoice::with(['customer', 'items'])
-        ->orderBy('id')
-        ->get();
-    
-    return response()->json([
-        'data' => $recurring->map(function ($r) {
-            return [
-                'id' => $r->id,
-                'customer_name' => $r->customer?->name,
-                'schedule' => $r->schedule,
-                'custom_recurring_human_readable' => $r->custom_recurring_human_readable,
-                'status' => $r->status,
-                'next_send_date' => $r->next_send_date,
-            ];
-        })
-    ]);
-});
+// NOTE: A trailing block of duplicate routes used to live here
+// (GET /custom/customers, GET /custom/line-items, POST /custom/invoice/{id}/items,
+// GET /custom/recurring-invoices). They were simplified copies that returned a
+// `{ data: [...] }` shape and, in the line-items case, referenced a non-existent
+// `Crater\Models\LineItem` (→ 500). Because Laravel lets a later same-method+URI
+// route win, these shadowed the canonical handlers defined earlier in this file
+// (which return `{ count, ... }` and use the real `Item` / `InvoiceItem` models).
+// Removed so the canonical implementations are the active ones.
