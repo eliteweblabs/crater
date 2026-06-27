@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\DB;
 use Crater\Models\CompanySetting;
 use Crater\Models\Customer;
+use Crater\Models\Estimate;
 use Crater\Models\Invoice;
 use Crater\Models\InvoiceItem;
 use Crater\Models\Payment;
@@ -301,6 +302,47 @@ Route::get('/custom/invoices', function (Illuminate\Http\Request $request) {
     ]);
 });
 
+// List all estimates (auth required) — billing hints / duplicate detection
+// GET /api/custom/estimates?company_id=1
+Route::get('/custom/estimates', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $companyId = (int) ($request->input('company_id') ?? 1);
+
+    $estimates = Estimate::where('company_id', $companyId)
+        ->with('customer:id,name')
+        ->orderByDesc('estimate_date')
+        ->orderByDesc('id')
+        ->get([
+            'id', 'estimate_number', 'sequence_number', 'customer_id',
+            'estimate_date', 'expiry_date', 'status',
+            'total', 'unique_hash',
+        ])
+        ->map(function ($est) {
+            return [
+                'id' => $est->id,
+                'estimate_number' => $est->estimate_number,
+                'sequence_number' => $est->sequence_number,
+                'estimate_date' => optional($est->estimate_date)->format('Y-m-d'),
+                'expiry_date' => optional($est->expiry_date)->format('Y-m-d'),
+                'customer_id' => $est->customer_id,
+                'customer_name' => $est->customer->name ?? null,
+                'status' => $est->status,
+                'total_cents' => (int) $est->total,
+                'total' => round(((int) $est->total) / 100, 2),
+                'public_url' => $est->unique_hash ? url('/estimates/pdf/'.$est->unique_hash) : null,
+            ];
+        });
+
+    return response()->json([
+        'company_id' => $companyId,
+        'count' => $estimates->count(),
+        'estimates' => $estimates,
+    ]);
+});
+
 // Export customers with full profile data.
 // GET /api/custom/customers?company_id=1&q=optional-search
 Route::get('/custom/customers', function (Illuminate\Http\Request $request) {
@@ -325,10 +367,13 @@ Route::get('/custom/customers', function (Illuminate\Http\Request $request) {
     }
 
     $customers = $query->get()->map(function ($c) {
-        // Invoice summary — aggregated in PHP to avoid N+1 per field
+        // Invoice + estimate summaries — aggregated in PHP to avoid N+1 per field
         $invoices     = DB::table('invoices')->where('customer_id', $c->id)->get(['total', 'due_amount', 'paid_status']);
+        $estimates    = DB::table('estimates')->where('customer_id', $c->id)->get(['total', 'status']);
         $totalBilled  = $invoices->sum('total');
         $totalDue     = $invoices->sum('due_amount');
+        $openEstimates = $estimates->whereIn('status', ['DRAFT', 'SENT', 'VIEWED'])->count();
+        $acceptedEstimates = $estimates->where('status', 'ACCEPTED')->count();
 
         $formatAddr = function ($addr) {
             if (!$addr) return null;
@@ -367,6 +412,11 @@ Route::get('/custom/customers', function (Illuminate\Http\Request $request) {
                 'total_billed' => round($totalBilled / 100, 2),
                 'total_paid'   => round(($totalBilled - $totalDue) / 100, 2),
                 'total_due'    => round($totalDue / 100, 2),
+            ],
+            'estimate_summary' => [
+                'count'    => $estimates->count(),
+                'open'     => $openEstimates,
+                'accepted' => $acceptedEstimates,
             ],
             'created_at'  => optional($c->created_at)->format('Y-m-d'),
             'admin_url'   => url("/admin/customers/{$c->id}/view"),
