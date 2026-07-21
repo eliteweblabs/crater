@@ -302,6 +302,86 @@ Route::get('/custom/invoices', function (Illuminate\Http\Request $request) {
     ]);
 });
 
+// List payments (auth required) — client portal / billing history
+// GET /api/custom/payments?company_id=1&customer_id=5
+// GET /api/custom/payments?company_id=1&q=customer-name-or-email
+Route::get('/custom/payments', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $companyId = (int) ($request->input('company_id') ?? 1);
+    $customerId = $request->input('customer_id');
+    $q = trim((string) $request->input('q', ''));
+
+    $paymentModeLabel = function (?string $type, ?string $name): string {
+        $labels = [
+            'CASH' => 'Cash',
+            'CHECK' => 'Check',
+            'CREDIT_CARD' => 'Credit Card',
+            'BANK_TRANSFER' => 'Bank Transfer',
+            'OTHER' => 'Other',
+        ];
+        if ($type && isset($labels[$type])) {
+            return $labels[$type];
+        }
+        if ($name && trim($name) !== '') {
+            return trim($name);
+        }
+        return 'Other';
+    };
+
+    $query = Payment::where('company_id', $companyId)
+        ->with([
+            'customer:id,name',
+            'invoice:id,invoice_number',
+            'paymentMethod:id,name,type',
+        ])
+        ->orderByDesc('payment_date')
+        ->orderByDesc('id');
+
+    if ($customerId !== null && $customerId !== '') {
+        $query->where('customer_id', (int) $customerId);
+    } elseif ($q !== '') {
+        $query->whereHas('customer', function ($w) use ($q) {
+            $w->where('name', 'LIKE', "%{$q}%")
+              ->orWhere('contact_name', 'LIKE', "%{$q}%")
+              ->orWhere('email', 'LIKE', "%{$q}%")
+              ->orWhere('phone', 'LIKE', "%{$q}%");
+        });
+    }
+
+    $payments = $query->get([
+        'id', 'payment_number', 'payment_date', 'amount',
+        'customer_id', 'invoice_id', 'payment_method_id',
+    ])->map(function ($pay) use ($paymentModeLabel) {
+        $method = $pay->paymentMethod;
+
+        return [
+            'id' => $pay->id,
+            'payment_number' => $pay->payment_number,
+            'payment_date' => optional($pay->payment_date)->format('Y-m-d'),
+            'amount_cents' => (int) $pay->amount,
+            'amount' => round(((int) $pay->amount) / 100, 2),
+            'customer_id' => $pay->customer_id,
+            'customer_name' => $pay->customer->name ?? null,
+            'invoice_id' => $pay->invoice_id,
+            'invoice_number' => $pay->invoice->invoice_number ?? null,
+            'payment_mode' => $method->type ?? null,
+            'payment_method' => $paymentModeLabel(
+                $method->type ?? null,
+                $method->name ?? null
+            ),
+        ];
+    });
+
+    return response()->json([
+        'company_id' => $companyId,
+        'count' => $payments->count(),
+        'payments' => $payments,
+    ]);
+});
+
 // List all estimates (auth required) — billing hints / duplicate detection
 // GET /api/custom/estimates?company_id=1
 Route::get('/custom/estimates', function (Illuminate\Http\Request $request) {
