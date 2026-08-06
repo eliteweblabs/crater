@@ -2,8 +2,11 @@
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\DB;
+use Crater\Models\Company;
 use Crater\Models\CompanySetting;
 use Crater\Models\Customer;
+use Crater\Models\Expense;
+use Crater\Models\ExpenseCategory;
 use Crater\Models\Estimate;
 use Crater\Models\Invoice;
 use Crater\Models\InvoiceItem;
@@ -1207,6 +1210,77 @@ Route::post('/custom/record-payment', function (Illuminate\Http\Request $request
         'customer'          => ['id' => $customer->id, 'name' => $customer->name],
         'admin_payment_url' => url("/admin/payments/{$payment->id}/view"),
         'admin_invoice_url' => url("/admin/invoices/{$invoice->id}/view"),
+    ]);
+});
+
+// Log expense from REΛVE receipt email review.
+// POST /api/custom/create-expense
+Route::post('/custom/create-expense', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $validated = $request->validate([
+        'amount' => 'required|numeric|min:0.01',
+        'expense_date' => 'nullable|date',
+        'category_name' => 'nullable|string|max:120',
+        'notes' => 'nullable|string|max:65000',
+    ]);
+
+    $company = Company::query()->orderBy('id')->first();
+    if (!$company) {
+        return response()->json(['error' => 'No company configured in Crater'], 422);
+    }
+
+    $companyId = $company->id;
+    $currencyId = CompanySetting::getSetting('currency', $companyId);
+    if (!$currencyId) {
+        return response()->json(['error' => 'Company currency is not configured'], 422);
+    }
+
+    $categoryName = trim((string) ($validated['category_name'] ?? 'Business Expense'));
+    if ($categoryName === '') {
+        $categoryName = 'Business Expense';
+    }
+
+    $category = ExpenseCategory::query()
+        ->where('company_id', $companyId)
+        ->whereRaw('LOWER(name) = ?', [strtolower($categoryName)])
+        ->first();
+
+    if (!$category) {
+        $category = ExpenseCategory::create([
+            'name' => $categoryName,
+            'company_id' => $companyId,
+        ]);
+    }
+
+    $amountDollars = (float) $validated['amount'];
+    $amountCents = (int) round($amountDollars * 100);
+    $expenseDate = $validated['expense_date'] ?? now()->format('Y-m-d');
+    $creatorId = (int) (DB::table('users')->orderBy('id')->value('id') ?? 1);
+
+    $expense = Expense::create([
+        'expense_date' => $expenseDate,
+        'amount' => $amountCents,
+        'base_amount' => $amountCents,
+        'expense_category_id' => $category->id,
+        'company_id' => $companyId,
+        'currency_id' => $currencyId,
+        'notes' => $validated['notes'] ?? null,
+        'creator_id' => $creatorId,
+        'exchange_rate' => 1,
+    ]);
+
+    $adminUrl = url('/admin/expenses/' . $expense->id . '/edit');
+
+    return response()->json([
+        'success' => true,
+        'expense_id' => $expense->id,
+        'amount' => $amountDollars,
+        'expense_date' => $expenseDate,
+        'category' => $category->name,
+        'admin_url' => $adminUrl,
     ]);
 });
 
