@@ -5,7 +5,7 @@
 {!! $data['body'] !!}
 
 @component('mail::button', ['url' => $data['invoice_url'], 'color' => 'success'])
-View Invoice & Pay
+View invoice →
 @endcomponent
 
 Thanks,<br>

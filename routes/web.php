@@ -104,6 +104,7 @@ Route::middleware('pdf-auth')->group(function () {
 // -------------------------------------------------
 
 // Public invoice view (like Harvest - shows invoice + payment button)
+Route::get('/invoices/{uniqueHash}/og.png', [\Crater\Http\Controllers\PublicInvoiceController::class, 'ogImage']);
 Route::get('/invoices/{uniqueHash}', [\Crater\Http\Controllers\PublicInvoiceController::class, 'show']);
 
 // Public Stripe checkout endpoint (no auth required)

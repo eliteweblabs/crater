@@ -5,22 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Invoice {{ $invoice->invoice_number }}</title>
     
-    <!-- OG Meta Tags for Social Sharing - Uses Client's Logo! -->
     <meta property="og:type" content="website">
-    <meta property="og:title" content="Invoice {{ $invoice->invoice_number }} - ${{ number_format($invoice->total / 100, 2) }}">
-    <meta property="og:description" content="{{ $invoice->customer->name }} - Due {{ $invoice->formattedDueDate }}">
-    @if($invoice->customer->avatar)
-    <meta property="og:image" content="{{ $invoice->customer->avatar }}">
-    @elseif($invoice->company && $invoice->company->logo)
-    <meta property="og:image" content="{{ asset('uploads/'.$invoice->company->logo) }}">
-    @endif
-    <meta property="og:url" content="{{ url()->current() }}">
-    <meta property="og:site_name" content="{{ $invoice->customer->name }}">
-    
-    <!-- Twitter Card -->
+    <meta property="og:title" content="Invoice {{ $invoice->invoice_number }} · ${{ number_format($invoice->total / 100, 2) }}">
+    <meta property="og:description" content="{{ $invoice->customer->name }}{{ $invoice->formattedDueDate ? ' · Due '.$invoice->formattedDueDate : '' }}">
+    <meta property="og:image" content="{{ $ogImageUrl ?? url('/invoices/'.$invoice->unique_hash.'/og.png') }}">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Invoice {{ $invoice->invoice_number }} for {{ $invoice->customer->name }}">
+    <meta property="og:url" content="{{ url('/invoices/'.$invoice->unique_hash) }}">
+    <meta property="og:site_name" content="{{ $invoice->company->name ?? 'Invoice' }}">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Invoice {{ $invoice->invoice_number }}">
-    <meta name="twitter:description" content="{{ $invoice->customer->name }} - Due {{ $invoice->formattedDueDate }}">
+    <meta name="twitter:title" content="Invoice {{ $invoice->invoice_number }} · ${{ number_format($invoice->total / 100, 2) }}">
+    <meta name="twitter:description" content="{{ $invoice->customer->name }}{{ $invoice->formattedDueDate ? ' · Due '.$invoice->formattedDueDate : '' }}">
+    <meta name="twitter:image" content="{{ $ogImageUrl ?? url('/invoices/'.$invoice->unique_hash.'/og.png') }}">
 
     @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
     <script src="https://js.stripe.com/v3/"></script>
