@@ -21,6 +21,12 @@ return [
     'company_logo_url' => env('COMPANY_LOGO_URL'),
 
     /*
+    * Square company icon for OG / share cards (from COMPANY_ICON_URL).
+    * Prefer a PNG/WebP app icon. Falls back to COMPANY_LOGO_URL when unset.
+    */
+    'company_icon_url' => env('COMPANY_ICON_URL'),
+
+    /*
     * Minimum php version.
     */
     'min_php_version' => '7.4.0',

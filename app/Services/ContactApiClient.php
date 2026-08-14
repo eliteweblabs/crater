@@ -21,6 +21,49 @@ class ContactApiClient
     }
 
     /**
+     * GET /api/contacts/:uid — full contact including portal link metadata.
+     *
+     * Returns the contact object or null. $timeoutSeconds overrides the
+     * default client timeout (OG cards need a bit more room when iconData
+     * is embedded as base64).
+     */
+    public function get(string $uid, ?int $timeoutSeconds = null): ?array
+    {
+        if (!$this->isEnabled() || $uid === '') {
+            return null;
+        }
+
+        try {
+            $client = $this->client();
+            if ($timeoutSeconds !== null) {
+                $client = $client->timeout($timeoutSeconds);
+            }
+
+            $res = $client->get('/api/contacts/'.rawurlencode($uid));
+            if (!$res->successful()) {
+                Log::warning('[contact-api] non-2xx', [
+                    'method' => 'GET',
+                    'path'   => '/api/contacts/'.$uid,
+                    'status' => $res->status(),
+                    'body'   => mb_substr((string) $res->body(), 0, 500),
+                ]);
+                return null;
+            }
+
+            $json = $res->json();
+            $contact = is_array($json) ? ($json['contact'] ?? null) : null;
+            return is_array($contact) ? $contact : null;
+        } catch (\Throwable $e) {
+            Log::warning('[contact-api] request failed', [
+                'method' => 'GET',
+                'path'   => '/api/contacts/'.$uid,
+                'error'  => $e->getMessage(),
+            ]);
+            return null;
+        }
+    }
+
+    /**
      * POST /api/contacts/resolve
      *
      * Returns the parsed body or null on failure. Response shape:

@@ -3,7 +3,10 @@
 namespace Crater\Http\Controllers;
 
 use Crater\Models\Invoice;
+use Crater\Services\ContactApiClient;
+use Crater\Support\InvoiceOgIcons;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Http;
 
 class PublicInvoiceController extends Controller
 {
@@ -20,7 +23,7 @@ class PublicInvoiceController extends Controller
         $hasOptionalItems = $invoice->paid_status !== Invoice::STATUS_PAID
             && $invoice->items->contains(fn ($item) => $item->isOptional());
 
-        $ogImageUrl = url('/invoices/'.$invoice->unique_hash.'/og.png');
+        $ogImageUrl = url('/invoices/'.$invoice->unique_hash.'/og.png').'?v=icons';
 
         // Get all non-draft invoices for the same customer
         $customerInvoices = Invoice::where('customer_id', $invoice->customer_id)
@@ -101,23 +104,46 @@ class PublicInvoiceController extends Controller
         $amount = '$'.number_format(((int) $invoice->total) / 100, 2);
         $due = $invoice->formattedDueDate ? 'Due '.$invoice->formattedDueDate : '';
 
+        $iconSize = 188;
+        $iconGap = 40;
+        $pairWidth = ($iconSize * 2) + $iconGap;
+        $iconX = (int) (($w - $pairWidth) / 2);
+        $iconY = 72;
+
+        $this->paintIconTile(
+            $im,
+            $this->companyIconBytes($invoice),
+            $company,
+            $iconX,
+            $iconY,
+            $iconSize
+        );
+        $this->paintIconTile(
+            $im,
+            $this->clientIconBytes($invoice),
+            $customer !== '' ? $customer : $company,
+            $iconX + $iconSize + $iconGap,
+            $iconY,
+            $iconSize
+        );
+
+        $textTop = $iconY + $iconSize + 56;
+
         if ($regular) {
-            imagettftext($im, 22, 0, 72, 120, $pink, $regular, 'INVOICE');
-            imagettftext($im, 56, 0, 72, 210, $white, $bold ?? $regular, $this->fitText($number, $bold ?? $regular, 56, 720));
-            imagettftext($im, 72, 0, 72, 340, $white, $bold ?? $regular, $this->fitText($amount, $bold ?? $regular, 72, 900));
+            $this->drawCentered($im, 20, $textTop, $pink, $regular, 'INVOICE');
+            $this->drawCentered($im, 42, $textTop + 58, $white, $bold ?? $regular, $this->fitText($number, $bold ?? $regular, 42, 1000));
+            $this->drawCentered($im, 64, $textTop + 140, $white, $bold ?? $regular, $this->fitText($amount, $bold ?? $regular, 64, 1000));
             if ($customer !== '') {
-                imagettftext($im, 28, 0, 72, 430, $muted, $regular, $this->fitText($customer, $regular, 28, 1000));
+                $this->drawCentered($im, 24, $textTop + 200, $muted, $regular, $this->fitText($customer, $regular, 24, 1000));
             }
             if ($due !== '') {
-                imagettftext($im, 22, 0, 72, 480, $muted, $regular, $due);
+                $this->drawCentered($im, 20, $textTop + 242, $muted, $regular, $due);
             }
-            imagettftext($im, 22, 0, 72, 580, $white, $regular, $this->fitText($company, $regular, 22, 1000));
         } else {
-            imagestring($im, 5, 72, 90, 'INVOICE', $pink);
-            imagestring($im, 5, 72, 160, $number, $white);
-            imagestring($im, 5, 72, 230, $amount, $white);
-            imagestring($im, 4, 72, 300, $customer, $muted);
-            imagestring($im, 3, 72, 540, $company, $white);
+            imagestring($im, 5, 72, 360, 'INVOICE', $pink);
+            imagestring($im, 5, 72, 400, $number, $white);
+            imagestring($im, 5, 72, 440, $amount, $white);
+            imagestring($im, 4, 72, 480, $customer, $muted);
         }
 
         ob_start();
@@ -126,6 +152,202 @@ class PublicInvoiceController extends Controller
         imagedestroy($im);
 
         return $png;
+    }
+
+    private function drawCentered($im, int $size, int $baselineY, $color, string $font, string $text): void
+    {
+        $box = imagettfbbox($size, 0, $font, $text);
+        $width = abs($box[2] - $box[0]);
+        $x = (int) ((self::OG_WIDTH - $width) / 2);
+        imagettftext($im, $size, 0, $x, $baselineY, $color, $font, $text);
+    }
+
+    private function paintIconTile($im, ?string $bytes, string $label, int $x, int $y, int $size): void
+    {
+        $radius = (int) ($size * 0.22);
+        $tile = imagecolorallocatealpha($im, 36, 20, 52, 36);
+        $this->fillRoundRect($im, $x, $y, $size, $size, $radius, $tile);
+
+        $src = $bytes ? @imagecreatefromstring($bytes) : false;
+        if ($src) {
+            $pad = 20;
+            $this->pasteContain($im, $src, $x + $pad, $y + $pad, $size - ($pad * 2), $size - ($pad * 2));
+            imagedestroy($src);
+
+            return;
+        }
+
+        $letter = mb_strtoupper(mb_substr(trim($label), 0, 1));
+        if ($letter === '') {
+            return;
+        }
+
+        $white = imagecolorallocate($im, 255, 255, 255);
+        $font = $this->fontPath(true) ?? $this->fontPath(false);
+        if (!$font) {
+            imagestring($im, 5, $x + (int) ($size / 2) - 6, $y + (int) ($size / 2) - 8, $letter, $white);
+
+            return;
+        }
+
+        $fontSize = 72;
+        $box = imagettfbbox($fontSize, 0, $font, $letter);
+        $tw = abs($box[2] - $box[0]);
+        $th = abs($box[7] - $box[1]);
+        imagettftext(
+            $im,
+            $fontSize,
+            0,
+            $x + (int) (($size - $tw) / 2),
+            $y + (int) (($size + $th) / 2),
+            $white,
+            $font,
+            $letter
+        );
+    }
+
+    private function fillRoundRect($im, int $x, int $y, int $w, int $h, int $r, $color): void
+    {
+        $r = max(1, min($r, (int) ($w / 2), (int) ($h / 2)));
+        imagefilledrectangle($im, $x + $r, $y, $x + $w - $r, $y + $h, $color);
+        imagefilledrectangle($im, $x, $y + $r, $x + $w, $y + $h - $r, $color);
+        imagefilledellipse($im, $x + $r, $y + $r, $r * 2, $r * 2, $color);
+        imagefilledellipse($im, $x + $w - $r, $y + $r, $r * 2, $r * 2, $color);
+        imagefilledellipse($im, $x + $r, $y + $h - $r, $r * 2, $r * 2, $color);
+        imagefilledellipse($im, $x + $w - $r, $y + $h - $r, $r * 2, $r * 2, $color);
+    }
+
+    private function pasteContain($dst, $src, int $x, int $y, int $boxW, int $boxH): void
+    {
+        $srcW = imagesx($src);
+        $srcH = imagesy($src);
+        if ($srcW < 1 || $srcH < 1) {
+            return;
+        }
+
+        $scale = min($boxW / $srcW, $boxH / $srcH);
+        $dw = max(1, (int) round($srcW * $scale));
+        $dh = max(1, (int) round($srcH * $scale));
+        $dx = $x + (int) (($boxW - $dw) / 2);
+        $dy = $y + (int) (($boxH - $dh) / 2);
+        imagecopyresampled($dst, $src, $dx, $dy, 0, 0, $dw, $dh, $srcW, $srcH);
+    }
+
+    private function companyIconBytes(Invoice $invoice): ?string
+    {
+        $company = $invoice->company;
+        if (!$company) {
+            return null;
+        }
+
+        $logoUrl = trim((string) ($company->logo ?? config('crater.company_logo_url') ?? ''));
+        $urls = array_filter([
+            InvoiceOgIcons::safeHttpUrl(config('crater.company_icon_url')),
+            InvoiceOgIcons::safeHttpUrl($logoUrl),
+            InvoiceOgIcons::reaveBrandingIconUrl(config('crater.company_icon_url')),
+            InvoiceOgIcons::reaveBrandingIconUrl($logoUrl),
+        ]);
+
+        foreach (array_unique($urls) as $url) {
+            $bytes = $this->fetchImageBytes($url);
+            if ($bytes) {
+                return $bytes;
+            }
+        }
+
+        $media = $company->getMedia('logo')->first();
+        if ($media && is_readable($media->getPath())) {
+            $bytes = @file_get_contents($media->getPath());
+            if (is_string($bytes) && $bytes !== '' && !InvoiceOgIcons::isSvg($bytes)) {
+                return $bytes;
+            }
+        }
+
+        return null;
+    }
+
+    private function clientIconBytes(Invoice $invoice): ?string
+    {
+        $contact = $this->loadContact($invoice);
+        $sources = InvoiceOgIcons::clientIconSources(InvoiceOgIcons::portalFromContact($contact));
+
+        foreach ($sources as $source) {
+            if (!empty($source['data'])) {
+                $bytes = InvoiceOgIcons::decodeImageData($source['data']);
+                if ($bytes) {
+                    return $bytes;
+                }
+            }
+            if (!empty($source['url'])) {
+                $bytes = $this->fetchImageBytes($source['url']);
+                if ($bytes) {
+                    return $bytes;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function loadContact(Invoice $invoice): ?array
+    {
+        $api = app(ContactApiClient::class);
+        if (!$api->isEnabled()) {
+            return null;
+        }
+
+        $customer = $invoice->customer;
+        $uid = trim((string) ($customer->contact_uid ?? ''));
+        if ($uid !== '') {
+            $contact = $api->get($uid, 8);
+            if ($contact) {
+                return $contact;
+            }
+        }
+
+        $resolved = $api->resolve(
+            $customer->name ?? null,
+            $customer->email ?? null,
+            $customer->phone ?? null
+        );
+        if (!is_array($resolved) || !in_array($resolved['match'] ?? '', ['exact', 'likely'], true)) {
+            return null;
+        }
+
+        return is_array($resolved['contact'] ?? null) ? $resolved['contact'] : null;
+    }
+
+    private function fetchImageBytes(string $url): ?string
+    {
+        $url = InvoiceOgIcons::safeHttpUrl($url);
+        if (!$url) {
+            return null;
+        }
+
+        try {
+            $res = Http::timeout(5)
+                ->withHeaders([
+                    'Accept' => 'image/*,*/*;q=0.8',
+                    'User-Agent' => 'CraterInvoice/1.0',
+                ])
+                ->get($url);
+            if (!$res->successful()) {
+                return null;
+            }
+            $bytes = $res->body();
+            if ($bytes === '' || InvoiceOgIcons::isSvg($bytes)) {
+                return null;
+            }
+            $probe = @imagecreatefromstring($bytes);
+            if (!$probe) {
+                return null;
+            }
+            imagedestroy($probe);
+
+            return $bytes;
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     private function paintGlow($im, int $cx, int $cy, int $radius, int $r, int $g, int $b, float $alpha): void
