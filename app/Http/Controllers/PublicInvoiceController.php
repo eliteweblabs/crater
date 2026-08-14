@@ -23,6 +23,14 @@ class PublicInvoiceController extends Controller
         $hasOptionalItems = $invoice->paid_status !== Invoice::STATUS_PAID
             && $invoice->items->contains(fn ($item) => $item->isOptional());
 
+        // Optional add-ons always start off on the public page. Stored qty is
+        // not a customer choice — Crater defaults new lines to 1, which was
+        // turning the last optional (e.g. Google Workspace) on.
+        $publicSubtotal = (int) $invoice->items->sum(
+            fn ($item) => $item->isOptional() ? 0 : (int) $item->total
+        );
+        $publicTotal = max(0, $publicSubtotal - (int) ($invoice->discount_val ?? 0) + (int) $invoice->tax);
+
         $ogImageUrl = url('/invoices/'.$invoice->unique_hash.'/og.png').'?v=icons';
 
         // Get all non-draft invoices for the same customer
@@ -37,6 +45,8 @@ class PublicInvoiceController extends Controller
             'invoice',
             'customerInvoices',
             'hasOptionalItems',
+            'publicSubtotal',
+            'publicTotal',
             'ogImageUrl'
         ));
     }

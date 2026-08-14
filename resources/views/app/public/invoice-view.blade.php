@@ -50,7 +50,7 @@
         .item-row--off { opacity: 0.55; }
         .item-check { width: 56px; text-align: center; vertical-align: top; padding-top: 18px !important; }
         .item-switch { position: relative; display: inline-flex; cursor: pointer; }
-        .item-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+        .item-switch input { position: absolute; inset: 0; z-index: 1; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
         .item-switch-track {
             position: relative;
             display: block;
@@ -161,7 +161,7 @@
                 <p><strong>Due Date:</strong> {{ $invoice->formattedDueDate }}</p>
             </div>
             <div>
-                <p><strong>Amount Due:</strong> <span id="amount-due" style="font-size: 18px; font-weight: 600; color: #667eea;">${{ number_format($invoice->total / 100, 2) }}</span></p>
+                <p><strong>Amount Due:</strong> <span id="amount-due" style="font-size: 18px; font-weight: 600; color: #667eea;">${{ number_format(($publicTotal ?? $invoice->total) / 100, 2) }}</span></p>
             </div>
         </div>
 
@@ -182,9 +182,9 @@
                     @foreach($invoice->items as $item)
                     @php
                         $optional = $item->isOptional();
-                        $included = ! $optional || (float) $item->quantity > 0;
+                        $included = ! $optional;
                     @endphp
-                    <tr class="item-row {{ $optional ? 'item-row--optional' : '' }} {{ $optional && ! $included ? 'item-row--off' : '' }}"
+                    <tr class="item-row {{ $optional ? 'item-row--optional' : '' }} {{ $optional ? 'item-row--off' : '' }}"
                         data-optional="{{ $optional ? '1' : '0' }}"
                         data-item-id="{{ $item->id }}"
                         data-price="{{ (int) $item->price }}"
@@ -194,7 +194,7 @@
                         <td class="item-check">
                             @if($optional)
                             <label class="item-switch">
-                                <input type="checkbox" class="optional-toggle" value="{{ $item->id }}" {{ $included ? 'checked' : '' }} aria-label="Add {{ $item->publicDisplayName() }}">
+                                <input type="checkbox" class="optional-toggle" value="{{ $item->id }}" autocomplete="off" aria-label="Add {{ $item->publicDisplayName() }}">
                                 <span class="item-switch-track" aria-hidden="true"></span>
                             </label>
                             @endif
@@ -211,9 +211,9 @@
                                 <div class="description">{{ $item->description }}</div>
                             @endif
                         </td>
-                        <td class="item-qty" style="text-align: center;">{{ $included || ! $optional ? $item->quantity : 0 }}</td>
+                        <td class="item-qty" style="text-align: center;">{{ $optional ? 0 : $item->quantity }}</td>
                         <td style="text-align: right;">${{ number_format($item->price / 100, 2) }}</td>
-                        <td class="amount">${{ number_format(($included || ! $optional ? $item->total : 0) / 100, 2) }}</td>
+                        <td class="amount">${{ number_format(($optional ? 0 : $item->total) / 100, 2) }}</td>
                     </tr>
                     @endforeach
                 </tbody>
@@ -223,7 +223,7 @@
         <div class="totals">
             <div class="row">
                 <span>Subtotal</span>
-                <span id="subtotal-display">${{ number_format($invoice->sub_total / 100, 2) }}</span>
+                <span id="subtotal-display">${{ number_format(($publicSubtotal ?? $invoice->sub_total) / 100, 2) }}</span>
             </div>
             @if($invoice->tax > 0)
             <div class="row">
@@ -233,7 +233,7 @@
             @endif
             <div class="row total">
                 <span>Total</span>
-                <span id="total-display">${{ number_format($invoice->total / 100, 2) }}</span>
+                <span id="total-display">${{ number_format(($publicTotal ?? $invoice->total) / 100, 2) }}</span>
             </div>
         </div>
 
