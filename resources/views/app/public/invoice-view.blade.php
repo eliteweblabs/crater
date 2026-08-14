@@ -88,7 +88,7 @@
         .totals { margin-left: auto; width: 300px; margin-top: 20px; }
         .totals .row { display: flex; justify-content: space-between; padding: 8px 0; }
         .totals .row.total { font-size: 20px; font-weight: 600; padding-top: 16px; border-top: 2px solid #eee; margin-top: 8px; }
-        .pay-cta { display: none; margin: 24px 0 0; width: 100%; padding: 14px 28px; border: none; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #0b0512; cursor: pointer; background: linear-gradient(145deg, #f472b6 0%, #c026d3 52%, #6366f1 100%); box-shadow: 0 2px 16px rgba(192, 38, 211, 0.35); }
+        .pay-cta { display: none; margin: 24px 0 0; width: 100%; padding: 14px 28px; border: none; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #ffffff; cursor: pointer; background: linear-gradient(145deg, #f472b6 0%, #c026d3 52%, #6366f1 100%); box-shadow: 0 2px 16px rgba(192, 38, 211, 0.35); }
         .pay-cta.is-visible { display: block; }
         .pay-cta:disabled { opacity: 0.6; cursor: not-allowed; }
         .payment-section { margin-top: 40px; padding: 30px; background: #f9f9f9; border-radius: 8px; }
@@ -100,6 +100,7 @@
         .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
         .btn-secondary { background: white; color: #666; border: 1px solid #ddd; margin-top: 12px; }
         .btn-secondary:hover { border-color: #999; color: #333; }
+        .btn-pdf { border-radius: 999px; }
         .error-message { color: #d32f2f; margin-top: 12px; font-size: 14px; }
         .success-message { background: #e8f5e9; border: 1px solid #388e3c; color: #2e7d32; padding: 16px; border-radius: 6px; margin-bottom: 20px; }
         .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; color: #999; font-size: 14px; text-align: center; }
@@ -415,7 +416,7 @@
         @endif
 
         <div style="margin-top: 20px; text-align: center;">
-            <a href="{{ url("/invoices/pdf/{$invoice->unique_hash}") }}" class="btn btn-secondary" target="_blank">
+            <a href="{{ url("/invoices/pdf/{$invoice->unique_hash}") }}" class="btn btn-secondary btn-pdf" target="_blank">
                 📄 Download PDF
             </a>
         </div>
