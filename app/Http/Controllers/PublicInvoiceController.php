@@ -60,11 +60,19 @@ class PublicInvoiceController extends Controller
             ->where('unique_hash', $uniqueHash)
             ->firstOrFail();
 
-        $png = $this->renderOgPng($invoice);
+        try {
+            $png = $this->renderOgPng($invoice);
+        } catch (\Throwable $e) {
+            \Log::error('invoice og image failed', [
+                'hash' => $uniqueHash,
+                'error' => $e->getMessage(),
+            ]);
+            $png = $this->fallbackOgPng($invoice);
+        }
 
         return response($png, 200, [
             'Content-Type' => 'image/png',
-            'Cache-Control' => 'public, max-age=86400',
+            'Cache-Control' => 'public, max-age=3600',
         ]);
     }
 
@@ -164,12 +172,17 @@ class PublicInvoiceController extends Controller
         return $png;
     }
 
+    private function canPaintTtf(): bool
+    {
+        return function_exists('imagettfbbox') && function_exists('imagettftext');
+    }
+
     private function drawCentered($im, int $size, int $baselineY, $color, string $font, string $text): void
     {
-        $box = imagettfbbox($size, 0, $font, $text);
+        $box = \imagettfbbox($size, 0, $font, $text);
         $width = abs($box[2] - $box[0]);
         $x = (int) ((self::OG_WIDTH - $width) / 2);
-        imagettftext($im, $size, 0, $x, $baselineY, $color, $font, $text);
+        \imagettftext($im, $size, 0, $x, $baselineY, $color, $font, $text);
     }
 
     private function paintIconTile($im, ?string $bytes, string $label, int $x, int $y, int $size): void
@@ -201,10 +214,10 @@ class PublicInvoiceController extends Controller
         }
 
         $fontSize = 72;
-        $box = imagettfbbox($fontSize, 0, $font, $letter);
+        $box = \imagettfbbox($fontSize, 0, $font, $letter);
         $tw = abs($box[2] - $box[0]);
         $th = abs($box[7] - $box[1]);
-        imagettftext(
+        \imagettftext(
             $im,
             $fontSize,
             0,
@@ -371,8 +384,27 @@ class PublicInvoiceController extends Controller
         }
     }
 
+    private function fallbackOgPng(Invoice $invoice): string
+    {
+        $im = imagecreatetruecolor(self::OG_WIDTH, self::OG_HEIGHT);
+        imagefilledrectangle($im, 0, 0, self::OG_WIDTH, self::OG_HEIGHT, imagecolorallocate($im, 12, 6, 20));
+        $white = imagecolorallocate($im, 255, 255, 255);
+        imagestring($im, 5, 72, 200, (string) ($invoice->invoice_number ?: 'Invoice'), $white);
+        imagestring($im, 5, 72, 240, '$'.number_format(((int) $invoice->total) / 100, 2), $white);
+        ob_start();
+        imagepng($im);
+        $png = (string) ob_get_clean();
+        imagedestroy($im);
+
+        return $png;
+    }
+
     private function fontPath(bool $bold): ?string
     {
+        if (! $this->canPaintTtf()) {
+            return null;
+        }
+
         $name = $bold ? 'DejaVuSans-Bold.ttf' : 'DejaVuSans.ttf';
         $candidates = [
             resource_path('fonts/'.$name),
@@ -396,7 +428,7 @@ class PublicInvoiceController extends Controller
         }
 
         while (mb_strlen($text) > 3) {
-            $box = imagettfbbox($size, 0, $font, $text);
+            $box = \imagettfbbox($size, 0, $font, $text);
             $width = abs($box[2] - $box[0]);
             if ($width <= $maxWidth) {
                 return $text;
