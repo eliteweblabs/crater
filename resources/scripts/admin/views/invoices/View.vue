@@ -504,6 +504,7 @@ onSearched = debounce(onSearched, 500)
       style="height: 75vh"
     >
       <iframe
+        v-if="!modalStore.active"
         :src="`${shareableLink}`"
         class="
           flex-1

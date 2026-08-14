@@ -66,7 +66,7 @@
         </BaseInputGrid>
       </div>
       <div
-        class="z-0 flex justify-end p-4 border-t border-gray-200 border-solid"
+        class="relative z-10 flex justify-end p-4 bg-white border-t border-gray-200 border-solid"
       >
         <BaseButton
           class="mr-3"
@@ -115,7 +115,7 @@
         ></iframe>
       </div>
       <div
-        class="z-0 flex justify-end p-4 border-t border-gray-200 border-solid"
+        class="relative z-10 flex justify-end p-4 bg-white border-t border-gray-200 border-solid"
       >
         <BaseButton
           class="mr-3"

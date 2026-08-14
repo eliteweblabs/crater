@@ -263,6 +263,7 @@
       style="height: 75vh"
     >
       <iframe
+        v-if="!modalStore.active"
         :src="`${shareableLink}`"
         class="
           flex-1

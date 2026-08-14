@@ -240,7 +240,7 @@
       style="height: 75vh"
     >
       <iframe
-        v-if="shareableLink"
+        v-if="shareableLink && !modalStore.active"
         :src="shareableLink"
         class="flex-1 border border-gray-400 border-solid rounded-md"
       />

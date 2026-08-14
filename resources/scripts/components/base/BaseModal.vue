@@ -4,7 +4,7 @@
       <Dialog
         as="div"
         static
-        class="fixed inset-0 z-20 overflow-y-auto"
+        class="fixed inset-0 z-50 overflow-y-auto"
         :open="show"
         @close="$emit('close')"
       >
