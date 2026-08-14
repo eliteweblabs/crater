@@ -26,6 +26,19 @@ test('invoice item belongs to item', function () {
 });
 
 
+test('optional tag is detected on invoice item names', function () {
+    expect((new InvoiceItem(['name' => 'Phaseline Analytics (optional)']))->isOptional())->toBeTrue();
+    expect((new InvoiceItem(['name' => 'Booksy White Labeling (one time fee, can be added anytime)']))->isOptional())->toBeTrue();
+    expect((new InvoiceItem(['name' => 'Railway Web Hosting (required)']))->isOptional())->toBeFalse();
+    expect((new InvoiceItem(['name' => 'Web Design']))->isOptional())->toBeFalse();
+});
+
+test('public display name strips optional tags', function () {
+    $item = new InvoiceItem(['name' => 'Booksy White Labeling (optional)']);
+
+    expect($item->publicDisplayName())->toBe('Booksy White Labeling');
+});
+
 test('invoice item has many taxes', function () {
     $invoiceItem = InvoiceItem::factory()->hasTaxes(5)->create([
         'invoice_id' => Invoice::factory(),

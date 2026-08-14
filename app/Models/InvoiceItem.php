@@ -78,4 +78,37 @@ class InvoiceItem extends Model
             DB::raw('sum(quantity) as total_quantity, sum(base_total) as total_amount, invoice_items.name')
         )->groupBy('invoice_items.name');
     }
+
+    /**
+     * Optional add-on the customer can toggle on the public invoice.
+     * Required wins if both tags appear. Also treats the EST-000001 phrasing
+     * "can be added anytime" as optional so converted estimates work as-is.
+     */
+    public function isOptional(): bool
+    {
+        $name = (string) $this->name;
+
+        if (preg_match('/\(\s*required\s*\)/i', $name)) {
+            return false;
+        }
+
+        return (bool) preg_match(
+            '/\(\s*optional\s*\)|\[\s*optional\s*\]|can be added anytime/i',
+            $name
+        );
+    }
+
+    public function publicDisplayName(): string
+    {
+        $name = preg_replace(
+            '/\s*[\(\[]\s*(optional|required)\s*[\)\]]/i',
+            '',
+            (string) $this->name
+        );
+        $name = preg_replace('/\s*\([^)]*can be added anytime[^)]*\)/i', '', $name);
+
+        $name = trim((string) $name);
+
+        return $name !== '' ? $name : (string) $this->name;
+    }
 }

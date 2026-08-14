@@ -42,6 +42,63 @@ test('invoice belongs to customer', function () {
     $this->assertTrue($invoice->customer()->exists());
 });
 
+test('optional add-on selection recalculates invoice totals', function () {
+    $invoice = Invoice::factory()->create([
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'sub_total' => 50000,
+        'total' => 50000,
+        'due_amount' => 50000,
+        'paid_status' => Invoice::STATUS_UNPAID,
+        'exchange_rate' => 1,
+    ]);
+
+    InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'Railway Web Hosting (required)',
+        'price' => 50000,
+        'quantity' => 1,
+        'total' => 50000,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    $optional = InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'Booksy White Labeling (optional)',
+        'price' => 20000,
+        'quantity' => 0,
+        'total' => 0,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    $invoice->applyOptionalItemSelection([$optional->id]);
+    $invoice->refresh();
+    $optional->refresh();
+
+    expect((float) $optional->quantity)->toBe(1.0)
+        ->and((int) $optional->total)->toBe(20000)
+        ->and((int) $invoice->total)->toBe(70000)
+        ->and((int) $invoice->due_amount)->toBe(70000);
+
+    $invoice->applyOptionalItemSelection([]);
+    $invoice->refresh();
+    $optional->refresh();
+
+    expect((float) $optional->quantity)->toBe(0.0)
+        ->and((int) $optional->total)->toBe(0)
+        ->and((int) $invoice->total)->toBe(50000);
+});
+
 test('get previous status', function () {
     $invoice = Invoice::factory()->create();
 

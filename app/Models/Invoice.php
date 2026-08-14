@@ -784,4 +784,58 @@ class Invoice extends Model implements HasMedia
 
         return true;
     }
+
+    /**
+     * Customer-picked add-ons on the public invoice. Only rows {@see InvoiceItem::isOptional()}
+     * change quantity (1 = included, 0 = left off). Required lines stay as-is.
+     * Recalculates totals and due_amount from the items + payments.
+     */
+    public function applyOptionalItemSelection(array $selectedIds): self
+    {
+        if ($this->paid_status === self::STATUS_PAID) {
+            return $this;
+        }
+
+        $this->loadMissing('items');
+        $selected = array_fill_keys(array_map('intval', $selectedIds), true);
+        $rate = (float) ($this->exchange_rate ?: 1);
+
+        foreach ($this->items as $item) {
+            if (! $item->isOptional()) {
+                continue;
+            }
+
+            $include = isset($selected[(int) $item->id]);
+            $qty = $include ? 1.0 : 0.0;
+            $lineTotal = (int) round(((int) $item->price) * $qty);
+
+            $item->quantity = $qty;
+            $item->total = $lineTotal;
+            $item->base_total = (int) round($lineTotal * $rate);
+            $item->save();
+        }
+
+        return $this->recalculateTotalsFromItems();
+    }
+
+    public function recalculateTotalsFromItems(): self
+    {
+        $this->unsetRelation('items');
+        $this->load('items');
+
+        $rate = (float) ($this->exchange_rate ?: 1);
+        $subTotal = (int) $this->items->sum(function ($item) {
+            return (int) $item->total;
+        });
+        $discountVal = (int) ($this->discount_val ?? 0);
+        $tax = (int) ($this->tax ?? 0);
+
+        $this->sub_total = $subTotal;
+        $this->base_sub_total = (int) round($subTotal * $rate);
+        $this->total = max(0, $subTotal - $discountVal + $tax);
+        $this->base_total = (int) round($this->total * $rate);
+        $this->save();
+
+        return $this->recomputeFromPayments();
+    }
 }

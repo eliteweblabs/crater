@@ -107,7 +107,8 @@ class StripePaymentController extends Controller
     {
         try {
             // Load relationships (currency may not be loaded from the public route)
-            $invoice->loadMissing(['customer', 'company', 'currency']);
+            $invoice->loadMissing(['customer', 'company', 'currency', 'items']);
+            $invoice = $this->applyOptionalSelectionFromRequest($request, $invoice);
 
             // Self-heal due_amount / paid_status from the canonical
             // sum(payments) before we charge the customer. See
@@ -133,6 +134,10 @@ class StripePaymentController extends Controller
             $amountInCents = (int)$invoice->due_amount > 0
                 ? (int)$invoice->due_amount
                 : (int)$invoice->total;
+
+            if ($amountInCents <= 0) {
+                return response()->json(['error' => 'Nothing to pay on this invoice'], 400);
+            }
 
             // Create Stripe embedded checkout session
             $session = StripeSession::create($this->buildCheckoutSessionParams($invoice, [
@@ -188,12 +193,14 @@ class StripePaymentController extends Controller
         try {
             // If invoice is an ID or unique_hash, fetch the model
             if (!$invoice instanceof Invoice) {
-                $invoice = Invoice::with(['customer', 'company', 'currency', 'emailLogs'])
+                $invoice = Invoice::with(['customer', 'company', 'currency', 'emailLogs', 'items'])
                     ->where('unique_hash', $invoice)
                     ->firstOrFail();
             } else {
-                $invoice->load(['customer', 'company', 'currency', 'emailLogs']);
+                $invoice->load(['customer', 'company', 'currency', 'emailLogs', 'items']);
             }
+
+            $invoice = $this->applyOptionalSelectionFromRequest($request, $invoice);
 
             // Build a safe fallback URL using the public invoice view
             $invoiceViewUrl = url("/invoices/{$invoice->unique_hash}");
@@ -286,7 +293,8 @@ class StripePaymentController extends Controller
     public function createPaymentIntent(Request $request, Invoice $invoice)
     {
         try {
-            $invoice->loadMissing(['customer', 'company', 'currency']);
+            $invoice->loadMissing(['customer', 'company', 'currency', 'items']);
+            $invoice = $this->applyOptionalSelectionFromRequest($request, $invoice);
 
             // Self-heal due_amount / paid_status from the canonical
             // sum(payments) before charging.
@@ -486,6 +494,27 @@ class StripePaymentController extends Controller
 
             \Log::info("Payment fulfilled for invoice #{$invoice->invoice_number} (stripe session {$session['id']}, event {$session['event_id']} )");
         });
+    }
+
+    /**
+     * Persist optional add-on toggles from the public invoice before charging.
+     * Missing `optional_item_ids` leaves the invoice unchanged (plain invoices).
+     */
+    private function applyOptionalSelectionFromRequest(Request $request, Invoice $invoice): Invoice
+    {
+        if (! $request->exists('optional_item_ids')) {
+            return $invoice;
+        }
+
+        $ids = $request->input('optional_item_ids', []);
+        if (! is_array($ids)) {
+            $ids = [];
+        }
+
+        $invoice->applyOptionalItemSelection($ids);
+        $invoice->refresh()->loadMissing(['customer', 'company', 'currency', 'items']);
+
+        return $invoice;
     }
 
     /**

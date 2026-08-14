@@ -48,9 +48,18 @@
         .items td { padding: 16px 0; border-bottom: 1px solid #f5f5f5; }
         .items .description { color: #666; font-size: 14px; }
         .items .amount { text-align: right; }
+        .item-row--optional { background: #faf7ff; }
+        .item-row--off { opacity: 0.55; }
+        .item-check { width: 44px; text-align: center; vertical-align: top; padding-top: 18px !important; }
+        .item-check input { width: 18px; height: 18px; accent-color: #c026d3; cursor: pointer; }
+        .addon-badge { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: #0b0512; background: linear-gradient(145deg, #f472b6 0%, #c026d3 52%, #6366f1 100%); }
+        .optional-hint { margin: 0 0 16px; padding: 12px 16px; border-radius: 8px; background: #faf7ff; color: #4b3a5a; font-size: 14px; }
         .totals { margin-left: auto; width: 300px; margin-top: 20px; }
         .totals .row { display: flex; justify-content: space-between; padding: 8px 0; }
         .totals .row.total { font-size: 20px; font-weight: 600; padding-top: 16px; border-top: 2px solid #eee; margin-top: 8px; }
+        .pay-cta { display: none; margin: 24px 0 0; width: 100%; padding: 14px 28px; border: none; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #0b0512; cursor: pointer; background: linear-gradient(145deg, #f472b6 0%, #c026d3 52%, #6366f1 100%); box-shadow: 0 2px 16px rgba(192, 38, 211, 0.35); }
+        .pay-cta.is-visible { display: block; }
+        .pay-cta:disabled { opacity: 0.6; cursor: not-allowed; }
         .payment-section { margin-top: 40px; padding: 30px; background: #f9f9f9; border-radius: 8px; }
         .payment-section h2 { font-size: 20px; margin-bottom: 20px; color: #333; }
         #payment-element { margin-bottom: 20px; }
@@ -120,14 +129,20 @@
                 <p><strong>Due Date:</strong> {{ $invoice->formattedDueDate }}</p>
             </div>
             <div>
-                <p><strong>Amount Due:</strong> <span style="font-size: 18px; font-weight: 600; color: #667eea;">${{ number_format($invoice->total / 100, 2) }}</span></p>
+                <p><strong>Amount Due:</strong> <span id="amount-due" style="font-size: 18px; font-weight: 600; color: #667eea;">${{ number_format($invoice->total / 100, 2) }}</span></p>
             </div>
         </div>
 
         <div class="items">
+            @if(!empty($hasOptionalItems))
+            <p class="optional-hint">Check any add-ons you want. The total updates here — then pay on this page. Nothing extra to send back.</p>
+            @endif
             <table>
                 <thead>
                     <tr>
+                        @if(!empty($hasOptionalItems))
+                        <th class="item-check"></th>
+                        @endif
                         <th>Item</th>
                         <th style="text-align: center; width: 80px;">Qty</th>
                         <th style="text-align: right; width: 100px;">Rate</th>
@@ -136,16 +151,37 @@
                 </thead>
                 <tbody>
                     @foreach($invoice->items as $item)
-                    <tr>
+                    @php
+                        $optional = $item->isOptional();
+                        $included = ! $optional || (float) $item->quantity > 0;
+                    @endphp
+                    <tr class="item-row {{ $optional ? 'item-row--optional' : '' }} {{ $optional && ! $included ? 'item-row--off' : '' }}"
+                        data-optional="{{ $optional ? '1' : '0' }}"
+                        data-item-id="{{ $item->id }}"
+                        data-price="{{ (int) $item->price }}"
+                        data-fixed-cents="{{ $optional ? 0 : (int) $item->total }}"
+                        data-included="{{ $included ? '1' : '0' }}">
+                        @if(!empty($hasOptionalItems))
+                        <td class="item-check">
+                            @if($optional)
+                            <input type="checkbox" class="optional-toggle" value="{{ $item->id }}" {{ $included ? 'checked' : '' }} aria-label="Add {{ $item->publicDisplayName() }}">
+                            @endif
+                        </td>
+                        @endif
                         <td>
-                            <div style="font-weight: 500;">{{ $item->name }}</div>
+                            <div style="font-weight: 500;">
+                                {{ $item->publicDisplayName() }}
+                                @if($optional)
+                                    <span class="addon-badge">Optional</span>
+                                @endif
+                            </div>
                             @if($item->description)
                                 <div class="description">{{ $item->description }}</div>
                             @endif
                         </td>
-                        <td style="text-align: center;">{{ $item->quantity }}</td>
+                        <td class="item-qty" style="text-align: center;">{{ $included || ! $optional ? $item->quantity : 0 }}</td>
                         <td style="text-align: right;">${{ number_format($item->price / 100, 2) }}</td>
-                        <td class="amount">${{ number_format($item->total / 100, 2) }}</td>
+                        <td class="amount">${{ number_format(($included || ! $optional ? $item->total : 0) / 100, 2) }}</td>
                     </tr>
                     @endforeach
                 </tbody>
@@ -155,7 +191,7 @@
         <div class="totals">
             <div class="row">
                 <span>Subtotal</span>
-                <span>${{ number_format($invoice->sub_total / 100, 2) }}</span>
+                <span id="subtotal-display">${{ number_format($invoice->sub_total / 100, 2) }}</span>
             </div>
             @if($invoice->tax > 0)
             <div class="row">
@@ -165,7 +201,7 @@
             @endif
             <div class="row total">
                 <span>Total</span>
-                <span>${{ number_format($invoice->total / 100, 2) }}</span>
+                <span id="total-display">${{ number_format($invoice->total / 100, 2) }}</span>
             </div>
         </div>
 
@@ -177,11 +213,12 @@
         @endif
 
         @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
-        <div id="stripe-checkout" style="margin-top: 40px;"></div>
+        <button type="button" id="pay-cta" class="pay-cta"></button>
+        <div id="stripe-checkout" style="margin-top: 24px;"></div>
 
         @if(env('VENMO_HANDLE'))
         <div style="margin-top: 16px; text-align: center;">
-            <a href="https://venmo.com/?txn=pay&recipients={{ env('VENMO_HANDLE') }}&amount={{ number_format($invoice->total / 100, 2) }}&note=Invoice+{{ $invoice->invoice_number }}"
+            <a id="venmo-pay" href="https://venmo.com/?txn=pay&recipients={{ env('VENMO_HANDLE') }}&amount={{ number_format($invoice->total / 100, 2) }}&note=Invoice+{{ $invoice->invoice_number }}"
                target="_blank"
                style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: #008CFF; color: #fff; font-size: 15px; font-weight: 600; text-decoration: none; border-radius: 8px;">
                 <svg width="18" height="18" viewBox="0 0 300 300" fill="white"><path d="M232.3 30c9.5 15.7 13.8 31.9 13.8 52.1 0 64.9-55.4 149.3-100.4 208.5H57.4L18 38.5l80.2-7.6 22.1 88.7c20.6-37.8 46-97.4 46-137.3 0-22.1-3.8-37.2-9.7-49.3L232.3 30z"/></svg>
@@ -191,31 +228,133 @@
         @endif
 
         <script>
-            (async () => {
-                const stripe = Stripe('{{ config("services.stripe.key") }}');
+            (function () {
+                const stripeKey = @json(config('services.stripe.key'));
+                const invoiceHash = @json($invoice->unique_hash);
+                const csrf = @json(csrf_token());
+                const taxCents = {{ (int) $invoice->tax }};
+                const discountCents = {{ (int) ($invoice->discount_val ?? 0) }};
+                const hasOptional = {{ !empty($hasOptionalItems) ? 'true' : 'false' }};
+                const money = (cents) => (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
-                const checkout = await stripe.initEmbeddedCheckout({
-                    fetchClientSecret: async () => {
-                        const res = await fetch(
-                            '/api/invoices/{{ $invoice->unique_hash }}/checkout-session',
-                            {
+                const selectedOptionalIds = () =>
+                    Array.from(document.querySelectorAll('.optional-toggle:checked')).map((el) => Number(el.value));
+
+                const liveCents = () => {
+                    let subtotal = 0;
+                    document.querySelectorAll('.item-row').forEach((row) => {
+                        if (row.dataset.optional === '1') {
+                            const on = row.querySelector('.optional-toggle')?.checked;
+                            subtotal += on ? Number(row.dataset.price || 0) : 0;
+                        } else {
+                            subtotal += Number(row.dataset.fixedCents || 0);
+                        }
+                    });
+                    return Math.max(0, subtotal - discountCents + taxCents);
+                };
+
+                const paintTotals = () => {
+                    const total = liveCents();
+                    let subtotal = 0;
+                    document.querySelectorAll('.item-row').forEach((row) => {
+                        const optional = row.dataset.optional === '1';
+                        const on = optional ? !!row.querySelector('.optional-toggle')?.checked : true;
+                        const cents = optional ? (on ? Number(row.dataset.price || 0) : 0) : Number(row.dataset.fixedCents || 0);
+                        if (optional) subtotal += cents;
+                        else subtotal += cents;
+                        const amountEl = row.querySelector('.amount');
+                        const qtyEl = row.querySelector('.item-qty');
+                        if (amountEl) amountEl.textContent = money(cents);
+                        if (optional && qtyEl) qtyEl.textContent = on ? '1' : '0';
+                        row.classList.toggle('item-row--off', optional && !on);
+                    });
+                    const due = document.getElementById('amount-due');
+                    const sub = document.getElementById('subtotal-display');
+                    const tot = document.getElementById('total-display');
+                    if (due) due.textContent = money(total);
+                    if (sub) sub.textContent = money(subtotal);
+                    if (tot) tot.textContent = money(total);
+                    const venmo = document.getElementById('venmo-pay');
+                    if (venmo) {
+                        const url = new URL(venmo.href);
+                        url.searchParams.set('amount', (total / 100).toFixed(2));
+                        venmo.href = url.toString();
+                    }
+                    return total;
+                };
+
+                let checkout = null;
+                let stripe = null;
+                const payBtn = document.getElementById('pay-cta');
+                const mountEl = document.getElementById('stripe-checkout');
+
+                const destroyCheckout = () => {
+                    if (checkout) {
+                        try { checkout.destroy(); } catch (e) {}
+                        checkout = null;
+                    }
+                    if (mountEl) mountEl.innerHTML = '';
+                    if (payBtn) {
+                        payBtn.classList.add('is-visible');
+                        payBtn.disabled = false;
+                        payBtn.textContent = 'Pay ' + money(liveCents());
+                    }
+                };
+
+                const mountCheckout = async () => {
+                    if (!stripeKey || !mountEl) return;
+                    if (!stripe) stripe = Stripe(stripeKey);
+                    if (checkout) {
+                        try { checkout.destroy(); } catch (e) {}
+                        checkout = null;
+                    }
+                    if (payBtn) {
+                        payBtn.disabled = true;
+                        payBtn.textContent = 'Loading payment…';
+                    }
+                    checkout = await stripe.initEmbeddedCheckout({
+                        fetchClientSecret: async () => {
+                            const res = await fetch('/api/invoices/' + invoiceHash + '/checkout-session', {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
-                                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                    'X-CSRF-TOKEN': csrf,
                                 },
+                                body: JSON.stringify({ optional_item_ids: selectedOptionalIds() }),
+                            });
+                            const data = await res.json();
+                            if (data.error) {
+                                console.error('Payment init error:', data.error);
+                                destroyCheckout();
+                                return null;
                             }
-                        );
-                        const data = await res.json();
-                        if (data.error) {
-                            console.error('Payment init error:', data.error);
-                            return null;
-                        }
-                        return data.clientSecret;
-                    },
+                            return data.clientSecret;
+                        },
+                    });
+                    checkout.mount('#stripe-checkout');
+                    if (payBtn) {
+                        payBtn.classList.remove('is-visible');
+                    }
+                };
+
+                document.querySelectorAll('.optional-toggle').forEach((box) => {
+                    box.addEventListener('change', () => {
+                        paintTotals();
+                        destroyCheckout();
+                    });
                 });
 
-                checkout.mount('#stripe-checkout');
+                paintTotals();
+
+                if (hasOptional) {
+                    if (payBtn) {
+                        payBtn.classList.add('is-visible');
+                        payBtn.textContent = 'Pay ' + money(liveCents());
+                        payBtn.addEventListener('click', mountCheckout);
+                    }
+                } else {
+                    mountCheckout();
+                }
             })();
         </script>
         @endif

@@ -12,6 +12,9 @@ class PublicInvoiceController extends Controller
             ->where('unique_hash', $uniqueHash)
             ->firstOrFail();
 
+        $hasOptionalItems = $invoice->paid_status !== Invoice::STATUS_PAID
+            && $invoice->items->contains(fn ($item) => $item->isOptional());
+
         // Get all non-draft invoices for the same customer
         $customerInvoices = Invoice::where('customer_id', $invoice->customer_id)
             ->where('company_id', $invoice->company_id)
@@ -20,6 +23,6 @@ class PublicInvoiceController extends Controller
             ->orderBy('created_at', 'desc')
             ->get(['id', 'invoice_number', 'total', 'status', 'paid_status', 'due_date', 'unique_hash']);
 
-        return view('app.public.invoice-view', compact('invoice', 'customerInvoices'));
+        return view('app.public.invoice-view', compact('invoice', 'customerInvoices', 'hasOptionalItems'));
     }
 }
