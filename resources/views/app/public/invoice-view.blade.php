@@ -87,7 +87,6 @@
             outline-offset: 2px;
         }
         .addon-badge { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: #0b0512; background: linear-gradient(145deg, #f472b6 0%, #c026d3 52%, #6366f1 100%); }
-        .optional-hint { margin: 0 0 16px; padding: 12px 16px; border-radius: 8px; background: #faf7ff; color: #4b3a5a; font-size: 14px; }
         .totals { margin-left: auto; width: 300px; margin-top: 20px; }
         .totals .row { display: flex; justify-content: space-between; padding: 8px 0; }
         .totals .row.total { font-size: 20px; font-weight: 600; padding-top: 16px; border-top: 2px solid #eee; margin-top: 8px; }
@@ -168,9 +167,6 @@
         </div>
 
         <div class="items">
-            @if(!empty($hasOptionalItems))
-            <p class="optional-hint">Toggle any add-ons you want. The total updates here — then pay on this page. Nothing extra to send back.</p>
-            @endif
             <table>
                 <thead>
                     <tr>
