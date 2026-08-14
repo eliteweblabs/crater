@@ -50,8 +50,42 @@
         .items .amount { text-align: right; }
         .item-row--optional { background: #faf7ff; }
         .item-row--off { opacity: 0.55; }
-        .item-check { width: 44px; text-align: center; vertical-align: top; padding-top: 18px !important; }
-        .item-check input { width: 18px; height: 18px; accent-color: #c026d3; cursor: pointer; }
+        .item-check { width: 56px; text-align: center; vertical-align: top; padding-top: 18px !important; }
+        .item-switch { position: relative; display: inline-flex; cursor: pointer; }
+        .item-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+        .item-switch-track {
+            position: relative;
+            display: block;
+            width: 44px;
+            height: 26px;
+            border-radius: 999px;
+            background: #d4d0db;
+            box-shadow: inset 0 0 0 1px rgba(11, 5, 18, 0.08);
+            transition: background 0.18s ease, box-shadow 0.18s ease;
+        }
+        .item-switch-track::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 1px 4px rgba(11, 5, 18, 0.28);
+            transition: transform 0.18s ease;
+        }
+        .item-switch input:checked + .item-switch-track {
+            background: linear-gradient(145deg, #f472b6 0%, #c026d3 52%, #6366f1 100%);
+            box-shadow: 0 2px 10px rgba(192, 38, 211, 0.35);
+        }
+        .item-switch input:checked + .item-switch-track::after {
+            transform: translateX(18px);
+        }
+        .item-switch input:focus-visible + .item-switch-track {
+            outline: 2px solid #c026d3;
+            outline-offset: 2px;
+        }
         .addon-badge { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: #0b0512; background: linear-gradient(145deg, #f472b6 0%, #c026d3 52%, #6366f1 100%); }
         .optional-hint { margin: 0 0 16px; padding: 12px 16px; border-radius: 8px; background: #faf7ff; color: #4b3a5a; font-size: 14px; }
         .totals { margin-left: auto; width: 300px; margin-top: 20px; }
@@ -135,7 +169,7 @@
 
         <div class="items">
             @if(!empty($hasOptionalItems))
-            <p class="optional-hint">Check any add-ons you want. The total updates here — then pay on this page. Nothing extra to send back.</p>
+            <p class="optional-hint">Toggle any add-ons you want. The total updates here — then pay on this page. Nothing extra to send back.</p>
             @endif
             <table>
                 <thead>
@@ -164,7 +198,10 @@
                         @if(!empty($hasOptionalItems))
                         <td class="item-check">
                             @if($optional)
-                            <input type="checkbox" class="optional-toggle" value="{{ $item->id }}" {{ $included ? 'checked' : '' }} aria-label="Add {{ $item->publicDisplayName() }}">
+                            <label class="item-switch">
+                                <input type="checkbox" class="optional-toggle" value="{{ $item->id }}" {{ $included ? 'checked' : '' }} aria-label="Add {{ $item->publicDisplayName() }}">
+                                <span class="item-switch-track" aria-hidden="true"></span>
+                            </label>
                             @endif
                         </td>
                         @endif
