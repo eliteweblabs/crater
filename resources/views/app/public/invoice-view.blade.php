@@ -27,7 +27,7 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; }
-        .container { max-width: 800px; margin: 40px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .container { max-width: 800px; margin: 40px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: visible; }
         .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; padding-bottom: 20px; border-bottom: 2px solid #eee; }
         .logo img { max-width: 200px; height: auto; }
         .invoice-info { text-align: right; }
@@ -40,8 +40,8 @@
         .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px; }
         .party h3 { font-size: 12px; text-transform: uppercase; color: #999; margin-bottom: 8px; font-weight: 600; }
         .party p { margin: 4px 0; }
-        .items { margin: 40px -40px 20px; }
-        .item-row { overflow: hidden; padding: 16px 40px; border-bottom: 1px solid #eee; }
+        .items { margin: 40px -40px 20px; overflow: visible; }
+        .item-row { position: relative; overflow: visible; padding: 16px 40px; border-bottom: 1px solid #eee; }
         .item-row--optional { background: #faf7ff; }
         .item-row--off { opacity: 0.55; }
         .item-switch { float: left; position: relative; display: inline-flex; cursor: pointer; margin: 3px 12px 8px 0; }
@@ -82,7 +82,26 @@
             outline: 2px solid #c026d3;
             outline-offset: 2px;
         }
-        .addon-badge { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: #ffffff; background: linear-gradient(145deg, #f472b6 0%, #c026d3 52%, #6366f1 100%); }
+        .addon-badge {
+            position: absolute;
+            top: 0;
+            right: 0;
+            z-index: 2;
+            display: inline-block;
+            padding: 3px 9px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            line-height: 1.2;
+            text-transform: uppercase;
+            color: #ffffff;
+            background: linear-gradient(145deg, #f472b6 0%, #c026d3 52%, #6366f1 100%);
+            box-shadow: 0 2px 8px rgba(192, 38, 211, 0.28);
+            transform: translate(42%, -45%);
+            pointer-events: none;
+            white-space: nowrap;
+        }
         .totals { margin-left: auto; width: 300px; margin-top: 20px; }
         .totals .row { display: flex; justify-content: space-between; padding: 8px 0; }
         .totals .row.total { font-size: 20px; font-weight: 600; padding-top: 16px; border-top: 2px solid #eee; margin-top: 8px; }
@@ -110,6 +129,7 @@
             .totals { width: 100%; }
             .items { margin-left: -20px; margin-right: -20px; }
             .item-row { padding-left: 16px; padding-right: 16px; }
+            .addon-badge { transform: translate(28%, -40%); }
         }
     </style>
 </head>
@@ -183,12 +203,12 @@
                     <span class="item-switch-track" aria-hidden="true"></span>
                 </label>
                 @endif
+                @if($optional)
+                    <span class="addon-badge">Optional</span>
+                @endif
                 <div class="amount">${{ number_format(($included || ! $optional ? $item->total : 0) / 100, 2) }}</div>
                 <div class="item-title">
                     {{ $item->publicDisplayName() }}
-                    @if($optional)
-                        <span class="addon-badge">Optional</span>
-                    @endif
                 </div>
                 @if($item->description)
                     <div class="description">{{ $item->description }}</div>
