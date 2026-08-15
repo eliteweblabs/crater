@@ -23,7 +23,7 @@ class PublicInvoiceController extends Controller
         $hasOptionalItems = $invoice->paid_status !== Invoice::STATUS_PAID
             && $invoice->items->contains(fn ($item) => $item->isOptional());
 
-        $ogImageUrl = url('/invoices/'.$invoice->unique_hash.'/og.png').'?v=icons';
+        $ogImageUrl = url('/invoices/'.$invoice->unique_hash.'/og.png').'?v=pair';
 
         // Get all non-draft invoices for the same customer
         $customerInvoices = Invoice::where('customer_id', $invoice->customer_id)
@@ -74,49 +74,17 @@ class PublicInvoiceController extends Controller
         imagealphablending($im, true);
         imagesavealpha($im, true);
 
-        $bg = imagecolorallocate($im, 12, 6, 20);
+        $bg = imagecolorallocate($im, 10, 10, 10);
         imagefilledrectangle($im, 0, 0, $w, $h, $bg);
 
-        $this->paintGlow($im, (int) ($w * 0.18), (int) ($h * 0.15), 520, 192, 38, 211, 0.28);
-        $this->paintGlow($im, (int) ($w * 0.82), (int) ($h * 0.75), 480, 99, 102, 241, 0.22);
-
-        $bar = imagecreatetruecolor($w, 10);
-        for ($x = 0; $x < $w; $x++) {
-            $t = $x / max(1, $w - 1);
-            if ($t < 0.52) {
-                $u = $t / 0.52;
-                $r = (int) (244 + (192 - 244) * $u);
-                $g = (int) (114 + (38 - 114) * $u);
-                $b = (int) (182 + (211 - 182) * $u);
-            } else {
-                $u = ($t - 0.52) / 0.48;
-                $r = (int) (192 + (99 - 192) * $u);
-                $g = (int) (38 + (102 - 38) * $u);
-                $b = (int) (211 + (241 - 211) * $u);
-            }
-            imageline($bar, $x, 0, $x, 9, imagecolorallocate($bar, $r, $g, $b));
-        }
-        imagecopy($im, $bar, 0, 0, 0, 0, $w, 10);
-        imagedestroy($bar);
-
-        $white = imagecolorallocate($im, 255, 255, 255);
-        $muted = imagecolorallocate($im, 196, 184, 210);
-        $pink = imagecolorallocate($im, 244, 114, 182);
-
-        $regular = $this->fontPath(false);
-        $bold = $this->fontPath(true) ?? $regular;
-
         $company = $invoice->company->name ?? 'Invoice';
-        $number = $invoice->invoice_number ?: 'Invoice';
         $customer = $invoice->customer->name ?? '';
-        $amount = '$'.number_format(((int) $invoice->total) / 100, 2);
-        $due = $invoice->formattedDueDate ? 'Due '.$invoice->formattedDueDate : '';
 
-        $iconSize = 188;
-        $iconGap = 40;
+        $iconSize = 280;
+        $iconGap = 56;
         $pairWidth = ($iconSize * 2) + $iconGap;
         $iconX = (int) (($w - $pairWidth) / 2);
-        $iconY = 72;
+        $iconY = (int) (($h - $iconSize) / 2);
 
         $this->paintIconTile(
             $im,
@@ -135,25 +103,6 @@ class PublicInvoiceController extends Controller
             $iconSize
         );
 
-        $textTop = $iconY + $iconSize + 56;
-
-        if ($regular) {
-            $this->drawCentered($im, 20, $textTop, $pink, $regular, 'INVOICE');
-            $this->drawCentered($im, 42, $textTop + 58, $white, $bold ?? $regular, $this->fitText($number, $bold ?? $regular, 42, 1000));
-            $this->drawCentered($im, 64, $textTop + 140, $white, $bold ?? $regular, $this->fitText($amount, $bold ?? $regular, 64, 1000));
-            if ($customer !== '') {
-                $this->drawCentered($im, 24, $textTop + 200, $muted, $regular, $this->fitText($customer, $regular, 24, 1000));
-            }
-            if ($due !== '') {
-                $this->drawCentered($im, 20, $textTop + 242, $muted, $regular, $due);
-            }
-        } else {
-            imagestring($im, 5, 72, 360, 'INVOICE', $pink);
-            imagestring($im, 5, 72, 400, $number, $white);
-            imagestring($im, 5, 72, 440, $amount, $white);
-            imagestring($im, 4, 72, 480, $customer, $muted);
-        }
-
         ob_start();
         imagepng($im);
         $png = (string) ob_get_clean();
@@ -167,14 +116,6 @@ class PublicInvoiceController extends Controller
         return function_exists('imagettfbbox') && function_exists('imagettftext');
     }
 
-    private function drawCentered($im, int $size, int $baselineY, $color, string $font, string $text): void
-    {
-        $box = \imagettfbbox($size, 0, $font, $text);
-        $width = abs($box[2] - $box[0]);
-        $x = (int) ((self::OG_WIDTH - $width) / 2);
-        \imagettftext($im, $size, 0, $x, $baselineY, $color, $font, $text);
-    }
-
     private function paintIconTile($im, ?string $bytes, string $label, int $x, int $y, int $size): void
     {
         $radius = (int) ($size * 0.22);
@@ -183,7 +124,7 @@ class PublicInvoiceController extends Controller
 
         $src = $bytes ? @imagecreatefromstring($bytes) : false;
         if ($src) {
-            $pad = 20;
+            $pad = 16;
             $this->pasteContain($im, $src, $x + $pad, $y + $pad, $size - ($pad * 2), $size - ($pad * 2));
             imagedestroy($src);
 
@@ -253,11 +194,12 @@ class PublicInvoiceController extends Controller
             return null;
         }
 
+        $origin = InvoiceOgIcons::reaveOrigin(config('crater.reave_app_url'));
         $logoUrl = trim((string) ($company->logo ?? config('crater.company_logo_url') ?? ''));
         $urls = array_filter([
             InvoiceOgIcons::safeHttpUrl(config('crater.company_icon_url')),
+            InvoiceOgIcons::companyBrandIconUrl($origin),
             InvoiceOgIcons::safeHttpUrl($logoUrl),
-            InvoiceOgIcons::reaveBrandingIconUrl(config('crater.company_icon_url')),
             InvoiceOgIcons::reaveBrandingIconUrl($logoUrl),
         ]);
 
@@ -281,8 +223,22 @@ class PublicInvoiceController extends Controller
 
     private function clientIconBytes(Invoice $invoice): ?string
     {
-        $contact = $this->loadContact($invoice);
-        $sources = InvoiceOgIcons::clientIconSources(InvoiceOgIcons::portalFromContact($contact));
+        $origin = InvoiceOgIcons::reaveOrigin(config('crater.reave_app_url'));
+        $uid = $this->contactUid($invoice);
+
+        // Uploaded icons live on Reave, not as a full URL in contact-api.
+        foreach (InvoiceOgIcons::clientServeUrls((string) $uid, $origin) as $url) {
+            $bytes = $this->fetchImageBytes($url);
+            if ($bytes) {
+                return $bytes;
+            }
+        }
+
+        $contact = $this->loadContact($invoice, $uid);
+        $sources = InvoiceOgIcons::clientIconSources(
+            InvoiceOgIcons::portalFromContact($contact),
+            $origin
+        );
 
         foreach ($sources as $source) {
             if (!empty($source['data'])) {
@@ -302,22 +258,19 @@ class PublicInvoiceController extends Controller
         return null;
     }
 
-    private function loadContact(Invoice $invoice): ?array
+    private function contactUid(Invoice $invoice): ?string
     {
+        $uid = trim((string) ($invoice->customer->contact_uid ?? ''));
+        if ($uid !== '') {
+            return $uid;
+        }
+
         $api = app(ContactApiClient::class);
         if (!$api->isEnabled()) {
             return null;
         }
 
         $customer = $invoice->customer;
-        $uid = trim((string) ($customer->contact_uid ?? ''));
-        if ($uid !== '') {
-            $contact = $api->get($uid, 8);
-            if ($contact) {
-                return $contact;
-            }
-        }
-
         $resolved = $api->resolve(
             $customer->name ?? null,
             $customer->email ?? null,
@@ -327,7 +280,24 @@ class PublicInvoiceController extends Controller
             return null;
         }
 
-        return is_array($resolved['contact'] ?? null) ? $resolved['contact'] : null;
+        $found = trim((string) data_get($resolved, 'contact.uid', ''));
+
+        return $found !== '' ? $found : null;
+    }
+
+    private function loadContact(Invoice $invoice, ?string $uid = null): ?array
+    {
+        $api = app(ContactApiClient::class);
+        if (!$api->isEnabled()) {
+            return null;
+        }
+
+        $uid = trim((string) ($uid ?: $invoice->customer->contact_uid ?? ''));
+        if ($uid === '') {
+            return null;
+        }
+
+        return $api->get($uid, 8);
     }
 
     private function fetchImageBytes(string $url): ?string
@@ -360,17 +330,6 @@ class PublicInvoiceController extends Controller
             return $bytes;
         } catch (\Throwable $e) {
             return null;
-        }
-    }
-
-    private function paintGlow($im, int $cx, int $cy, int $radius, int $r, int $g, int $b, float $alpha): void
-    {
-        imagesetthickness($im, 1);
-        for ($i = $radius; $i > 0; $i -= 8) {
-            $t = 1 - ($i / $radius);
-            $a = (int) min(127, round((1 - ($alpha * $t * $t)) * 127));
-            $color = imagecolorallocatealpha($im, $r, $g, $b, $a);
-            imagefilledellipse($im, $cx, $cy, $i * 2, (int) ($i * 1.4), $color);
         }
     }
 
@@ -408,24 +367,5 @@ class PublicInvoiceController extends Controller
         }
 
         return null;
-    }
-
-    private function fitText(string $text, string $font, int $size, int $maxWidth): string
-    {
-        $text = trim($text);
-        if ($text === '') {
-            return $text;
-        }
-
-        while (mb_strlen($text) > 3) {
-            $box = \imagettfbbox($size, 0, $font, $text);
-            $width = abs($box[2] - $box[0]);
-            if ($width <= $maxWidth) {
-                return $text;
-            }
-            $text = rtrim(mb_substr($text, 0, -2)).'…';
-        }
-
-        return $text;
     }
 }

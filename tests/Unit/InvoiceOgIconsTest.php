@@ -33,13 +33,22 @@ test('prefers uploaded icon data then remote icon then logo', function () {
         ->and($sources[3])->toBe(['url' => 'https://cdn.example/logo.png']);
 });
 
-test('skips relative and non-http icon urls', function () {
+test('resolves relative reave icon paths and skips unsafe urls', function () {
     $sources = InvoiceOgIcons::clientIconSources([
         'iconUrl' => '/api/clients/abc/icon',
         'logoUrl' => 'javascript:alert(1)',
-    ]);
+    ], 'https://reave.app');
 
-    expect($sources)->toBe([]);
+    expect($sources)->toBe([['url' => 'https://reave.app/api/clients/abc/icon']]);
+});
+
+test('builds reave client serve urls from a contact uid', function () {
+    expect(InvoiceOgIcons::clientServeUrls('abc-123', 'https://reave.app'))->toBe([
+        'https://reave.app/api/clients/abc-123/icon',
+        'https://reave.app/api/clients/abc-123/logo',
+    ]);
+    expect(InvoiceOgIcons::companyBrandIconUrl('https://reave.app'))
+        ->toBe('https://reave.app/api/branding/icon?size=256&transparent=1');
 });
 
 test('decodes raw and data-uri image payloads and rejects svg', function () {

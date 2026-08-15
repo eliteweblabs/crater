@@ -65,7 +65,7 @@ class InvoiceOgIcons
      *
      * @return list<array{data?: string, url?: string}>
      */
-    public static function clientIconSources(array $portal): array
+    public static function clientIconSources(array $portal, string $origin = 'https://reave.app'): array
     {
         $sources = [];
 
@@ -73,7 +73,8 @@ class InvoiceOgIcons
             $sources[] = ['data' => (string) $portal['iconData']];
         }
 
-        $iconUrl = self::safeHttpUrl($portal['iconUrl'] ?? null);
+        $iconUrl = self::safeHttpUrl($portal['iconUrl'] ?? null)
+            ?? self::absolutizeReaveUrl($portal['iconUrl'] ?? null, $origin);
         if ($iconUrl) {
             $sources[] = ['url' => $iconUrl];
         }
@@ -82,12 +83,62 @@ class InvoiceOgIcons
             $sources[] = ['data' => (string) $portal['logoData']];
         }
 
-        $logoUrl = self::safeHttpUrl($portal['logoUrl'] ?? null);
+        $logoUrl = self::safeHttpUrl($portal['logoUrl'] ?? null)
+            ?? self::absolutizeReaveUrl($portal['logoUrl'] ?? null, $origin);
         if ($logoUrl) {
             $sources[] = ['url' => $logoUrl];
         }
 
         return $sources;
+    }
+
+    public static function reaveOrigin(?string $configured = null): string
+    {
+        $configured = trim((string) $configured);
+        if (preg_match('#^https?://#i', $configured)) {
+            return rtrim($configured, '/');
+        }
+
+        return 'https://reave.app';
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function clientServeUrls(string $uid, string $origin): array
+    {
+        $uid = trim($uid);
+        if ($uid === '') {
+            return [];
+        }
+
+        $base = rtrim($origin, '/');
+
+        return [
+            $base.'/api/clients/'.rawurlencode($uid).'/icon',
+            $base.'/api/clients/'.rawurlencode($uid).'/logo',
+        ];
+    }
+
+    public static function companyBrandIconUrl(string $origin): string
+    {
+        return rtrim($origin, '/').'/api/branding/icon?size=256&transparent=1';
+    }
+
+    public static function absolutizeReaveUrl(?string $url, string $origin): ?string
+    {
+        $url = trim((string) $url);
+        if ($url === '') {
+            return null;
+        }
+        if (preg_match('#^https?://#i', $url)) {
+            return $url;
+        }
+        if (str_starts_with($url, '/')) {
+            return rtrim($origin, '/').$url;
+        }
+
+        return null;
     }
 
     /**

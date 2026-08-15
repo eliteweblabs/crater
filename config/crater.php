@@ -27,6 +27,12 @@ return [
     'company_icon_url' => env('COMPANY_ICON_URL'),
 
     /*
+    * Public Reave origin — used to fetch company + client icons for OG cards.
+    * Uploaded client icons are served at /api/clients/{uid}/icon on this host.
+    */
+    'reave_app_url' => env('REAVE_APP_URL', 'https://reave.app'),
+
+    /*
     * Minimum php version.
     */
     'min_php_version' => '7.4.0',
