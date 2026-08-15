@@ -50,9 +50,7 @@
         .header {
             display: grid;
             grid-template-columns: 1fr auto;
-            grid-template-areas:
-                "logo info"
-                "logo status";
+            grid-template-areas: "logo info";
             align-items: start;
             justify-items: end;
             margin-bottom: 24px;
@@ -60,12 +58,17 @@
             border-bottom: 2px solid #eee;
         }
         .logo { grid-area: logo; justify-self: start; }
-        .invoice-info { grid-area: info; text-align: right; }
-        .header > .status { grid-area: status; margin-top: 8px; }
         .logo img { max-width: 200px; height: auto; }
-        .invoice-info { text-align: right; }
+        .invoice-info {
+            grid-area: info;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 10px;
+            text-align: right;
+        }
         .invoice-info h1 { font-size: 28px; font-weight: 300; color: #666; margin: 0; letter-spacing: -0.02em; }
-        .status { display: inline-block; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; margin-top: 8px; }
+        .status { display: inline-block; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; }
         .status.sent { background: #e3f2fd; color: #1976d2; }
         .status.paid { background: #e8f5e9; color: #388e3c; }
         .status.overdue { background: #ffebee; color: #d32f2f; }
@@ -173,13 +176,10 @@
         .btn-pdf { border-radius: 999px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 22px; }
         .btn-pdf svg { flex: none; }
         .foot-tag {
-            letter-spacing: 0.02em;
             display: inline-flex;
             align-items: center;
             gap: 0;
             line-height: 1;
-            font-size: 12px;
-            color: #bbb;
         }
         .foot-bean {
             display: inline-flex;
@@ -204,14 +204,13 @@
                 display: grid;
                 grid-template-columns: 1fr auto;
                 grid-template-areas:
-                    "logo status"
+                    "logo logo"
                     "info info";
                 gap: 8px 12px;
                 align-items: start;
             }
             .logo { grid-area: logo; }
-            .invoice-info { grid-area: info; text-align: left; justify-self: start; }
-            .header > .status { grid-area: status; margin-top: 0; justify-self: end; }
+            .invoice-info { grid-area: info; justify-content: flex-start; text-align: left; justify-self: start; }
             .parties { grid-template-columns: 1fr; gap: 24px; }
             .totals { width: 100%; }
             .items { margin-left: -20px; margin-right: -20px; }
@@ -239,8 +238,8 @@
                         : (string) $invoice->invoice_number;
                 @endphp
                 <h1>INVOICE #{{ $invoiceShortNo }}</h1>
+                <span class="status {{ strtolower($invoice->status) }}">{{ $invoice->paid_status === 'PAID' ? 'PAID' : $invoice->status }}</span>
             </div>
-            <span class="status {{ strtolower($invoice->status) }}">{{ $invoice->paid_status === 'PAID' ? 'PAID' : $invoice->status }}</span>
         </div>
 
         <div class="parties">
@@ -602,7 +601,7 @@
             @if($invoice->company->website)
             <p style="margin-top: 4px;"><a href="{{ $invoice->company->website }}" target="_blank" style="color: #667eea;">{{ $invoice->company->website }}</a></p>
             @endif
-            <p style="margin-top: 16px;">
+            <p style="margin-top: 8px;">
                 <span class="foot-tag" aria-label="Baked in Boston">
                     Baked in B<span class="foot-bean foot-bean--a" aria-hidden="true"><svg class="foot-bean-icon" viewBox="0 0 11 14" focusable="false" aria-hidden="true"><path d="M5.8 1.1c2.9-.1 4.6 2.2 4.5 5.3-.1 3.1-2 5.9-4.4 6.3-1.4.3-2.6-.4-3-1.6-.35-.95-.15-2.05.55-2.35.65-.25 1.15.75.95 2.05-.35 2.2-2.25 1.35-2.75-1.05C1.15 7.35 1.55 3.95 3.25 2.25 4.15 1.35 5 1.1 5.8 1.1Z" fill="currentColor"></path><path d="M3.45 3.35q.55 3.65.95 7.35" fill="none" stroke="currentColor" stroke-width=".7" stroke-linecap="round" opacity=".4"></path></svg></span>st<span class="foot-bean foot-bean--b" aria-hidden="true"><svg class="foot-bean-icon" viewBox="0 0 11 14" focusable="false" aria-hidden="true"><path d="M5.8 1.1c2.9-.1 4.6 2.2 4.5 5.3-.1 3.1-2 5.9-4.4 6.3-1.4.3-2.6-.4-3-1.6-.35-.95-.15-2.05.55-2.35.65-.25 1.15.75.95 2.05-.35 2.2-2.25 1.35-2.75-1.05C1.15 7.35 1.55 3.95 3.25 2.25 4.15 1.35 5 1.1 5.8 1.1Z" fill="currentColor"></path><path d="M3.45 3.35q.55 3.65.95 7.35" fill="none" stroke="currentColor" stroke-width=".7" stroke-linecap="round" opacity=".4"></path></svg></span>n
                 </span>
