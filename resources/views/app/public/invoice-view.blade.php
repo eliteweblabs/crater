@@ -163,7 +163,7 @@
         .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
         .btn-secondary { background: white; color: #666; border: 1px solid #ddd; margin-top: 12px; }
         .btn-secondary:hover { border-color: #999; color: #333; }
-        .btn-pdf { border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: auto; padding: 12px 22px; }
+        .btn-pdf { border-radius: 999px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 22px; }
         .btn-pdf svg { flex: none; }
         .foot-tag {
             letter-spacing: 0.02em;
