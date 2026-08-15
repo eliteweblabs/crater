@@ -55,8 +55,8 @@
                 "logo status";
             align-items: start;
             justify-items: end;
-            margin-bottom: 40px;
-            padding-bottom: 20px;
+            margin-bottom: 24px;
+            padding-bottom: 12px;
             border-bottom: 2px solid #eee;
         }
         .logo { grid-area: logo; justify-self: start; }
@@ -64,8 +64,7 @@
         .header > .status { grid-area: status; margin-top: 8px; }
         .logo img { max-width: 200px; height: auto; }
         .invoice-info { text-align: right; }
-        .invoice-info h1 { font-size: 32px; font-weight: 300; color: #666; margin-bottom: 8px; }
-        .invoice-info .number { font-size: 18px; color: #999; }
+        .invoice-info h1 { font-size: 28px; font-weight: 300; color: #666; margin: 0; letter-spacing: -0.02em; }
         .status { display: inline-block; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; margin-top: 8px; }
         .status.sent { background: #e3f2fd; color: #1976d2; }
         .status.paid { background: #e8f5e9; color: #388e3c; }
@@ -206,7 +205,7 @@
                 grid-template-areas:
                     "logo status"
                     "info info";
-                gap: 16px 12px;
+                gap: 8px 12px;
                 align-items: start;
             }
             .logo { grid-area: logo; }
@@ -233,8 +232,12 @@
                 <img src="{{ $invoice->company->logo ?? asset('build/img/crater-logo.png') }}" alt="{{ $invoice->company->name }}">
             </div>
             <div class="invoice-info">
-                <h1>INVOICE</h1>
-                <div class="number">{{ $invoice->invoice_number }}</div>
+                @php
+                    $invoiceShortNo = preg_match('/(\d+)\s*$/', (string) $invoice->invoice_number, $m)
+                        ? (string) intval($m[1])
+                        : (string) $invoice->invoice_number;
+                @endphp
+                <h1>INVOICE #{{ $invoiceShortNo }}</h1>
             </div>
             <span class="status {{ strtolower($invoice->status) }}">{{ $invoice->paid_status === 'PAID' ? 'PAID' : $invoice->status }}</span>
         </div>
