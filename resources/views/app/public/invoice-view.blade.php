@@ -5,10 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
     @php
-        $clientName = $invoice->customer->name ?: 'client';
         $pageTitle = $invoice->paid_status === 'PAID'
-            ? 'Invoice for '.$clientName
-            : 'New invoice for '.$clientName;
+            ? 'Invoice'
+            : 'New Invoice';
     @endphp
     <title>{{ $pageTitle }}</title>
     
