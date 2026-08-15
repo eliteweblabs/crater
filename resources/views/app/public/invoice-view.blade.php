@@ -32,6 +32,7 @@
 
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { overflow-x: hidden; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; }
         .container { max-width: 800px; margin: 40px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: visible; }
         .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; padding-bottom: 20px; border-bottom: 2px solid #eee; }
@@ -106,7 +107,8 @@
             color: #ffffff;
             background: linear-gradient(145deg, #f472b6 0%, #c026d3 52%, #6366f1 100%);
             box-shadow: 0 2px 8px rgba(192, 38, 211, 0.28);
-            transform: translate(42%, -45%);
+            /* Hang by the pill’s end-cap radius so the card edge bisects that circle. */
+            transform: translate(9px, -50%);
             pointer-events: none;
             white-space: nowrap;
         }
@@ -160,7 +162,7 @@
             .totals { width: 100%; }
             .items { margin-left: -20px; margin-right: -20px; }
             .item-row { padding-left: 16px; padding-right: 16px; }
-            .addon-badge { transform: translate(28%, -40%); }
+            .addon-badge { transform: translate(9px, -50%); }
         }
     </style>
 </head>
