@@ -112,7 +112,7 @@
         }
         .totals { margin-left: auto; width: 300px; margin-top: 20px; }
         .totals .row { display: flex; justify-content: space-between; padding: 8px 0; }
-        .totals .row.total { font-size: 20px; font-weight: 600; padding-top: 16px; border-top: 2px solid #eee; margin-top: 8px; }
+        .totals .row.total { font-size: 20px; font-weight: 600; }
         .pay-cta { display: none; margin: 24px 0 0; width: 100%; padding: 14px 28px; border: none; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #ffffff; cursor: pointer; background: linear-gradient(145deg, #f472b6 0%, #c026d3 52%, #6366f1 100%); box-shadow: 0 2px 16px rgba(192, 38, 211, 0.35); }
         .pay-cta.is-visible { display: block; }
         .pay-cta:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -125,7 +125,30 @@
         .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
         .btn-secondary { background: white; color: #666; border: 1px solid #ddd; margin-top: 12px; }
         .btn-secondary:hover { border-color: #999; color: #333; }
-        .btn-pdf { border-radius: 999px; }
+        .btn-pdf { border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: auto; padding: 12px 22px; }
+        .btn-pdf svg { flex: none; }
+        .foot-tag {
+            letter-spacing: 0.02em;
+            display: inline-flex;
+            align-items: center;
+            gap: 0;
+            line-height: 1;
+            font-size: 12px;
+            color: #bbb;
+        }
+        .foot-bean {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 10px;
+            height: 10px;
+            margin: 0 1px;
+            flex: none;
+            overflow: visible;
+        }
+        .foot-bean-icon { display: block; width: 10px; height: 13px; flex: none; }
+        .foot-bean--a { transform: rotate(28deg); }
+        .foot-bean--b { transform: rotate(-28deg); }
         .error-message { color: #d32f2f; margin-top: 12px; font-size: 14px; }
         .success-message { background: #e8f5e9; border: 1px solid #388e3c; color: #2e7d32; padding: 16px; border-radius: 6px; margin-bottom: 20px; }
         .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; color: #999; font-size: 14px; text-align: center; }
@@ -221,10 +244,6 @@
         </div>
 
         <div class="totals">
-            <div class="row">
-                <span>Subtotal</span>
-                <span id="subtotal-display">${{ number_format($invoice->sub_total / 100, 2) }}</span>
-            </div>
             @if($invoice->tax > 0)
             <div class="row">
                 <span>Tax</span>
@@ -417,7 +436,9 @@
 
         <div style="margin-top: 20px; text-align: center;">
             <a href="{{ url("/invoices/pdf/{$invoice->unique_hash}") }}" class="btn btn-secondary btn-pdf" target="_blank">
-                📄 Download PDF
+                {{-- Lucide file-text — PDF download --}}
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+                Download PDF
             </a>
         </div>
 
@@ -427,6 +448,11 @@
             @if($invoice->company->website)
             <p style="margin-top: 4px;"><a href="{{ $invoice->company->website }}" target="_blank" style="color: #667eea;">{{ $invoice->company->website }}</a></p>
             @endif
+            <p style="margin-top: 16px;">
+                <span class="foot-tag" aria-label="Baked in Boston">
+                    Baked in B<span class="foot-bean foot-bean--a" aria-hidden="true"><svg class="foot-bean-icon" viewBox="0 0 11 14" focusable="false" aria-hidden="true"><path d="M5.8 1.1c2.9-.1 4.6 2.2 4.5 5.3-.1 3.1-2 5.9-4.4 6.3-1.4.3-2.6-.4-3-1.6-.35-.95-.15-2.05.55-2.35.65-.25 1.15.75.95 2.05-.35 2.2-2.25 1.35-2.75-1.05C1.15 7.35 1.55 3.95 3.25 2.25 4.15 1.35 5 1.1 5.8 1.1Z" fill="currentColor"></path><path d="M3.45 3.35q.55 3.65.95 7.35" fill="none" stroke="currentColor" stroke-width=".7" stroke-linecap="round" opacity=".4"></path></svg></span>st<span class="foot-bean foot-bean--b" aria-hidden="true"><svg class="foot-bean-icon" viewBox="0 0 11 14" focusable="false" aria-hidden="true"><path d="M5.8 1.1c2.9-.1 4.6 2.2 4.5 5.3-.1 3.1-2 5.9-4.4 6.3-1.4.3-2.6-.4-3-1.6-.35-.95-.15-2.05.55-2.35.65-.25 1.15.75.95 2.05-.35 2.2-2.25 1.35-2.75-1.05C1.15 7.35 1.55 3.95 3.25 2.25 4.15 1.35 5 1.1 5.8 1.1Z" fill="currentColor"></path><path d="M3.45 3.35q.55 3.65.95 7.35" fill="none" stroke="currentColor" stroke-width=".7" stroke-linecap="round" opacity=".4"></path></svg></span>n
+                </span>
+            </p>
         </div>
     </div>
 
