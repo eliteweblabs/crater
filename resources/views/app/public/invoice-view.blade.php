@@ -46,6 +46,7 @@
         .items td { padding: 16px 0; border-bottom: 1px solid #f5f5f5; }
         .items .description { color: #666; font-size: 14px; }
         .items .amount { text-align: right; }
+        .item-qty, .item-rate { display: none; }
         .item-row--optional { background: #faf7ff; }
         .item-row--off { opacity: 0.55; }
         .item-check { width: 56px; text-align: center; vertical-align: top; padding-top: 18px !important; }
@@ -173,8 +174,8 @@
                         <th class="item-check"></th>
                         @endif
                         <th>Item</th>
-                        <th style="text-align: center; width: 80px;">Qty</th>
-                        <th style="text-align: right; width: 100px;">Rate</th>
+                        <th class="item-qty" style="text-align: center; width: 80px;">Qty</th>
+                        <th class="item-rate" style="text-align: right; width: 100px;">Rate</th>
                         <th style="text-align: right; width: 120px;">Amount</th>
                     </tr>
                 </thead>
@@ -212,7 +213,7 @@
                             @endif
                         </td>
                         <td class="item-qty" style="text-align: center;">{{ $included || ! $optional ? $item->quantity : 0 }}</td>
-                        <td style="text-align: right;">${{ number_format($item->price / 100, 2) }}</td>
+                        <td class="item-rate" style="text-align: right;">${{ number_format($item->price / 100, 2) }}</td>
                         <td class="amount">${{ number_format(($included || ! $optional ? $item->total : 0) / 100, 2) }}</td>
                     </tr>
                     @endforeach
