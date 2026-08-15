@@ -70,7 +70,15 @@
         .item-switch { float: left; position: relative; display: inline-flex; cursor: pointer; margin: 3px 12px 8px 0; }
         .items .item-title { font-weight: 500; }
         .items .description { color: #666; font-size: 14px; }
-        .items .amount { float: right; margin: 0 0 8px 12px; font-weight: 500; white-space: nowrap; }
+        .items .amount {
+            float: right;
+            margin: 0 0 8px 12px;
+            font-weight: 500;
+            white-space: nowrap;
+            min-width: 6.25em;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
         .item-switch input { position: absolute; inset: 0; z-index: 1; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
         .item-switch-track {
             position: relative;
@@ -258,7 +266,7 @@
                 @if($optional)
                     <span class="addon-badge">Optional</span>
                 @endif
-                <div class="amount">${{ number_format(($included || ! $optional ? $item->total : 0) / 100, 2) }}</div>
+                <div class="amount">${{ number_format(($optional ? $item->price : $item->total) / 100, 2) }}</div>
                 <div class="item-title">
                     {{ $item->publicDisplayName() }}
                 </div>
@@ -336,12 +344,12 @@
                     document.querySelectorAll('.item-row').forEach((row) => {
                         const optional = row.dataset.optional === '1';
                         const on = optional ? !!row.querySelector('.optional-toggle')?.checked : true;
-                        const cents = optional ? (on ? Number(row.dataset.price || 0) : 0) : Number(row.dataset.fixedCents || 0);
-                        if (optional) subtotal += cents;
-                        else subtotal += cents;
+                        const priceCents = optional ? Number(row.dataset.price || 0) : Number(row.dataset.fixedCents || 0);
+                        const cents = optional && !on ? 0 : priceCents;
+                        subtotal += cents;
                         const amountEl = row.querySelector('.amount');
                         const qtyEl = row.querySelector('.item-qty');
-                        if (amountEl) amountEl.textContent = money(cents);
+                        if (amountEl) amountEl.textContent = money(priceCents);
                         if (optional && qtyEl) qtyEl.textContent = on ? '1' : '0';
                         row.classList.toggle('item-row--off', optional && !on);
                     });
