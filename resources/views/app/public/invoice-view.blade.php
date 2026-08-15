@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
     @php
         $clientName = $invoice->customer->name ?: 'client';
         $pageTitle = $invoice->paid_status === 'PAID'
@@ -82,6 +83,7 @@
         .item-switch { float: left; position: relative; display: inline-flex; cursor: pointer; margin: 3px 12px 8px 0; }
         .items .item-title { font-weight: 500; }
         .items .description { color: #666; font-size: 14px; }
+        .items .description a { color: inherit; text-decoration: none; pointer-events: none; }
         .items .amount {
             float: right;
             margin: 0 0 8px 12px;
@@ -283,7 +285,7 @@
                     {{ $item->publicDisplayName() }}
                 </div>
                 @if($item->description)
-                    <div class="description">{{ $item->description }}</div>
+                    <div class="description" x-apple-data-detectors="false">{{ $item->description }}</div>
                 @endif
             </div>
             @endforeach
