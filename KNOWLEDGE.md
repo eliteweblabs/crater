@@ -185,7 +185,7 @@ Examples:
 Web Design (required)
 Railway Web Hosting - 1 Year - 10/2026 - 10/2027 (required) (yearly)
 Plausible Analytics - 1 Year - 10/2026 - 10/2027 (optional) (yearly)
-Booksy White Labeling (optional) (can be added anytime)
+Booxie White Label (optional) (can be added anytime)
 ```
 
 Do not invent product names. **Plausible Analytics** is the analytics add-on — never "Phaseline Analytics".
