@@ -402,6 +402,8 @@
                 let stripe = null;
                 let elements = null;
                 let paymentElement = null;
+                let paymentReady = { type: null, complete: false };
+                let ignoreConfirmUntil = 0;
                 const payBtn = document.getElementById('pay-cta');
                 const mountEl = document.getElementById('payment-element');
                 const errorEl = document.getElementById('pay-error');
@@ -432,6 +434,8 @@
                         paymentElement = null;
                     }
                     elements = null;
+                    paymentReady = { type: null, complete: false };
+                    ignoreConfirmUntil = 0;
                     if (mountEl) mountEl.innerHTML = '';
                     showError('');
                     labelPay();
@@ -485,6 +489,16 @@
                     paymentElement = elements.create('payment', {
                         defaultValues: { billingDetails },
                     });
+                    paymentElement.on('change', (event) => {
+                        const nextType = event.value && event.value.type ? event.value.type : null;
+                        if (nextType !== paymentReady.type) {
+                            // Card fields collapse when switching to Apple Pay; the
+                            // same tap can land on Pay and confirm the empty card.
+                            ignoreConfirmUntil = Date.now() + 500;
+                            showError('');
+                        }
+                        paymentReady = { type: nextType, complete: !!event.complete };
+                    });
                     paymentElement.mount('#payment-element');
                     labelPay();
                     return true;
@@ -493,6 +507,9 @@
                 const confirmPay = async () => {
                     if (!elements) {
                         await mountCheckout();
+                        return;
+                    }
+                    if (Date.now() < ignoreConfirmUntil) {
                         return;
                     }
                     showError('');
@@ -505,7 +522,14 @@
                         confirmParams: { return_url: returnUrl },
                     });
                     if (error) {
-                        showError(error.message || 'Payment failed.');
+                        const switchedAwayFromCard = paymentReady.type && paymentReady.type !== 'card';
+                        const cardIncomplete = error.type === 'validation_error'
+                            && /card details/i.test(error.message || '');
+                        if (switchedAwayFromCard && cardIncomplete) {
+                            showError('');
+                        } else {
+                            showError(error.message || 'Payment failed.');
+                        }
                         labelPay();
                     }
                 };
