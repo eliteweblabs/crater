@@ -77,8 +77,8 @@
         .party h3 { font-size: 12px; text-transform: uppercase; color: #999; margin-bottom: 8px; font-weight: 600; }
         .party p { margin: 4px 0; }
         .items { margin: 40px -40px 20px; overflow: visible; }
-        .item-row { position: relative; overflow: visible; padding: 16px 40px; border-bottom: 1px solid #eee; }
-        .item-row--optional { background: #faf7ff; }
+        .item-row { display: block; position: relative; overflow: visible; padding: 16px 40px; border-bottom: 1px solid #eee; }
+        .item-row--optional { background: #faf7ff; cursor: pointer; }
         .item-row--off { opacity: 0.55; }
         .item-switch { float: left; position: relative; display: inline-flex; cursor: pointer; margin: 3px 12px 8px 0; }
         .items .item-title { font-weight: 500; }
@@ -265,17 +265,17 @@
                 $optional = $item->isOptional();
                 $included = ! $optional || (float) $item->quantity > 0;
             @endphp
-            <div class="item-row {{ $optional ? 'item-row--optional' : '' }} {{ $optional && ! $included ? 'item-row--off' : '' }}"
+            <{{ $optional ? 'label' : 'div' }} class="item-row {{ $optional ? 'item-row--optional' : '' }} {{ $optional && ! $included ? 'item-row--off' : '' }}"
                 data-optional="{{ $optional ? '1' : '0' }}"
                 data-item-id="{{ $item->id }}"
                 data-price="{{ (int) $item->price }}"
                 data-fixed-cents="{{ $optional ? 0 : (int) $item->total }}"
                 data-included="{{ $included ? '1' : '0' }}">
                 @if($optional)
-                <label class="item-switch">
+                <span class="item-switch">
                     <input type="checkbox" class="optional-toggle" value="{{ $item->id }}" autocomplete="off" {{ $included ? 'checked' : '' }} aria-label="Add {{ $item->publicDisplayName() }}">
                     <span class="item-switch-track" aria-hidden="true"></span>
-                </label>
+                </span>
                 @endif
                 @if($optional)
                     <span class="addon-badge">Optional</span>
@@ -287,7 +287,7 @@
                 @if($item->description)
                     <div class="description" x-apple-data-detectors="false">{{ $item->description }}</div>
                 @endif
-            </div>
+            </{{ $optional ? 'label' : 'div' }}>
             @endforeach
         </div>
 
