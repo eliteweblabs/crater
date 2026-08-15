@@ -309,18 +309,14 @@
             @endforeach
         </div>
 
+        @if($invoice->tax > 0)
         <div class="totals">
-            @if($invoice->tax > 0)
             <div class="row">
                 <span>Tax</span>
                 <span>${{ number_format($invoice->tax / 100, 2) }}</span>
             </div>
-            @endif
-            <div class="row total">
-                <span>Total</span>
-                <span id="total-display">${{ number_format($invoice->total / 100, 2) }}</span>
-            </div>
         </div>
+        @endif
 
         @if($invoice->notes)
         <div style="margin-top: 40px; padding: 20px; background: #f9f9f9; border-radius: 6px;">
