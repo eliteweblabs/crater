@@ -97,6 +97,10 @@ test('optional add-on selection recalculates invoice totals', function () {
     expect((float) $optional->quantity)->toBe(0.0)
         ->and((int) $optional->total)->toBe(0)
         ->and((int) $invoice->total)->toBe(50000);
+
+    $doc = $invoice->documentItems();
+    expect($doc)->toHaveCount(1)
+        ->and($doc->first()->name)->toBe('Railway Web Hosting (required)');
 });
 
 test('get previous status', function () {

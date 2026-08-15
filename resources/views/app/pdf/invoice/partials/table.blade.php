@@ -18,7 +18,7 @@
     @php
         $index = 1
     @endphp
-    @foreach ($invoice->items as $item)
+    @foreach ($invoice->documentItems() as $item)
         <tr class="item-row">
             <td
                 class="pr-20 text-right item-cell"
@@ -30,7 +30,7 @@
                 class="pl-0 text-left item-cell"
                 style="vertical-align: top;"
             >
-                <span>{{ $item->name }}</span><br>
+                <span>{{ $item->publicDisplayName() }}</span><br>
                 <span class="item-description">{!! nl2br(htmlspecialchars($item->description)) !!}</span>
             </td>
             @foreach($customFields as $field)

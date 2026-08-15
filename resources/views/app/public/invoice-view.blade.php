@@ -190,6 +190,7 @@
         .error-message { color: #d32f2f; margin-top: 12px; font-size: 14px; }
         .success-message { background: #e8f5e9; border: 1px solid #388e3c; color: #2e7d32; padding: 16px; border-radius: 6px; margin-bottom: 20px; }
         .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; color: #999; font-size: 14px; text-align: center; }
+        .pdf-hint { margin-top: 20px; text-align: center; color: #999; font-size: 13px; }
         @media (max-width: 640px) {
             .container { padding: 20px; margin: 20px; }
             .header {
@@ -262,9 +263,13 @@
         <div class="items">
             @foreach($invoice->items as $item)
             @php
-                $optional = $item->isOptional();
+                $paid = $invoice->paid_status === 'PAID';
+                $optional = ! $paid && $item->isOptional();
                 $included = ! $optional || (float) $item->quantity > 0;
             @endphp
+            @if($paid && $item->isOptional() && (float) $item->quantity <= 0)
+                @continue
+            @endif
             <{{ $optional ? 'label' : 'div' }} class="item-row {{ $optional ? 'item-row--optional' : '' }} {{ $optional && ! $included ? 'item-row--off' : '' }}"
                 data-optional="{{ $optional ? '1' : '0' }}"
                 data-item-id="{{ $item->id }}"
@@ -542,6 +547,11 @@
         </div>
         @endif
 
+        @php
+            $pdfReady = $invoice->paid_status === 'PAID'
+                || ! $invoice->items->contains(fn ($item) => $item->isOptional());
+        @endphp
+        @if($pdfReady)
         <div style="margin-top: 20px; text-align: center;">
             <a href="{{ url("/invoices/pdf/{$invoice->unique_hash}") }}" class="btn btn-secondary btn-pdf" target="_blank">
                 {{-- Lucide file-text — PDF download --}}
@@ -549,6 +559,9 @@
                 Download PDF
             </a>
         </div>
+        @else
+        <p class="pdf-hint">A PDF receipt will be available after you pay.</p>
+        @endif
 
         <div class="footer">
             <p>Thank you for your business!</p>

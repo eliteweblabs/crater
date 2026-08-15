@@ -152,7 +152,8 @@ The public page (`/invoices/{unique_hash}`) is what clients open. Recent behavio
 
 - **Qty and rate are hidden.** The client sees name, description, amount, and (for add-ons) a toggle.
 - **Optional rows get a switch.** Toggling live-updates subtotal / due and is sent to Stripe as `optional_item_ids` when they pay.
-- **Paid invoices lock.** Toggles do not appear after `paid_status = PAID`.
+- **Paid invoices lock.** Toggles do not appear after `paid_status = PAID`. Declined add-ons (qty `0`) are hidden on the paid page and on the PDF.
+- **PDF** (`/invoices/pdf/{hash}`) is the stored invoice, not the live toggles. On an unpaid proposal with add-ons the public page hides Download PDF until they pay (selection is written when the PaymentIntent is created). Invoices with no optional rows keep the button. The PDF omits qty-`0` add-ons and uses `publicDisplayName()` so `(optional)` tags do not print.
 - **OG card** is `/invoices/{hash}/og.png` (REΛVE icon). Share previews use that, not a screenshot of the line items.
 
 ### How a line becomes a toggle

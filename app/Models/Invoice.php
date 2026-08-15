@@ -786,6 +786,21 @@ class Invoice extends Model implements HasMedia
     }
 
     /**
+     * Lines that belong on the PDF / paid receipt. Declined add-ons stay on
+     * the invoice as qty 0 for toggle state, but they are not part of the bill.
+     */
+    public function documentItems()
+    {
+        $this->loadMissing('items');
+
+        return $this->items
+            ->filter(function ($item) {
+                return ! $item->isOptional() || (float) $item->quantity > 0;
+            })
+            ->values();
+    }
+
+    /**
      * Customer-picked add-ons on the public invoice. Only rows {@see InvoiceItem::isOptional()}
      * change quantity (1 = included, 0 = left off). Required lines stay as-is.
      * Recalculates totals and due_amount from the items + payments.
