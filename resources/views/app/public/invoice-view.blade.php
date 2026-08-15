@@ -151,12 +151,12 @@
         .totals { margin-left: auto; width: 300px; margin-top: 20px; }
         .totals .row { display: flex; justify-content: space-between; padding: 8px 0; }
         .totals .row.total { font-size: 20px; font-weight: 600; }
-        .pay-cta { display: none; margin: 24px 0 0; width: 100%; padding: 14px 28px; border: none; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #ffffff; cursor: pointer; background: linear-gradient(145deg, #f472b6 0%, #c026d3 52%, #6366f1 100%); box-shadow: 0 2px 16px rgba(192, 38, 211, 0.35); }
+        .pay-cta { display: none; margin: 16px 0 0; width: 100%; padding: 14px 28px; border: none; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #ffffff; cursor: pointer; background: linear-gradient(145deg, #f472b6 0%, #c026d3 52%, #6366f1 100%); box-shadow: 0 2px 16px rgba(192, 38, 211, 0.35); }
         .pay-cta.is-visible { display: block; }
         .pay-cta:disabled { opacity: 0.6; cursor: not-allowed; }
-        .payment-section { margin-top: 40px; padding: 30px; background: #f9f9f9; border-radius: 8px; }
-        .payment-section h2 { font-size: 20px; margin-bottom: 20px; color: #333; }
-        #payment-element { margin-bottom: 20px; }
+        #payment-element { margin-top: 24px; width: 100%; }
+        #payment-element:empty { display: none; margin: 0; }
+        .pay-error { color: #d32f2f; margin-top: 12px; font-size: 14px; }
         .btn { display: inline-block; padding: 14px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; text-align: center; cursor: pointer; border: none; font-size: 16px; transition: all 0.2s; width: 100%; }
         .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
         .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); }
@@ -312,8 +312,9 @@
         @endif
 
         @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
+        <div id="payment-element"></div>
+        <p id="pay-error" class="pay-error" hidden></p>
         <button type="button" id="pay-cta" class="pay-cta"></button>
-        <div id="stripe-checkout" style="margin-top: 24px;"></div>
 
         @if(env('VENMO_HANDLE'))
         <div style="margin-top: 16px; text-align: center;">
@@ -382,17 +383,26 @@
                     return total;
                 };
 
-                let checkout = null;
                 let stripe = null;
+                let elements = null;
+                let paymentElement = null;
                 const payBtn = document.getElementById('pay-cta');
-                const mountEl = document.getElementById('stripe-checkout');
+                const mountEl = document.getElementById('payment-element');
+                const errorEl = document.getElementById('pay-error');
+                const returnUrl = window.location.origin + '/invoices/' + invoiceHash + '?payment=success';
 
-                const destroyCheckout = () => {
-                    if (checkout) {
-                        try { checkout.destroy(); } catch (e) {}
-                        checkout = null;
+                const showError = (msg) => {
+                    if (!errorEl) return;
+                    if (msg) {
+                        errorEl.textContent = msg;
+                        errorEl.hidden = false;
+                    } else {
+                        errorEl.textContent = '';
+                        errorEl.hidden = true;
                     }
-                    if (mountEl) mountEl.innerHTML = '';
+                };
+
+                const labelPay = () => {
                     if (payBtn) {
                         payBtn.classList.add('is-visible');
                         payBtn.disabled = false;
@@ -400,39 +410,82 @@
                     }
                 };
 
-                const mountCheckout = async () => {
-                    if (!stripeKey || !mountEl) return;
-                    if (!stripe) stripe = Stripe(stripeKey);
-                    if (checkout) {
-                        try { checkout.destroy(); } catch (e) {}
-                        checkout = null;
+                const destroyCheckout = () => {
+                    if (paymentElement) {
+                        try { paymentElement.unmount(); } catch (e) {}
+                        paymentElement = null;
                     }
+                    elements = null;
+                    if (mountEl) mountEl.innerHTML = '';
+                    showError('');
+                    labelPay();
+                };
+
+                const mountCheckout = async () => {
+                    if (!stripeKey || !mountEl) return false;
+                    if (!stripe) stripe = Stripe(stripeKey);
+                    if (paymentElement) {
+                        try { paymentElement.unmount(); } catch (e) {}
+                        paymentElement = null;
+                    }
+                    elements = null;
+                    mountEl.innerHTML = '';
+                    showError('');
                     if (payBtn) {
                         payBtn.disabled = true;
                         payBtn.textContent = 'Loading payment…';
                     }
-                    checkout = await stripe.initEmbeddedCheckout({
-                        fetchClientSecret: async () => {
-                            const res = await fetch('/api/invoices/' + invoiceHash + '/checkout-session', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-CSRF-TOKEN': csrf,
-                                },
-                                body: JSON.stringify({ optional_item_ids: selectedOptionalIds() }),
-                            });
-                            const data = await res.json();
-                            if (data.error) {
-                                console.error('Payment init error:', data.error);
-                                destroyCheckout();
-                                return null;
-                            }
-                            return data.clientSecret;
+                    const res = await fetch('/api/invoices/' + invoiceHash + '/payment-intent', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrf,
+                        },
+                        body: JSON.stringify({ optional_item_ids: selectedOptionalIds() }),
+                    });
+                    const data = await res.json();
+                    if (data.error || !data.clientSecret) {
+                        console.error('Payment init error:', data.error);
+                        destroyCheckout();
+                        showError(data.error || 'Unable to start payment.');
+                        return false;
+                    }
+                    elements = stripe.elements({
+                        clientSecret: data.clientSecret,
+                        appearance: {
+                            theme: 'stripe',
+                            variables: {
+                                colorPrimary: '#c026d3',
+                                colorBackground: '#ffffff',
+                                colorText: '#333333',
+                                fontFamily: 'Mozilla Text, system-ui, sans-serif',
+                                borderRadius: '8px',
+                            },
                         },
                     });
-                    checkout.mount('#stripe-checkout');
+                    paymentElement = elements.create('payment');
+                    paymentElement.mount('#payment-element');
+                    labelPay();
+                    return true;
+                };
+
+                const confirmPay = async () => {
+                    if (!elements) {
+                        await mountCheckout();
+                        return;
+                    }
+                    showError('');
                     if (payBtn) {
-                        payBtn.classList.remove('is-visible');
+                        payBtn.disabled = true;
+                        payBtn.textContent = 'Processing…';
+                    }
+                    const { error } = await stripe.confirmPayment({
+                        elements,
+                        confirmParams: { return_url: returnUrl },
+                    });
+                    if (error) {
+                        showError(error.message || 'Payment failed.');
+                        labelPay();
                     }
                 };
 
@@ -445,12 +498,12 @@
 
                 paintTotals();
 
+                if (payBtn) {
+                    payBtn.addEventListener('click', confirmPay);
+                }
+
                 if (hasOptional) {
-                    if (payBtn) {
-                        payBtn.classList.add('is-visible');
-                        payBtn.textContent = 'Pay ' + money(liveCents());
-                        payBtn.addEventListener('click', mountCheckout);
-                    }
+                    labelPay();
                 } else {
                     mountCheckout();
                 }

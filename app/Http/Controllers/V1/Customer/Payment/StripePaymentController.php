@@ -287,8 +287,8 @@ class StripePaymentController extends Controller
     }
 
     /**
-     * Create a PaymentIntent for Apple Pay / Payment Request Button
-     * Used by the sticky Apple Pay button on the public invoice view
+     * Create a PaymentIntent for the public invoice Payment Element.
+     * Description is for Stripe receipts/dashboard only — it is not shown in the form.
      */
     public function createPaymentIntent(Request $request, Invoice $invoice)
     {
@@ -311,10 +311,18 @@ class StripePaymentController extends Controller
 
             Stripe::setApiKey($stripeSecret);
 
+            $amountInCents = (int) $invoice->due_amount > 0
+                ? (int) $invoice->due_amount
+                : (int) $invoice->total;
+
+            if ($amountInCents <= 0) {
+                return response()->json(['error' => 'Nothing to pay on this invoice'], 400);
+            }
+
             $paymentIntent = \Stripe\PaymentIntent::create([
-                'amount'               => (int) $invoice->due_amount,
-                'currency'             => strtolower($invoice->currency->code),
-                'payment_method_types' => ['card'],
+                'amount'               => $amountInCents,
+                'currency'             => strtolower($invoice->currency->code ?? 'usd'),
+                'payment_method_types' => ['card', 'cashapp', 'us_bank_account'],
                 'receipt_email'        => $invoice->customer->email ?? null,
                 'description'          => 'Invoice #' . $invoice->invoice_number,
                 'metadata'             => [
@@ -336,7 +344,7 @@ class StripePaymentController extends Controller
             return response()->json(['clientSecret' => $paymentIntent->client_secret]);
 
         } catch (\Exception $e) {
-            \Log::error('Apple Pay PaymentIntent error: ' . $e->getMessage());
+            \Log::error('Stripe PaymentIntent error: ' . $e->getMessage());
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
