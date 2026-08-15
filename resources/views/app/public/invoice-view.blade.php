@@ -35,7 +35,21 @@
         html, body { overflow-x: hidden; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; }
         .container { max-width: 800px; margin: 40px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: visible; }
-        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; padding-bottom: 20px; border-bottom: 2px solid #eee; }
+        .header {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            grid-template-areas:
+                "logo info"
+                "logo status";
+            align-items: start;
+            justify-items: end;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #eee;
+        }
+        .logo { grid-area: logo; justify-self: start; }
+        .invoice-info { grid-area: info; text-align: right; }
+        .header > .status { grid-area: status; margin-top: 8px; }
         .logo img { max-width: 200px; height: auto; }
         .invoice-info { text-align: right; }
         .invoice-info h1 { font-size: 32px; font-weight: 300; color: #666; margin-bottom: 8px; }
@@ -156,8 +170,18 @@
         .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; color: #999; font-size: 14px; text-align: center; }
         @media (max-width: 640px) {
             .container { padding: 20px; margin: 20px; }
-            .header { flex-direction: column; gap: 20px; }
-            .invoice-info { text-align: left; }
+            .header {
+                display: grid;
+                grid-template-columns: 1fr auto;
+                grid-template-areas:
+                    "logo status"
+                    "info info";
+                gap: 16px 12px;
+                align-items: start;
+            }
+            .logo { grid-area: logo; }
+            .invoice-info { grid-area: info; text-align: left; justify-self: start; }
+            .header > .status { grid-area: status; margin-top: 0; justify-self: end; }
             .parties { grid-template-columns: 1fr; gap: 20px; }
             .totals { width: 100%; }
             .items { margin-left: -20px; margin-right: -20px; }
@@ -181,8 +205,8 @@
             <div class="invoice-info">
                 <h1>INVOICE</h1>
                 <div class="number">{{ $invoice->invoice_number }}</div>
-                <span class="status {{ strtolower($invoice->status) }}">{{ $invoice->paid_status === 'PAID' ? 'PAID' : $invoice->status }}</span>
             </div>
+            <span class="status {{ strtolower($invoice->status) }}">{{ $invoice->paid_status === 'PAID' ? 'PAID' : $invoice->status }}</span>
         </div>
 
         <div class="parties">
