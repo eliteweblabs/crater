@@ -40,17 +40,14 @@
         .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px; }
         .party h3 { font-size: 12px; text-transform: uppercase; color: #999; margin-bottom: 8px; font-weight: 600; }
         .party p { margin: 4px 0; }
-        .items { margin: 40px 0; }
-        .items table { width: 100%; border-collapse: collapse; }
-        .items th { text-align: left; padding: 12px 0; border-bottom: 2px solid #eee; font-size: 12px; text-transform: uppercase; color: #999; font-weight: 600; }
-        .items td { padding: 16px 0; border-bottom: 1px solid #f5f5f5; }
-        .items .description { color: #666; font-size: 14px; }
-        .items .amount { text-align: right; }
-        .item-qty, .item-rate { display: none; }
+        .items { margin: 40px -40px 20px; }
+        .item-row { overflow: hidden; padding: 16px 40px; border-bottom: 1px solid #eee; }
         .item-row--optional { background: #faf7ff; }
         .item-row--off { opacity: 0.55; }
-        .item-check { width: 56px; text-align: center; vertical-align: top; padding-top: 18px !important; }
-        .item-switch { position: relative; display: inline-flex; cursor: pointer; }
+        .item-switch { float: left; position: relative; display: inline-flex; cursor: pointer; margin: 3px 12px 8px 0; }
+        .items .item-title { font-weight: 500; }
+        .items .description { color: #666; font-size: 14px; }
+        .items .amount { float: right; margin: 0 0 8px 12px; font-weight: 500; white-space: nowrap; }
         .item-switch input { position: absolute; inset: 0; z-index: 1; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
         .item-switch-track {
             position: relative;
@@ -111,6 +108,8 @@
             .invoice-info { text-align: left; }
             .parties { grid-template-columns: 1fr; gap: 20px; }
             .totals { width: 100%; }
+            .items { margin-left: -20px; margin-right: -20px; }
+            .item-row { padding-left: 16px; padding-right: 16px; }
         }
     </style>
 </head>
@@ -167,58 +166,35 @@
         </div>
 
         <div class="items">
-            <table>
-                <thead>
-                    <tr>
-                        @if(!empty($hasOptionalItems))
-                        <th class="item-check"></th>
-                        @endif
-                        <th>Item</th>
-                        <th class="item-qty" style="text-align: center; width: 80px;">Qty</th>
-                        <th class="item-rate" style="text-align: right; width: 100px;">Rate</th>
-                        <th style="text-align: right; width: 120px;">Amount</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach($invoice->items as $item)
-                    @php
-                        $optional = $item->isOptional();
-                        $included = ! $optional || (float) $item->quantity > 0;
-                    @endphp
-                    <tr class="item-row {{ $optional ? 'item-row--optional' : '' }} {{ $optional && ! $included ? 'item-row--off' : '' }}"
-                        data-optional="{{ $optional ? '1' : '0' }}"
-                        data-item-id="{{ $item->id }}"
-                        data-price="{{ (int) $item->price }}"
-                        data-fixed-cents="{{ $optional ? 0 : (int) $item->total }}"
-                        data-included="{{ $included ? '1' : '0' }}">
-                        @if(!empty($hasOptionalItems))
-                        <td class="item-check">
-                            @if($optional)
-                            <label class="item-switch">
-                                <input type="checkbox" class="optional-toggle" value="{{ $item->id }}" autocomplete="off" {{ $included ? 'checked' : '' }} aria-label="Add {{ $item->publicDisplayName() }}">
-                                <span class="item-switch-track" aria-hidden="true"></span>
-                            </label>
-                            @endif
-                        </td>
-                        @endif
-                        <td>
-                            <div style="font-weight: 500;">
-                                {{ $item->publicDisplayName() }}
-                                @if($optional)
-                                    <span class="addon-badge">Optional</span>
-                                @endif
-                            </div>
-                            @if($item->description)
-                                <div class="description">{{ $item->description }}</div>
-                            @endif
-                        </td>
-                        <td class="item-qty" style="text-align: center;">{{ $included || ! $optional ? $item->quantity : 0 }}</td>
-                        <td class="item-rate" style="text-align: right;">${{ number_format($item->price / 100, 2) }}</td>
-                        <td class="amount">${{ number_format(($included || ! $optional ? $item->total : 0) / 100, 2) }}</td>
-                    </tr>
-                    @endforeach
-                </tbody>
-            </table>
+            @foreach($invoice->items as $item)
+            @php
+                $optional = $item->isOptional();
+                $included = ! $optional || (float) $item->quantity > 0;
+            @endphp
+            <div class="item-row {{ $optional ? 'item-row--optional' : '' }} {{ $optional && ! $included ? 'item-row--off' : '' }}"
+                data-optional="{{ $optional ? '1' : '0' }}"
+                data-item-id="{{ $item->id }}"
+                data-price="{{ (int) $item->price }}"
+                data-fixed-cents="{{ $optional ? 0 : (int) $item->total }}"
+                data-included="{{ $included ? '1' : '0' }}">
+                @if($optional)
+                <label class="item-switch">
+                    <input type="checkbox" class="optional-toggle" value="{{ $item->id }}" autocomplete="off" {{ $included ? 'checked' : '' }} aria-label="Add {{ $item->publicDisplayName() }}">
+                    <span class="item-switch-track" aria-hidden="true"></span>
+                </label>
+                @endif
+                <div class="amount">${{ number_format(($included || ! $optional ? $item->total : 0) / 100, 2) }}</div>
+                <div class="item-title">
+                    {{ $item->publicDisplayName() }}
+                    @if($optional)
+                        <span class="addon-badge">Optional</span>
+                    @endif
+                </div>
+                @if($item->description)
+                    <div class="description">{{ $item->description }}</div>
+                @endif
+            </div>
+            @endforeach
         </div>
 
         <div class="totals">
