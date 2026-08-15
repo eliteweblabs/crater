@@ -78,8 +78,16 @@
         .party p { margin: 4px 0; }
         .items { margin: 40px -40px 20px; overflow: visible; }
         .item-row { display: block; position: relative; overflow: visible; padding: 16px 40px; border-bottom: 1px solid #eee; }
+        .item-row::after { content: ''; display: table; clear: both; }
         .item-row--optional { background: #faf7ff; cursor: pointer; }
-        .item-row--off { opacity: 0.55; }
+        /* Own top rule after a required row so the Optional chip sits on this
+           row’s edge, not the white item above. Consecutive optionals keep a
+           single shared border. */
+        .item-row:not(.item-row--optional) + .item-row--optional { border-top: 1px solid #eee; }
+        .item-row--off .item-title,
+        .item-row--off .description,
+        .item-row--off .amount,
+        .item-row--off .item-switch { opacity: 0.55; }
         .item-switch { float: left; position: relative; display: inline-flex; cursor: pointer; margin: 3px 12px 8px 0; }
         .items .item-title { font-weight: 500; }
         .items .description { color: #666; font-size: 14px; }
