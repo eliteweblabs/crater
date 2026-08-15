@@ -69,12 +69,12 @@
         .status.sent { background: #e3f2fd; color: #1976d2; }
         .status.paid { background: #e8f5e9; color: #388e3c; }
         .status.overdue { background: #ffebee; color: #d32f2f; }
-        .meta-dates { margin-bottom: 40px; font-size: 14px; }
+        .meta-dates { margin: 0; font-size: 14px; }
         .meta-dates p { margin: 0; line-height: 1.7; white-space: nowrap; }
-        .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px; }
+        .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 0 0 24px; }
         .party h3 { font-size: 12px; text-transform: uppercase; color: #999; margin-bottom: 8px; font-weight: 600; }
         .party p { margin: 4px 0; }
-        .items { margin: 40px -40px 20px; overflow: visible; }
+        .items { margin: 24px -40px 20px; overflow: visible; border-top: 1px solid #eee; }
         .item-row { display: block; position: relative; overflow: visible; padding: 16px 40px; border-bottom: 1px solid #eee; }
         .item-row::after { content: ''; display: table; clear: both; }
         .item-row--optional { background: #faf7ff; cursor: pointer; }
@@ -211,7 +211,7 @@
             .logo { grid-area: logo; }
             .invoice-info { grid-area: info; text-align: left; justify-self: start; }
             .header > .status { grid-area: status; margin-top: 0; justify-self: end; }
-            .parties { grid-template-columns: 1fr; gap: 20px; }
+            .parties { grid-template-columns: 1fr; gap: 24px; }
             .totals { width: 100%; }
             .items { margin-left: -20px; margin-right: -20px; }
             .item-row { padding-left: 16px; padding-right: 16px; }
