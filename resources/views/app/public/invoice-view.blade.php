@@ -3,10 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Invoice {{ $invoice->invoice_number }}</title>
+    @php
+        $clientName = $invoice->customer->name ?: 'client';
+        $pageTitle = $invoice->paid_status === 'PAID'
+            ? 'Invoice for '.$clientName
+            : 'New invoice for '.$clientName;
+    @endphp
+    <title>{{ $pageTitle }}</title>
     
     <meta property="og:type" content="website">
-    <meta property="og:title" content="Invoice {{ $invoice->invoice_number }} · ${{ number_format($invoice->total / 100, 2) }}">
+    <meta property="og:title" content="{{ $pageTitle }}">
     <meta property="og:description" content="{{ $invoice->customer->name }}{{ $invoice->formattedDueDate ? ' · Due '.$invoice->formattedDueDate : '' }}">
     <meta property="og:image" content="{{ $ogImageUrl ?? url('/invoices/'.$invoice->unique_hash.'/og.png').'?v=reave' }}">
     <meta property="og:image:type" content="image/png">
@@ -16,7 +22,7 @@
     <meta property="og:url" content="{{ url('/invoices/'.$invoice->unique_hash) }}">
     <meta property="og:site_name" content="{{ $invoice->company->name ?? 'Invoice' }}">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Invoice {{ $invoice->invoice_number }} · ${{ number_format($invoice->total / 100, 2) }}">
+    <meta name="twitter:title" content="{{ $pageTitle }}">
     <meta name="twitter:description" content="{{ $invoice->customer->name }}{{ $invoice->formattedDueDate ? ' · Due '.$invoice->formattedDueDate : '' }}">
     <meta name="twitter:image" content="{{ $ogImageUrl ?? url('/invoices/'.$invoice->unique_hash.'/og.png').'?v=reave' }}">
 
@@ -37,6 +43,8 @@
         .status.sent { background: #e3f2fd; color: #1976d2; }
         .status.paid { background: #e8f5e9; color: #388e3c; }
         .status.overdue { background: #ffebee; color: #d32f2f; }
+        .meta-dates { margin-bottom: 40px; font-size: 14px; }
+        .meta-dates p { margin: 0; line-height: 1.7; white-space: nowrap; }
         .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px; }
         .party h3 { font-size: 12px; text-transform: uppercase; color: #999; margin-bottom: 8px; font-weight: 600; }
         .party p { margin: 4px 0; }
@@ -175,14 +183,9 @@
             </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 40px; font-size: 14px;">
-            <div>
-                <p><strong>Invoice Date:</strong> {{ $invoice->formattedInvoiceDate }}</p>
-                <p><strong>Due Date:</strong> {{ $invoice->formattedDueDate }}</p>
-            </div>
-            <div>
-                <p><strong>Amount Due:</strong> <span id="amount-due" style="font-size: 18px; font-weight: 600; color: #667eea;">${{ number_format($invoice->total / 100, 2) }}</span></p>
-            </div>
+        <div class="meta-dates">
+            <p><strong>Invoice Date:</strong> {{ $invoice->formattedInvoiceDate }}</p>
+            <p><strong>Due Date:</strong> {{ $invoice->formattedDueDate }}</p>
         </div>
 
         <div class="items">
