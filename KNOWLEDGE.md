@@ -1,6 +1,7 @@
 # Crater — Self-Hosted Invoicing
 
-Integration knowledge for the Crater invoicing service (Reave Business OS, Telegram bot, etc.).
+Agent playbook for the Crater invoicing service (Reave Business OS, Telegram bot, etc.).
+Reave also ships a short copy as `plugins/billing/knowledge/crater-billing.md` — keep both in sync.
 
 The deployed instance lives at the URL configured per-deployment
 (typically `ap.<your-domain>` or `crater.<your-domain>`). All examples below use
@@ -124,6 +125,71 @@ Headers:
 
 Returns customers with billing profile and invoice summary. Optional `q` filter.
 
+### Get / update / add items
+
+```
+GET  {CRATER_URL}/api/custom/invoice/{id}
+PUT  {CRATER_URL}/api/custom/invoice/{id}
+POST {CRATER_URL}/api/custom/invoice/{id}/items
+PUT  {CRATER_URL}/api/custom/invoice/{invoiceId}/items/{itemId}
+```
+
+`GET` returns line items with stored `name` (including `(optional)` / `(required)` tags), `quantity`, and dollar `price` / `total`.
+
+`PUT /invoice/{id}` updates status, due date, or notes only — **not** line item names.
+
+`PUT /invoice/{invoiceId}/items/{itemId}` edits one row. Body fields are all optional:
+
+```
+{ "name": "Plausible Analytics - 1 Year - 10/2026 - 10/2027 (optional) (yearly)" }
+```
+
+`price` is whole dollars. Changing `price` or `quantity` recalculates that row and the invoice totals. A name-only edit does not change totals. Use this for typos on SENT invoices (do not delete + re-add).
+
+## Public invoice add-on toggles
+
+The public page (`/invoices/{unique_hash}`) is what clients open. Recent behavior:
+
+- **Qty and rate are hidden.** The client sees name, description, amount, and (for add-ons) a toggle.
+- **Optional rows get a switch.** Toggling live-updates subtotal / due and is sent to Stripe as `optional_item_ids` when they pay.
+- **Paid invoices lock.** Toggles do not appear after `paid_status = PAID`.
+- **OG card** is `/invoices/{hash}/og.png` (REΛVE icon). Share previews use that, not a screenshot of the line items.
+
+### How a line becomes a toggle
+
+Detection is **name-only** (`InvoiceItem::isOptional()`). There is no separate `optional` column.
+
+| Stored name contains | Public behavior |
+|---|---|
+| `(optional)` or `[optional]` | Toggle. Client can include or leave off. |
+| `can be added anytime` | Same as optional (converted estimates). |
+| `(required)` | **Never** a toggle, even if the name also says optional. |
+| no tag | Required. No switch. Amount is fixed. |
+
+The public title is `publicDisplayName()` — it strips `(optional)`, `[optional]`, `(required)`, and `(…can be added anytime…)`. The client sees **Plausible Analytics - 1 Year - 10/2026 - 10/2027 (yearly)** plus an **Optional** badge. Keep the tag in the stored name so the switch still works.
+
+### Quantity is the on/off bit
+
+| Quantity | Meaning for an optional row |
+|---|---|
+| `0` | Toggle starts **off**. Amount due does not include it. |
+| `> 0` (usually `1`) | Toggle starts **on**. |
+
+When the client pays, checked add-ons are saved as qty `1` and unchecked as qty `0`, then totals and `due_amount` are recalculated. Required rows are never changed by the toggle.
+
+**When creating a proposal-style invoice:** tag add-ons `(optional)` (or `(optional) (yearly)` / `(optional) (can be added anytime)`) and send **quantity `0`** so they start off. Tag must-haves `(required)` with quantity `1`. Untagged names are required and have no switch.
+
+Examples:
+
+```
+Web Design (required)
+Railway Web Hosting - 1 Year - 10/2026 - 10/2027 (required) (yearly)
+Plausible Analytics - 1 Year - 10/2026 - 10/2027 (optional) (yearly)
+Booksy White Labeling (optional) (can be added anytime)
+```
+
+Do not invent product names. **Plausible Analytics** is the analytics add-on — never "Phaseline Analytics".
+
 ## Environment Variables
 
 | Var | Purpose |
@@ -137,9 +203,12 @@ Returns customers with billing profile and invoice summary. Optional `q` filter.
 ## Common Tasks
 
 - Create an invoice for a client (use `/api/custom/create-invoice`)
+- Mark add-ons `(optional)` with quantity `0` so the public page shows toggles off
+- Rename or fix a line on a SENT invoice (`PUT /api/custom/invoice/{id}/items/{itemId}`)
 - Record cash/check/transfer payment (use `/api/custom/record-payment`)
 - List upcoming recurring invoices (use `/api/v1/recurring-invoices` or `/api/custom/recurring-invoices`)
 - View invoice PDF (`/api/v1/invoices/{id}` includes a `pdf_url`)
+- Send the client `public_url` (`/invoices/{unique_hash}`), not the admin view
 
 ## Common Pitfalls
 
@@ -152,6 +221,16 @@ Returns customers with billing profile and invoice summary. Optional `q` filter.
    are slow — prefer the API over direct DB queries for anything routine.
 4. **Stripe is built-in.** Online payments hit `/api/v1/payments` automatically;
    offline payments must be recorded via `/api/custom/record-payment`.
+5. **`update_invoice` cannot rename a line.** Use `PUT .../items/{itemId}`.
+   Do not delete and recreate a SENT invoice to fix a typo.
+6. **Optional is a name tag, not a field.** If the switch is missing, the stored
+   name has no `(optional)` / `can be added anytime` (or it also has `(required)`).
+7. **Never replace `routes/api-custom.php`.** Append routes only. A stub file
+   drops create-invoice, payments, and everything else.
+8. **Never change `RouteServiceProvider` namespace.** It must stay
+   `Crater\Providers`. `config/app.php` registers that class. `App\Providers`
+   makes every URL 500 — including the client's public invoice link.
+   Custom routes are already loaded when `routes/api-custom.php` exists.
 
 ## Related Files in This Repo
 
