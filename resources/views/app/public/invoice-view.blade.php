@@ -592,7 +592,7 @@
             </a>
         </div>
         @else
-        <p class="pdf-hint">A PDF receipt will be available after you pay.</p>
+        <p class="pdf-hint">A PDF receipt will be available after payment.</p>
         @endif
 
         <div class="footer">
