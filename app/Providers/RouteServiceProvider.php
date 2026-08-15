@@ -1,6 +1,6 @@
 <?php
 
-namespace Crater\Providers;
+namespace App\Providers;
 
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ServiceProvider;
@@ -17,25 +17,7 @@ class RouteServiceProvider extends ServiceProvider
      *
      * @var string
      */
-    public const HOME = '/admin/dashboard';
-
-    /**
-     * The path to the "customer home" route for your application.
-     *
-     * This is used by Laravel authentication to redirect customers after login.
-     *
-     * @var string
-     */
-    public const CUSTOMER_HOME = '/customer/dashboard';
-
-    /**
-     * The controller namespace for the application.
-     *
-     * When present, controller route declarations will automatically be prefixed with this namespace.
-     *
-     * @var string|null
-     */
-    // protected $namespace = 'Crater\\Http\\Controllers';
+    public const HOME = '/home';
 
     /**
      * Define your route model bindings, pattern filters, etc.
@@ -52,12 +34,11 @@ class RouteServiceProvider extends ServiceProvider
                 ->namespace($this->namespace)
                 ->group(base_path('routes/api.php'));
 
-            // Crater custom API routes
-            if (file_exists(base_path('routes/api-custom.php'))) {
-                Route::prefix('api')
-                    ->middleware('api')
-                    ->group(base_path('routes/api-custom.php'));
-            }
+            // REΛVE custom agent routes (line-item edits, customer updates, etc.)
+            Route::prefix('api')
+                ->middleware('api')
+                ->namespace($this->namespace)
+                ->group(base_path('routes/api-custom.php'));
 
             Route::middleware('web')
                 ->namespace($this->namespace)
@@ -73,7 +54,7 @@ class RouteServiceProvider extends ServiceProvider
     protected function configureRateLimiting()
     {
         RateLimiter::for('api', function (Request $request) {
-            return Limit::perMinute(60);
+            return Limit::perMinute(60)->by(optional($request->user())->id ?: $request->ip());
         });
     }
 }
