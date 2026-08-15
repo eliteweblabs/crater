@@ -86,8 +86,9 @@
         .item-row--off .description,
         .item-row--off .amount,
         .item-row--off .item-switch { opacity: 0.55; }
-        .item-switch { float: left; position: relative; display: inline-flex; cursor: pointer; margin: 3px 12px 8px 0; }
-        .items .item-title { font-weight: 500; }
+        .item-heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .item-switch { position: relative; display: inline-flex; flex: none; cursor: pointer; margin: 0; }
+        .items .item-title { font-weight: 500; line-height: 1.2; min-width: 0; }
         .items .description { color: #666; font-size: 14px; }
         .items .description a { color: inherit; text-decoration: none; pointer-events: none; }
         .items .amount {
@@ -103,8 +104,8 @@
         .item-switch-track {
             position: relative;
             display: block;
-            width: 44px;
-            height: 26px;
+            width: 26px;
+            height: 16px;
             border-radius: 999px;
             background: #d4d0db;
             box-shadow: inset 0 0 0 1px rgba(11, 5, 18, 0.08);
@@ -113,13 +114,13 @@
         .item-switch-track::after {
             content: '';
             position: absolute;
-            top: 3px;
-            left: 3px;
-            width: 20px;
-            height: 20px;
+            top: 2px;
+            left: 2px;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
             background: #fff;
-            box-shadow: 0 1px 4px rgba(11, 5, 18, 0.28);
+            box-shadow: 0 1px 3px rgba(11, 5, 18, 0.28);
             transition: transform 0.18s ease;
         }
         .item-switch input:checked + .item-switch-track {
@@ -127,7 +128,7 @@
             box-shadow: 0 2px 10px rgba(192, 38, 211, 0.35);
         }
         .item-switch input:checked + .item-switch-track::after {
-            transform: translateX(18px);
+            transform: translateX(10px);
         }
         .item-switch input:focus-visible + .item-switch-track {
             outline: 2px solid #c026d3;
@@ -287,17 +288,19 @@
                 data-fixed-cents="{{ $optional ? 0 : (int) $item->total }}"
                 data-included="{{ $included ? '1' : '0' }}">
                 @if($optional)
-                <span class="item-switch">
-                    <input type="checkbox" class="optional-toggle" value="{{ $item->id }}" autocomplete="off" {{ $included ? 'checked' : '' }} aria-label="Add {{ $item->publicDisplayName() }}">
-                    <span class="item-switch-track" aria-hidden="true"></span>
-                </span>
-                @endif
-                @if($optional)
                     <span class="addon-badge">Optional</span>
                 @endif
                 <div class="amount">${{ number_format(($optional ? $item->price : $item->total) / 100, 2) }}</div>
-                <div class="item-title">
-                    {{ $item->publicDisplayName() }}
+                <div class="item-heading">
+                    @if($optional)
+                    <span class="item-switch">
+                        <input type="checkbox" class="optional-toggle" value="{{ $item->id }}" autocomplete="off" {{ $included ? 'checked' : '' }} aria-label="Add {{ $item->publicDisplayName() }}">
+                        <span class="item-switch-track" aria-hidden="true"></span>
+                    </span>
+                    @endif
+                    <div class="item-title">
+                        {{ $item->publicDisplayName() }}
+                    </div>
                 </div>
                 @if($item->description)
                     <div class="description" x-apple-data-detectors="false">{{ $item->description }}</div>
