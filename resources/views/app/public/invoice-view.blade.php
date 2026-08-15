@@ -332,6 +332,8 @@
                 const stripeKey = @json(config('services.stripe.key'));
                 const invoiceHash = @json($invoice->unique_hash);
                 const csrf = @json(csrf_token());
+                const customerEmail = @json($invoice->customer->email ?: null);
+                const customerName = @json($invoice->customer->contact_name ?: $invoice->customer->name ?: null);
                 const taxCents = {{ (int) $invoice->tax }};
                 const discountCents = {{ (int) ($invoice->discount_val ?? 0) }};
                 const hasOptional = {{ !empty($hasOptionalItems) ? 'true' : 'false' }};
@@ -463,7 +465,12 @@
                             },
                         },
                     });
-                    paymentElement = elements.create('payment');
+                    const billingDetails = {};
+                    if (customerEmail) billingDetails.email = customerEmail;
+                    if (customerName) billingDetails.name = customerName;
+                    paymentElement = elements.create('payment', {
+                        defaultValues: { billingDetails },
+                    });
                     paymentElement.mount('#payment-element');
                     labelPay();
                     return true;
