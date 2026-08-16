@@ -117,6 +117,49 @@ class Invoice extends Model implements HasMedia
         return url('/invoices/pdf/'.$this->unique_hash);
     }
 
+    /**
+     * iMessage / Slack / social preview title:
+     * "{Business Name} - Invoice for {subject}".
+     *
+     * Subject is the first required line item’s public name, then any
+     * line item, then notes, then the invoice number.
+     */
+    public function sharePreviewTitle(): string
+    {
+        $business = trim((string) ($this->company->name ?? ''));
+        $subject = $this->sharePreviewSubject();
+
+        if ($business !== '') {
+            return $business.' - Invoice for '.$subject;
+        }
+
+        return 'Invoice for '.$subject;
+    }
+
+    public function sharePreviewSubject(): string
+    {
+        $items = $this->relationLoaded('items')
+            ? $this->items
+            : $this->items()->get();
+
+        $item = $items->first(fn ($row) => ! $row->isOptional()) ?: $items->first();
+        if ($item) {
+            $name = trim($item->publicDisplayName());
+            if ($name !== '') {
+                return $name;
+            }
+        }
+
+        $notes = trim(preg_replace('/\s+/', ' ', (string) $this->notes) ?? '');
+        if ($notes !== '') {
+            return $notes;
+        }
+
+        $number = trim((string) $this->invoice_number);
+
+        return $number !== '' ? $number : 'Invoice';
+    }
+
     public function getPaymentModuleEnabledAttribute()
     {
         // Always return true since we have custom Stripe integration
