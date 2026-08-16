@@ -119,14 +119,17 @@ class Invoice extends Model implements HasMedia
 
     /**
      * iMessage / Slack / social preview title:
-     * "{Business Name} - Invoice for Service".
+     * "{Client Name} / {Business Name} - Invoice for Service".
      */
     public function sharePreviewTitle(): string
     {
-        $business = trim((string) ($this->company->name ?? ''));
+        $who = implode(' / ', array_filter([
+            trim((string) optional($this->customer)->name),
+            trim((string) optional($this->company)->name),
+        ]));
 
-        if ($business !== '') {
-            return $business.' - Invoice for Service';
+        if ($who !== '') {
+            return $who.' - Invoice for Service';
         }
 
         return 'Invoice for Service';
