@@ -105,11 +105,13 @@ class InvoiceItem extends Model
 
     /**
      * Mutually exclusive choice group from a `(group_01)` name tag.
-     * `group_1` and `group_01` resolve to the same key.
+     * `group_1` and `group_01` resolve to the same key. Also accepts
+     * `(group 01)` / `[group-01]` and a tag in the description.
      */
     public function optionGroup(): ?string
     {
-        if (! preg_match('/[\(\[]\s*group_(\d+)\s*[\)\]]/i', (string) $this->name, $matches)) {
+        $haystack = trim((string) $this->name.' '.(string) $this->description);
+        if (! preg_match('/[\(\[]\s*group[\s_-]*(\d+)\s*[\)\]]/i', $haystack, $matches)) {
             return null;
         }
 
@@ -133,7 +135,7 @@ class InvoiceItem extends Model
     public function publicDisplayName(): string
     {
         $name = preg_replace(
-            '/\s*[\(\[]\s*(optional|required|group_\d+)\s*[\)\]]/i',
+            '/\s*[\(\[]\s*(optional|required|group[\s_-]*\d+)\s*[\)\]]/i',
             '',
             (string) $this->name
         );

@@ -270,7 +270,7 @@
             <p><strong>Due Date:</strong> {{ $invoice->formattedDueDate }}</p>
         </div>
 
-        <div class="items">
+        <div class="items" autocomplete="off">
             @php
                 $paid = $invoice->paid_status === 'PAID';
                 $groupActiveIds = $invoice->activeGroupedItemIds();
@@ -312,7 +312,7 @@
                 <div class="item-heading">
                     @if($selectable)
                     <span class="item-switch">
-                        <input type="checkbox" class="optional-toggle selectable-toggle" value="{{ $item->id }}" autocomplete="off" {{ $included ? 'checked' : '' }} aria-label="{{ $grouped ? 'Select' : 'Add' }} {{ $item->publicDisplayName() }}">
+                        <input type="checkbox" class="optional-toggle selectable-toggle" value="{{ $item->id }}" autocomplete="off" data-default-on="{{ $included ? '1' : '0' }}" {{ $included ? 'checked' : '' }} aria-label="{{ $grouped ? 'Select' : 'Add' }} {{ $item->publicDisplayName() }}">
                         <span class="item-switch-track" aria-hidden="true"></span>
                     </span>
                     @endif
@@ -326,6 +326,54 @@
             </{{ $selectable ? 'label' : 'div' }}>
             @endforeach
         </div>
+        @if($invoice->paid_status !== 'PAID')
+        <script>
+            (function () {
+                const rows = document.querySelectorAll('.item-row[data-grouped="1"]');
+                if (!rows.length) return;
+
+                const peers = (group) =>
+                    document.querySelectorAll('.item-row[data-group="' + group + '"] .selectable-toggle');
+
+                const paintGroupRows = () => {
+                    rows.forEach((row) => {
+                        const on = !!row.querySelector('.selectable-toggle')?.checked;
+                        row.classList.toggle('item-row--off', !on);
+                    });
+                };
+
+                const firstByGroup = {};
+                rows.forEach((row) => {
+                    const group = row.dataset.group;
+                    const box = row.querySelector('.selectable-toggle');
+                    if (!group || !box) return;
+                    const isFirst = !firstByGroup[group];
+                    firstByGroup[group] = firstByGroup[group] || box;
+                    box.checked = isFirst;
+                    box.defaultChecked = isFirst;
+                });
+                paintGroupRows();
+
+                rows.forEach((row) => {
+                    const box = row.querySelector('.selectable-toggle');
+                    if (!box) return;
+                    box.addEventListener('change', () => {
+                        const group = row.dataset.group;
+                        if (!group) return;
+                        const boxes = peers(group);
+                        if (box.checked) {
+                            boxes.forEach((other) => {
+                                if (other !== box) other.checked = false;
+                            });
+                        } else if (![...boxes].some((el) => el.checked)) {
+                            box.checked = true;
+                        }
+                        paintGroupRows();
+                    });
+                });
+            })();
+        </script>
+        @endif
 
         @if($invoice->tax > 0)
         <div class="totals">
