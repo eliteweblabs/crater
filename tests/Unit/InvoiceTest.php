@@ -172,6 +172,91 @@ test('grouped plan selection keeps one alternative active', function () {
         ->and($doc->first()->publicDisplayName())->toBe('One Year Hosting Plan');
 });
 
+test('capturing paid line items drops declined add-ons and unused group plans', function () {
+    $invoice = Invoice::factory()->create([
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'sub_total' => 74000,
+        'total' => 74000,
+        'due_amount' => 74000,
+        'paid_status' => Invoice::STATUS_UNPAID,
+        'exchange_rate' => 1,
+    ]);
+
+    InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'Web Design',
+        'price' => 50000,
+        'quantity' => 1,
+        'total' => 50000,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    $yearly = InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'One Year Hosting Plan (group_01)',
+        'price' => 24000,
+        'quantity' => 1,
+        'total' => 24000,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    $monthly = InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'Monthly Hosting Plan (group_01)',
+        'price' => 2500,
+        'quantity' => 1,
+        'total' => 2500,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    $optional = InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'Booksy White Labeling (optional)',
+        'price' => 20000,
+        'quantity' => 1,
+        'total' => 20000,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    $invoice->capturePaidLineItems([$yearly->id]);
+    $invoice->refresh()->load('items');
+
+    expect($invoice->items)->toHaveCount(2)
+        ->and($invoice->items->pluck('name')->sort()->values()->all())->toBe([
+            'One Year Hosting Plan',
+            'Web Design',
+        ])
+        ->and(InvoiceItem::find($monthly->id))->toBeNull()
+        ->and(InvoiceItem::find($optional->id))->toBeNull()
+        ->and((int) $invoice->total)->toBe(74000);
+
+    $invoice->paid_status = Invoice::STATUS_PAID;
+    $invoice->save();
+    $invoice->capturePaidLineItems([]);
+    $invoice->refresh()->load('items');
+
+    expect($invoice->items)->toHaveCount(2);
+});
+
 test('get previous status', function () {
     $invoice = Invoice::factory()->create();
 

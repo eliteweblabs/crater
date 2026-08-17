@@ -325,11 +325,11 @@ class StripePaymentController extends Controller
                 'payment_method_types' => ['card', 'cashapp', 'us_bank_account'],
                 'receipt_email'        => $invoice->customer->email ?? null,
                 'description'          => 'Invoice #' . $invoice->invoice_number,
-                'metadata'             => [
-                    'invoice_id'  => $invoice->id,
-                    'company_id'  => $invoice->company_id,
-                    'customer_id' => $invoice->customer_id,
-                ],
+                'metadata'             => array_merge([
+                    'invoice_id'  => (string) $invoice->id,
+                    'company_id'  => (string) $invoice->company_id,
+                    'customer_id' => (string) $invoice->customer_id,
+                ], $this->selectableItemMetadata($invoice)),
             ]);
 
             Transaction::createTransaction([
@@ -446,7 +446,7 @@ class StripePaymentController extends Controller
                 \Log::warning("Stripe webhook: invoice {$invoice_id} not found");
                 return;
             }
-            $invoice->load(['company', 'customer']);
+            $invoice->load(['company', 'customer', 'items']);
 
             // Idempotency guard #1: if this Stripe session/PI was already
             // turned into a SUCCESS transaction, we've already fulfilled it.
@@ -470,6 +470,13 @@ class StripePaymentController extends Controller
                 }
                 return;
             }
+
+            // Lock in the toggles the customer paid for before we record
+            // the payment. Declined add-ons and the unselected hosting plan
+            // are removed so the paid invoice / PDF / admin view match the charge.
+            $invoice->capturePaidLineItems(
+                $this->parseOptionalItemIds($session['metadata'] ?? [])
+            );
 
             $paymentMethod = PaymentMethod::firstOrCreate(
                 ['name' => 'Stripe', 'company_id' => $invoice->company_id],
@@ -541,7 +548,42 @@ class StripePaymentController extends Controller
         if (empty($params['customer'])) {
             $params['customer_creation'] = 'always';
         }
+        $params['metadata'] = array_merge(
+            $this->selectableItemMetadata($invoice),
+            $params['metadata'] ?? []
+        );
+
         return $params;
+    }
+
+    /**
+     * @return array{optional_item_ids: string}
+     */
+    private function selectableItemMetadata(Invoice $invoice): array
+    {
+        $invoice->loadMissing('items');
+
+        return [
+            'optional_item_ids' => implode(',', $invoice->selectedCustomerItemIds()),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $metadata
+     * @return array<int, int>|null
+     */
+    private function parseOptionalItemIds(array $metadata): ?array
+    {
+        if (! array_key_exists('optional_item_ids', $metadata)) {
+            return null;
+        }
+
+        $raw = trim((string) $metadata['optional_item_ids']);
+        if ($raw === '') {
+            return [];
+        }
+
+        return array_values(array_filter(array_map('intval', explode(',', $raw))));
     }
 
     /**

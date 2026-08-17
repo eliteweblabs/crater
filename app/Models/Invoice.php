@@ -885,6 +885,71 @@ class Invoice extends Model implements HasMedia
     }
 
     /**
+     * Selectable lines that are currently on the bill (qty > 0).
+     *
+     * @return array<int, int>
+     */
+    public function selectedCustomerItemIds(): array
+    {
+        $this->loadMissing('items');
+
+        return $this->items
+            ->filter(fn ($item) => $item->isCustomerSelectable() && (float) $item->quantity > 0)
+            ->map(fn ($item) => (int) $item->id)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * After a successful payment: lock in the customer's choices, drop
+     * declined add-ons and unselected group alternatives, and store clean
+     * names on the lines that remain.
+     *
+     * @param  array<int, int>|null  $selectedIds  from Stripe metadata; null keeps current qty
+     */
+    public function capturePaidLineItems(?array $selectedIds = null): self
+    {
+        if ($this->paid_status === self::STATUS_PAID) {
+            return $this;
+        }
+
+        if ($selectedIds !== null) {
+            $this->applyOptionalItemSelection($selectedIds);
+        }
+
+        return $this->finalizeCustomerItemSelection();
+    }
+
+    /**
+     * Remove qty-0 optional/grouped rows and strip control tags from the
+     * names of the lines that were paid.
+     */
+    public function finalizeCustomerItemSelection(): self
+    {
+        $this->loadMissing('items');
+
+        foreach ($this->items as $item) {
+            if (! $item->isCustomerSelectable()) {
+                continue;
+            }
+
+            if ((float) $item->quantity <= 0) {
+                $item->taxes()->delete();
+                $item->delete();
+                continue;
+            }
+
+            $display = $item->publicDisplayName();
+            if ($display !== (string) $item->name) {
+                $item->name = $display;
+                $item->save();
+            }
+        }
+
+        return $this->recalculateTotalsFromItems();
+    }
+
+    /**
      * @param  array<int, bool>  $selected
      * @return array<string, int>
      */
