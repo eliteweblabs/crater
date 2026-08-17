@@ -42,6 +42,7 @@ test('group tag is detected on invoice item names', function () {
         ->and($yearly->isOptional())->toBeFalse()
         ->and($yearly->isCustomerSelectable())->toBeTrue()
         ->and($monthly->optionGroup())->toBe('group_01')
+        ->and((new InvoiceItem(['name' => 'Railway Web Hosting (group 01)']))->optionGroup())->toBe('group_01')
         ->and((new InvoiceItem(['name' => 'Railway Web Hosting (required)']))->isGrouped())->toBeFalse()
         ->and((new InvoiceItem(['name' => 'Web Design']))->optionGroup())->toBeNull();
 });
