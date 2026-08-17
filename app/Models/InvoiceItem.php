@@ -83,9 +83,14 @@ class InvoiceItem extends Model
      * Optional add-on the customer can toggle on the public invoice.
      * Required wins if both tags appear. Also treats the EST-000001 phrasing
      * "can be added anytime" as optional so converted estimates work as-is.
+     * Grouped alternatives ({@see optionGroup()}) are exclusive choices, not add-ons.
      */
     public function isOptional(): bool
     {
+        if ($this->isGrouped()) {
+            return false;
+        }
+
         $name = (string) $this->name;
 
         if (preg_match('/\(\s*required\s*\)/i', $name)) {
@@ -98,10 +103,37 @@ class InvoiceItem extends Model
         );
     }
 
+    /**
+     * Mutually exclusive choice group from a `(group_01)` name tag.
+     * `group_1` and `group_01` resolve to the same key.
+     */
+    public function optionGroup(): ?string
+    {
+        if (! preg_match('/[\(\[]\s*group_(\d+)\s*[\)\]]/i', (string) $this->name, $matches)) {
+            return null;
+        }
+
+        return 'group_'.str_pad((string) ((int) $matches[1]), 2, '0', STR_PAD_LEFT);
+    }
+
+    public function isGrouped(): bool
+    {
+        return $this->optionGroup() !== null;
+    }
+
+    /**
+     * Line the customer can change on the public invoice: an optional add-on
+     * or one alternative in a `(group_01)` pair.
+     */
+    public function isCustomerSelectable(): bool
+    {
+        return $this->isOptional() || $this->isGrouped();
+    }
+
     public function publicDisplayName(): string
     {
         $name = preg_replace(
-            '/\s*[\(\[]\s*(optional|required)\s*[\)\]]/i',
+            '/\s*[\(\[]\s*(optional|required|group_\d+)\s*[\)\]]/i',
             '',
             (string) $this->name
         );

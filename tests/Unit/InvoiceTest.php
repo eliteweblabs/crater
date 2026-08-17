@@ -103,6 +103,74 @@ test('optional add-on selection recalculates invoice totals', function () {
         ->and($doc->first()->name)->toBe('Railway Web Hosting (required)');
 });
 
+test('grouped plan selection keeps one alternative active', function () {
+    $invoice = Invoice::factory()->create([
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'sub_total' => 24000,
+        'total' => 24000,
+        'due_amount' => 24000,
+        'paid_status' => Invoice::STATUS_UNPAID,
+        'exchange_rate' => 1,
+    ]);
+
+    $yearly = InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'One Year Hosting Plan (group_01)',
+        'price' => 24000,
+        'quantity' => 1,
+        'total' => 24000,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    $monthly = InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'Monthly Hosting Plan (group_01)',
+        'price' => 2500,
+        'quantity' => 0,
+        'total' => 0,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    expect($invoice->activeGroupedItemIds())->toBe(['group_01' => $yearly->id]);
+
+    $invoice->applyOptionalItemSelection([$monthly->id]);
+    $invoice->refresh();
+    $yearly->refresh();
+    $monthly->refresh();
+
+    expect((float) $yearly->quantity)->toBe(0.0)
+        ->and((int) $yearly->total)->toBe(0)
+        ->and((float) $monthly->quantity)->toBe(1.0)
+        ->and((int) $monthly->total)->toBe(2500)
+        ->and((int) $invoice->total)->toBe(2500)
+        ->and((int) $invoice->due_amount)->toBe(2500);
+
+    $invoice->applyOptionalItemSelection([]);
+    $invoice->refresh();
+    $yearly->refresh();
+    $monthly->refresh();
+
+    expect((float) $monthly->quantity)->toBe(1.0)
+        ->and((float) $yearly->quantity)->toBe(0.0)
+        ->and((int) $invoice->total)->toBe(2500);
+
+    $doc = $invoice->documentItems();
+    expect($doc)->toHaveCount(1)
+        ->and($doc->first()->id)->toBe($monthly->id)
+        ->and($doc->first()->publicDisplayName())->toBe('Monthly Hosting Plan');
+});
+
 test('get previous status', function () {
     $invoice = Invoice::factory()->create();
 
