@@ -804,8 +804,9 @@ class Invoice extends Model implements HasMedia
     }
 
     /**
-     * Lines that belong on the PDF / paid receipt. Declined add-ons stay on
-     * the invoice as qty 0 for toggle state, but they are not part of the bill.
+     * Lines that belong on the PDF / paid receipt. Declined add-ons and
+     * unselected group alternatives stay on the invoice as qty 0 for toggle
+     * state, but they are not part of the bill.
      */
     public function documentItems()
     {
@@ -813,15 +814,43 @@ class Invoice extends Model implements HasMedia
 
         return $this->items
             ->filter(function ($item) {
-                return ! $item->isOptional() || (float) $item->quantity > 0;
+                return ! $item->isCustomerSelectable() || (float) $item->quantity > 0;
             })
             ->values();
     }
 
+    public function hasCustomerSelectableItems(): bool
+    {
+        $this->loadMissing('items');
+
+        return $this->items->contains(fn ($item) => $item->isCustomerSelectable());
+    }
+
     /**
-     * Customer-picked add-ons on the public invoice. Only rows {@see InvoiceItem::isOptional()}
-     * change quantity (1 = included, 0 = left off). Required lines stay as-is.
-     * Recalculates totals and due_amount from the items + payments.
+     * Active member of each `(group_01)` pair: the first line in invoice order.
+     *
+     * @return array<string, int> group key => invoice item id
+     */
+    public function activeGroupedItemIds(): array
+    {
+        $this->loadMissing('items');
+        $active = [];
+
+        foreach ($this->items as $item) {
+            $group = $item->optionGroup();
+            if ($group !== null && ! isset($active[$group])) {
+                $active[$group] = (int) $item->id;
+            }
+        }
+
+        return $active;
+    }
+
+    /**
+     * Customer-picked add-ons and group alternatives on the public invoice.
+     * Optional rows {@see InvoiceItem::isOptional()} are 1 = included, 0 = left off.
+     * Grouped rows keep exactly one member active per `(group_01)` pair.
+     * Required lines stay as-is. Recalculates totals and due_amount.
      */
     public function applyOptionalItemSelection(array $selectedIds): self
     {
@@ -832,13 +861,17 @@ class Invoice extends Model implements HasMedia
         $this->loadMissing('items');
         $selected = array_fill_keys(array_map('intval', $selectedIds), true);
         $rate = (float) ($this->exchange_rate ?: 1);
+        $groupWinner = $this->resolveGroupedSelection($selected);
 
         foreach ($this->items as $item) {
-            if (! $item->isOptional()) {
+            if ($item->isGrouped()) {
+                $include = ($groupWinner[$item->optionGroup()] ?? null) === (int) $item->id;
+            } elseif ($item->isOptional()) {
+                $include = isset($selected[(int) $item->id]);
+            } else {
                 continue;
             }
 
-            $include = isset($selected[(int) $item->id]);
             $qty = $include ? 1.0 : 0.0;
             $lineTotal = (int) round(((int) $item->price) * $qty);
 
@@ -849,6 +882,30 @@ class Invoice extends Model implements HasMedia
         }
 
         return $this->recalculateTotalsFromItems();
+    }
+
+    /**
+     * @param  array<int, bool>  $selected
+     * @return array<string, int>
+     */
+    private function resolveGroupedSelection(array $selected): array
+    {
+        $winners = [];
+
+        foreach ($this->items->groupBy(fn ($item) => $item->optionGroup()) as $group => $members) {
+            if ($group === null || $group === '') {
+                continue;
+            }
+
+            $winner = $members->first(fn ($item) => isset($selected[(int) $item->id]))
+                ?? $members->first();
+
+            if ($winner) {
+                $winners[$group] = (int) $winner->id;
+            }
+        }
+
+        return $winners;
     }
 
     public function recalculateTotalsFromItems(): self

@@ -20,7 +20,7 @@ class PublicInvoiceController extends Controller
             ->firstOrFail();
 
         $hasOptionalItems = $invoice->paid_status !== Invoice::STATUS_PAID
-            && $invoice->items->contains(fn ($item) => $item->isOptional());
+            && $invoice->hasCustomerSelectableItems();
 
         $ogImageUrl = url('/invoices/'.$invoice->unique_hash.'/og.png').'?v=reave';
 

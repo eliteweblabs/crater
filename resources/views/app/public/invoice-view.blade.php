@@ -78,11 +78,13 @@
         .items { margin: 24px -40px 20px; overflow: visible; border-top: 1px solid #eee; }
         .item-row { display: block; position: relative; overflow: visible; padding: 16px 40px; border-bottom: 1px solid #eee; }
         .item-row::after { content: ''; display: table; clear: both; }
-        .item-row--optional { background: #faf7ff; cursor: pointer; }
-        /* Own top rule after a required row so the Optional chip sits on this
-           row’s edge, not the white item above. Consecutive optionals keep a
-           single shared border. */
-        .item-row:not(.item-row--optional) + .item-row--optional { border-top: 1px solid #eee; }
+        .item-row--optional,
+        .item-row--grouped { background: #faf7ff; cursor: pointer; }
+        /* Own top rule after a required row so the Optional / Choose one chip
+           sits on this row’s edge, not the white item above. Consecutive
+           selectable rows keep a single shared border. */
+        .item-row:not(.item-row--optional):not(.item-row--grouped) + .item-row--optional,
+        .item-row:not(.item-row--optional):not(.item-row--grouped) + .item-row--grouped { border-top: 1px solid #eee; }
         .item-row--off .item-title,
         .item-row--off .description,
         .item-row--off .amount,
@@ -269,29 +271,48 @@
         </div>
 
         <div class="items">
-            @foreach($invoice->items as $item)
             @php
                 $paid = $invoice->paid_status === 'PAID';
-                $optional = ! $paid && $item->isOptional();
-                $included = ! $optional || (float) $item->quantity > 0;
+                $groupActiveIds = $invoice->activeGroupedItemIds();
+                $groupBadgeShown = [];
             @endphp
-            @if($paid && $item->isOptional() && (float) $item->quantity <= 0)
+            @foreach($invoice->items as $item)
+            @php
+                $group = $item->optionGroup();
+                $optional = ! $paid && $item->isOptional();
+                $grouped = ! $paid && $group !== null;
+                $selectable = $optional || $grouped;
+                if ($grouped) {
+                    $included = isset($groupActiveIds[$group]) && (int) $groupActiveIds[$group] === (int) $item->id;
+                } else {
+                    $included = ! $optional || (float) $item->quantity > 0;
+                }
+                $showGroupBadge = $grouped && ! isset($groupBadgeShown[$group]);
+                if ($showGroupBadge) {
+                    $groupBadgeShown[$group] = true;
+                }
+            @endphp
+            @if($paid && $item->isCustomerSelectable() && (float) $item->quantity <= 0)
                 @continue
             @endif
-            <{{ $optional ? 'label' : 'div' }} class="item-row {{ $optional ? 'item-row--optional' : '' }} {{ $optional && ! $included ? 'item-row--off' : '' }}"
+            <{{ $selectable ? 'label' : 'div' }} class="item-row {{ $selectable ? 'item-row--optional' : '' }} {{ $grouped ? 'item-row--grouped' : '' }} {{ $selectable && ! $included ? 'item-row--off' : '' }}"
                 data-optional="{{ $optional ? '1' : '0' }}"
+                data-grouped="{{ $grouped ? '1' : '0' }}"
+                data-group="{{ $group ?? '' }}"
                 data-item-id="{{ $item->id }}"
                 data-price="{{ (int) $item->price }}"
-                data-fixed-cents="{{ $optional ? 0 : (int) $item->total }}"
+                data-fixed-cents="{{ $selectable ? 0 : (int) $item->total }}"
                 data-included="{{ $included ? '1' : '0' }}">
                 @if($optional)
                     <span class="addon-badge">Optional</span>
+                @elseif($showGroupBadge)
+                    <span class="addon-badge">Choose one</span>
                 @endif
-                <div class="amount">${{ number_format(($optional ? $item->price : $item->total) / 100, 2) }}</div>
+                <div class="amount">${{ number_format(($selectable ? $item->price : $item->total) / 100, 2) }}</div>
                 <div class="item-heading">
-                    @if($optional)
+                    @if($selectable)
                     <span class="item-switch">
-                        <input type="checkbox" class="optional-toggle" value="{{ $item->id }}" autocomplete="off" {{ $included ? 'checked' : '' }} aria-label="Add {{ $item->publicDisplayName() }}">
+                        <input type="checkbox" class="optional-toggle selectable-toggle" value="{{ $item->id }}" autocomplete="off" {{ $included ? 'checked' : '' }} aria-label="{{ $grouped ? 'Select' : 'Add' }} {{ $item->publicDisplayName() }}">
                         <span class="item-switch-track" aria-hidden="true"></span>
                     </span>
                     @endif
@@ -302,7 +323,7 @@
                 @if($item->description)
                     <div class="description" x-apple-data-detectors="false">{{ $item->description }}</div>
                 @endif
-            </{{ $optional ? 'label' : 'div' }}>
+            </{{ $selectable ? 'label' : 'div' }}>
             @endforeach
         </div>
 
@@ -351,13 +372,16 @@
                 const money = (cents) => (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
                 const selectedOptionalIds = () =>
-                    Array.from(document.querySelectorAll('.optional-toggle:checked')).map((el) => Number(el.value));
+                    Array.from(document.querySelectorAll('.selectable-toggle:checked')).map((el) => Number(el.value));
+
+                const rowToggle = (row) => row.querySelector('.selectable-toggle');
+                const rowSelectable = (row) => row.dataset.optional === '1' || row.dataset.grouped === '1';
 
                 const liveCents = () => {
                     let subtotal = 0;
                     document.querySelectorAll('.item-row').forEach((row) => {
-                        if (row.dataset.optional === '1') {
-                            const on = row.querySelector('.optional-toggle')?.checked;
+                        if (rowSelectable(row)) {
+                            const on = rowToggle(row)?.checked;
                             subtotal += on ? Number(row.dataset.price || 0) : 0;
                         } else {
                             subtotal += Number(row.dataset.fixedCents || 0);
@@ -370,16 +394,16 @@
                     const total = liveCents();
                     let subtotal = 0;
                     document.querySelectorAll('.item-row').forEach((row) => {
-                        const optional = row.dataset.optional === '1';
-                        const on = optional ? !!row.querySelector('.optional-toggle')?.checked : true;
-                        const priceCents = optional ? Number(row.dataset.price || 0) : Number(row.dataset.fixedCents || 0);
-                        const cents = optional && !on ? 0 : priceCents;
+                        const selectable = rowSelectable(row);
+                        const on = selectable ? !!rowToggle(row)?.checked : true;
+                        const priceCents = selectable ? Number(row.dataset.price || 0) : Number(row.dataset.fixedCents || 0);
+                        const cents = selectable && !on ? 0 : priceCents;
                         subtotal += cents;
                         const amountEl = row.querySelector('.amount');
                         const qtyEl = row.querySelector('.item-qty');
                         if (amountEl) amountEl.textContent = money(priceCents);
-                        if (optional && qtyEl) qtyEl.textContent = on ? '1' : '0';
-                        row.classList.toggle('item-row--off', optional && !on);
+                        if (selectable && qtyEl) qtyEl.textContent = on ? '1' : '0';
+                        row.classList.toggle('item-row--off', selectable && !on);
                     });
                     const due = document.getElementById('amount-due');
                     const sub = document.getElementById('subtotal-display');
@@ -531,8 +555,20 @@
                     }
                 };
 
-                document.querySelectorAll('.optional-toggle').forEach((box) => {
+                document.querySelectorAll('.selectable-toggle').forEach((box) => {
                     box.addEventListener('change', () => {
+                        const row = box.closest('.item-row');
+                        const group = row && row.dataset.group;
+                        if (group) {
+                            const peers = document.querySelectorAll('.item-row[data-group="' + group + '"] .selectable-toggle');
+                            if (box.checked) {
+                                peers.forEach((other) => {
+                                    if (other !== box) other.checked = false;
+                                });
+                            } else if (![...peers].some((el) => el.checked)) {
+                                box.checked = true;
+                            }
+                        }
                         paintTotals();
                         destroyCheckout();
                     });
@@ -579,7 +615,7 @@
 
         @php
             $pdfReady = $invoice->paid_status === 'PAID'
-                || ! $invoice->items->contains(fn ($item) => $item->isOptional());
+                || ! $invoice->hasCustomerSelectableItems();
         @endphp
         @if($pdfReady)
         <div style="margin-top: 20px; text-align: center;">

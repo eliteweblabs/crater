@@ -33,10 +33,29 @@ test('optional tag is detected on invoice item names', function () {
     expect((new InvoiceItem(['name' => 'Web Design']))->isOptional())->toBeFalse();
 });
 
+test('group tag is detected on invoice item names', function () {
+    $yearly = new InvoiceItem(['name' => 'One Year Hosting Plan (group_01)']);
+    $monthly = new InvoiceItem(['name' => 'Monthly Hosting Plan (group_1)']);
+
+    expect($yearly->isGrouped())->toBeTrue()
+        ->and($yearly->optionGroup())->toBe('group_01')
+        ->and($yearly->isOptional())->toBeFalse()
+        ->and($yearly->isCustomerSelectable())->toBeTrue()
+        ->and($monthly->optionGroup())->toBe('group_01')
+        ->and((new InvoiceItem(['name' => 'Railway Web Hosting (required)']))->isGrouped())->toBeFalse()
+        ->and((new InvoiceItem(['name' => 'Web Design']))->optionGroup())->toBeNull();
+});
+
 test('public display name strips optional tags', function () {
     $item = new InvoiceItem(['name' => 'Booksy White Labeling (optional)']);
 
     expect($item->publicDisplayName())->toBe('Booksy White Labeling');
+});
+
+test('public display name strips group tags', function () {
+    $item = new InvoiceItem(['name' => 'One Year Hosting Plan (group_01)']);
+
+    expect($item->publicDisplayName())->toBe('One Year Hosting Plan');
 });
 
 test('invoice item has many taxes', function () {

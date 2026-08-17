@@ -505,8 +505,8 @@ class StripePaymentController extends Controller
     }
 
     /**
-     * Persist optional add-on toggles from the public invoice before charging.
-     * Missing `optional_item_ids` leaves the invoice unchanged (plain invoices).
+     * Persist optional add-on and `(group_01)` choices from the public invoice
+     * before charging. Missing `optional_item_ids` leaves the invoice unchanged.
      */
     private function applyOptionalSelectionFromRequest(Request $request, Invoice $invoice): Invoice
     {
