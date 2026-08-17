@@ -120,8 +120,8 @@ test('grouped plan selection keeps one alternative active', function () {
         'invoice_id' => $invoice->id,
         'name' => 'One Year Hosting Plan (group_01)',
         'price' => 24000,
-        'quantity' => 1,
-        'total' => 24000,
+        'quantity' => 0,
+        'total' => 0,
         'tax' => 0,
         'discount' => 0,
         'discount_val' => 0,
@@ -133,8 +133,8 @@ test('grouped plan selection keeps one alternative active', function () {
         'invoice_id' => $invoice->id,
         'name' => 'Monthly Hosting Plan (group_01)',
         'price' => 2500,
-        'quantity' => 0,
-        'total' => 0,
+        'quantity' => 1,
+        'total' => 2500,
         'tax' => 0,
         'discount' => 0,
         'discount_val' => 0,
@@ -161,14 +161,15 @@ test('grouped plan selection keeps one alternative active', function () {
     $yearly->refresh();
     $monthly->refresh();
 
-    expect((float) $monthly->quantity)->toBe(1.0)
-        ->and((float) $yearly->quantity)->toBe(0.0)
-        ->and((int) $invoice->total)->toBe(2500);
+    expect((float) $yearly->quantity)->toBe(1.0)
+        ->and((int) $yearly->total)->toBe(24000)
+        ->and((float) $monthly->quantity)->toBe(0.0)
+        ->and((int) $invoice->total)->toBe(24000);
 
     $doc = $invoice->documentItems();
     expect($doc)->toHaveCount(1)
-        ->and($doc->first()->id)->toBe($monthly->id)
-        ->and($doc->first()->publicDisplayName())->toBe('Monthly Hosting Plan');
+        ->and($doc->first()->id)->toBe($yearly->id)
+        ->and($doc->first()->publicDisplayName())->toBe('One Year Hosting Plan');
 });
 
 test('get previous status', function () {

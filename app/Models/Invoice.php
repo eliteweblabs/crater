@@ -827,7 +827,7 @@ class Invoice extends Model implements HasMedia
     }
 
     /**
-     * Active member of each `(group_01)` pair: the qty > 0 row, else the first.
+     * Active member of each `(group_01)` pair: the first line in invoice order.
      *
      * @return array<string, int> group key => invoice item id
      */
@@ -835,16 +835,6 @@ class Invoice extends Model implements HasMedia
     {
         $this->loadMissing('items');
         $active = [];
-
-        foreach ($this->items as $item) {
-            $group = $item->optionGroup();
-            if ($group === null) {
-                continue;
-            }
-            if (! isset($active[$group]) && (float) $item->quantity > 0) {
-                $active[$group] = (int) $item->id;
-            }
-        }
 
         foreach ($this->items as $item) {
             $group = $item->optionGroup();
@@ -907,11 +897,8 @@ class Invoice extends Model implements HasMedia
                 continue;
             }
 
-            $winner = $members->first(fn ($item) => isset($selected[(int) $item->id]));
-            if (! $winner) {
-                $winner = $members->first(fn ($item) => (float) $item->quantity > 0)
-                    ?? $members->first();
-            }
+            $winner = $members->first(fn ($item) => isset($selected[(int) $item->id]))
+                ?? $members->first();
 
             if ($winner) {
                 $winners[$group] = (int) $winner->id;

@@ -295,7 +295,7 @@
             @if($paid && $item->isCustomerSelectable() && (float) $item->quantity <= 0)
                 @continue
             @endif
-            <{{ $selectable ? 'label' : 'div' }} class="item-row {{ $optional ? 'item-row--optional' : '' }} {{ $grouped ? 'item-row--grouped' : '' }} {{ $selectable && ! $included ? 'item-row--off' : '' }}"
+            <{{ $selectable ? 'label' : 'div' }} class="item-row {{ $selectable ? 'item-row--optional' : '' }} {{ $grouped ? 'item-row--grouped' : '' }} {{ $selectable && ! $included ? 'item-row--off' : '' }}"
                 data-optional="{{ $optional ? '1' : '0' }}"
                 data-grouped="{{ $grouped ? '1' : '0' }}"
                 data-group="{{ $group ?? '' }}"
@@ -310,14 +310,9 @@
                 @endif
                 <div class="amount">${{ number_format(($selectable ? $item->price : $item->total) / 100, 2) }}</div>
                 <div class="item-heading">
-                    @if($optional)
+                    @if($selectable)
                     <span class="item-switch">
-                        <input type="checkbox" class="optional-toggle selectable-toggle" value="{{ $item->id }}" autocomplete="off" {{ $included ? 'checked' : '' }} aria-label="Add {{ $item->publicDisplayName() }}">
-                        <span class="item-switch-track" aria-hidden="true"></span>
-                    </span>
-                    @elseif($grouped)
-                    <span class="item-switch">
-                        <input type="radio" class="group-toggle selectable-toggle" name="item-group-{{ $group }}" value="{{ $item->id }}" autocomplete="off" {{ $included ? 'checked' : '' }} aria-label="Select {{ $item->publicDisplayName() }}">
+                        <input type="checkbox" class="optional-toggle selectable-toggle" value="{{ $item->id }}" autocomplete="off" {{ $included ? 'checked' : '' }} aria-label="{{ $grouped ? 'Select' : 'Add' }} {{ $item->publicDisplayName() }}">
                         <span class="item-switch-track" aria-hidden="true"></span>
                     </span>
                     @endif
@@ -562,6 +557,18 @@
 
                 document.querySelectorAll('.selectable-toggle').forEach((box) => {
                     box.addEventListener('change', () => {
+                        const row = box.closest('.item-row');
+                        const group = row && row.dataset.group;
+                        if (group) {
+                            const peers = document.querySelectorAll('.item-row[data-group="' + group + '"] .selectable-toggle');
+                            if (box.checked) {
+                                peers.forEach((other) => {
+                                    if (other !== box) other.checked = false;
+                                });
+                            } else if (![...peers].some((el) => el.checked)) {
+                                box.checked = true;
+                            }
+                        }
                         paintTotals();
                         destroyCheckout();
                     });
