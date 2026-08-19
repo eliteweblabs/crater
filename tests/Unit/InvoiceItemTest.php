@@ -59,6 +59,29 @@ test('public display name strips group tags', function () {
     expect($item->publicDisplayName())->toBe('One Year Hosting Plan');
 });
 
+test('discount package tags are detected on invoice item names', function () {
+    $label = new InvoiceItem(['name' => 'Booksy White Label (optional) (discount_01)']);
+    $chat = new InvoiceItem(['name' => 'Agentic Chat (optional) (discount_01-100)']);
+    $alt = new InvoiceItem(['name' => 'Agentic Chat (discount_1-100)']);
+
+    expect($label->discountPackage())->toBe('discount_01')
+        ->and($label->packageDiscountCents())->toBe(0)
+        ->and($label->isDiscountPackage())->toBeTrue()
+        ->and($label->isOptional())->toBeTrue()
+        ->and($chat->discountPackage())->toBe('discount_01')
+        ->and($chat->packageDiscountCents())->toBe(10000)
+        ->and($alt->discountPackage())->toBe('discount_01')
+        ->and((new InvoiceItem(['name' => 'Booksy White Label (discount 01)']))->discountPackage())->toBe('discount_01')
+        ->and((new InvoiceItem(['name' => 'Web Design (optional)']))->discountPackage())->toBeNull()
+        ->and((new InvoiceItem(['name' => 'Web Design']))->isDiscountPackage())->toBeFalse();
+});
+
+test('public display name strips discount package tags', function () {
+    $item = new InvoiceItem(['name' => 'Agentic Chat (optional) (discount_01-100)']);
+
+    expect($item->publicDisplayName())->toBe('Agentic Chat');
+});
+
 test('invoice item has many taxes', function () {
     $invoiceItem = InvoiceItem::factory()->hasTaxes(5)->create([
         'invoice_id' => Invoice::factory(),

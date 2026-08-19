@@ -134,7 +134,7 @@ POST {CRATER_URL}/api/custom/invoice/{id}/items
 PUT  {CRATER_URL}/api/custom/invoice/{invoiceId}/items/{itemId}
 ```
 
-`GET` returns line items with stored `name` (including `(optional)` / `(required)` tags), `quantity`, and dollar `price` / `total`.
+`GET` returns line items with stored `name` (including `(optional)` / `(required)` / `(group_01)` / `(discount_01)` tags), `quantity`, and dollar `price` / `total`.
 
 `PUT /invoice/{id}` updates status, due date, or notes only — **not** line item names.
 
@@ -164,10 +164,23 @@ Detection is **name-only** (`InvoiceItem::isOptional()`). There is no separate `
 |---|---|
 | `(optional)` or `[optional]` | Toggle. Client can include or leave off. |
 | `can be added anytime` | Same as optional (converted estimates). |
+| `(group_01)` | Choose-one group. Exactly one member stays on. |
+| `(discount_01)` / `(discount_01-100)` | Package. If every member is on, subtract $100 from the `-100` line. |
 | `(required)` | **Never** a toggle, even if the name also says optional. |
 | no tag | Required. No switch. Amount is fixed. |
 
-The public title is `publicDisplayName()` — it strips `(optional)`, `[optional]`, `(required)`, and `(…can be added anytime…)`. The client sees **Plausible Analytics - 1 Year - 10/2026 - 10/2027 (yearly)** plus an **Optional** badge. Keep the tag in the stored name so the switch still works.
+The public title is `publicDisplayName()` — it strips `(optional)`, `[optional]`, `(required)`, `(group_01)`, `(discount_01)` / `(discount_01-100)`, and `(…can be added anytime…)`. The client sees **Plausible Analytics - 1 Year - 10/2026 - 10/2027 (yearly)** plus an **Optional** badge. Keep the tag in the stored name so the switch still works.
+
+### Package discount
+
+Pair add-ons with the same package key. The `-N` suffix is **dollars** off that line when **all** members of the package are selected (qty `> 0`). One tagged row is not a package.
+
+```
+Booksy White Label (optional) (discount_01)
+Agentic Chat (optional) (discount_01-100)
+```
+
+Each is $200 alone. Both on → Agentic Chat is $100, package is **$300** (not $400). `discount_1` and `discount_01` are the same key. Use `(discount_02-50)` for a second package that knocks $50 off its tagged line. Combine with `(optional)` so the client can toggle members independently.
 
 ### Quantity is the on/off bit
 
@@ -186,7 +199,8 @@ Examples:
 Web Design (required)
 Railway Web Hosting - 1 Year - 10/2026 - 10/2027 (required) (yearly)
 Plausible Analytics - 1 Year - 10/2026 - 10/2027 (optional) (yearly)
-Booxie White Label (optional) (can be added anytime)
+Booksy White Label (optional) (discount_01)
+Agentic Chat (optional) (discount_01-100)
 ```
 
 Do not invent product names. **Plausible Analytics** is the analytics add-on — never "Phaseline Analytics".

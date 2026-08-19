@@ -850,7 +850,9 @@ class Invoice extends Model implements HasMedia
      * Customer-picked add-ons and group alternatives on the public invoice.
      * Optional rows {@see InvoiceItem::isOptional()} are 1 = included, 0 = left off.
      * Grouped rows keep exactly one member active per `(group_01)` pair.
-     * Required lines stay as-is. Recalculates totals and due_amount.
+     * When every member of a `(discount_01)` package is on, the line tagged
+     * `(discount_01-100)` loses $100. Required lines stay as-is.
+     * Recalculates totals and due_amount.
      */
     public function applyOptionalItemSelection(array $selectedIds): self
     {
@@ -880,6 +882,8 @@ class Invoice extends Model implements HasMedia
             $item->base_total = (int) round($lineTotal * $rate);
             $item->save();
         }
+
+        $this->applyPackageDiscountsToItems();
 
         return $this->recalculateTotalsFromItems();
     }
@@ -922,11 +926,13 @@ class Invoice extends Model implements HasMedia
 
     /**
      * Remove qty-0 optional/grouped rows and strip control tags from the
-     * names of the lines that were paid.
+     * names of the lines that were paid. Package discounts already baked
+     * into `total` are written onto `price` so the receipt rate matches.
      */
     public function finalizeCustomerItemSelection(): self
     {
         $this->loadMissing('items');
+        $rate = (float) ($this->exchange_rate ?: 1);
 
         foreach ($this->items as $item) {
             if (! $item->isCustomerSelectable()) {
@@ -939,11 +945,18 @@ class Invoice extends Model implements HasMedia
                 continue;
             }
 
+            $qty = (float) $item->quantity;
+            $expected = (int) round(((int) $item->price) * $qty);
+            if ((int) $item->total !== $expected && $qty > 0) {
+                $item->price = (int) max(0, round((int) $item->total / $qty));
+                $item->base_price = (int) round(((int) $item->price) * $rate);
+            }
+
             $display = $item->publicDisplayName();
             if ($display !== (string) $item->name) {
                 $item->name = $display;
-                $item->save();
             }
+            $item->save();
         }
 
         return $this->recalculateTotalsFromItems();
@@ -971,6 +984,44 @@ class Invoice extends Model implements HasMedia
         }
 
         return $winners;
+    }
+
+    /**
+     * When every member of a `(discount_01)` package is on the bill, subtract
+     * the `-N` dollar amount from that tagged line. Incomplete packages keep
+     * full prices. A lone tagged row is not a package.
+     */
+    public function applyPackageDiscountsToItems(): self
+    {
+        $this->loadMissing('items');
+        $rate = (float) ($this->exchange_rate ?: 1);
+
+        foreach ($this->items->groupBy(fn ($item) => $item->discountPackage()) as $package => $members) {
+            if ($package === null || $package === '') {
+                continue;
+            }
+
+            $complete = $members->count() >= 2
+                && $members->every(fn ($item) => (float) $item->quantity > 0);
+
+            foreach ($members as $item) {
+                $qty = (float) $item->quantity;
+                $lineTotal = (int) round(((int) $item->price) * $qty);
+                $off = ($complete && $qty > 0) ? $item->packageDiscountCents() : 0;
+                $off = min(max(0, $off), $lineTotal);
+                $lineTotal = max(0, $lineTotal - $off);
+
+                if ((int) $item->total === $lineTotal) {
+                    continue;
+                }
+
+                $item->total = $lineTotal;
+                $item->base_total = (int) round($lineTotal * $rate);
+                $item->save();
+            }
+        }
+
+        return $this;
     }
 
     public function recalculateTotalsFromItems(): self
