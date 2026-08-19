@@ -89,7 +89,7 @@
         .item-row--off .description,
         .item-row--off .amount,
         .item-row--off .item-switch { opacity: 0.55; }
-        .amount-was { text-decoration: line-through; font-weight: 400; opacity: 0.55; margin-right: 0.35em; }
+        .amount-was { display: block; text-decoration: line-through; font-weight: 400; opacity: 0.55; font-size: 13px; line-height: 1.2; }
         .item-heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
         .item-switch { position: relative; display: inline-flex; flex: none; cursor: pointer; margin: 0; }
         .items .item-title { font-weight: 500; line-height: 1.2; min-width: 0; }
@@ -97,6 +97,9 @@
         .items .description a { color: inherit; text-decoration: none; pointer-events: none; }
         .items .amount {
             float: right;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
             margin: 0 0 8px 12px;
             font-weight: 500;
             white-space: nowrap;
@@ -340,7 +343,8 @@
                 @endif
                 <div class="amount">
                     @if($selectable && $packageOff > 0)
-                        <s class="amount-was">${{ number_format(((int) $item->price) / 100, 2) }}</s>${{ number_format($displayPrice / 100, 2) }}
+                        <span class="amount-now">${{ number_format($displayPrice / 100, 2) }}</span>
+                        <s class="amount-was">${{ number_format(((int) $item->price) / 100, 2) }}</s>
                     @else
                         ${{ number_format(($selectable ? $item->price : $item->total) / 100, 2) }}
                     @endif
@@ -394,7 +398,7 @@
                         const amountEl = row.querySelector('.amount');
                         if (!amountEl) return;
                         if (off > 0) {
-                            amountEl.innerHTML = '<s class="amount-was">' + money(original) + '</s>' + money(display);
+                            amountEl.innerHTML = '<span class="amount-now">' + money(display) + '</span><s class="amount-was">' + money(original) + '</s>';
                         } else {
                             amountEl.textContent = money(original);
                         }
