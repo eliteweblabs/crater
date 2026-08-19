@@ -172,6 +172,97 @@ test('grouped plan selection keeps one alternative active', function () {
         ->and($doc->first()->publicDisplayName())->toBe('One Year Hosting Plan');
 });
 
+test('package discount applies when every member is selected', function () {
+    $invoice = Invoice::factory()->create([
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'sub_total' => 50000,
+        'total' => 50000,
+        'due_amount' => 50000,
+        'paid_status' => Invoice::STATUS_UNPAID,
+        'exchange_rate' => 1,
+    ]);
+
+    InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'Railway Web Hosting (required)',
+        'price' => 50000,
+        'quantity' => 1,
+        'total' => 50000,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    $label = InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'Booksy™ White Label (discount_01)',
+        'price' => 20000,
+        'quantity' => 0,
+        'total' => 0,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    $chat = InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'Agentic Chat (discount_01-100)',
+        'price' => 20000,
+        'quantity' => 0,
+        'total' => 0,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    $invoice->applyOptionalItemSelection([$label->id]);
+    $invoice->refresh();
+    $label->refresh();
+    $chat->refresh();
+
+    expect((float) $label->quantity)->toBe(1.0)
+        ->and((int) $label->total)->toBe(20000)
+        ->and((float) $chat->quantity)->toBe(0.0)
+        ->and((int) $invoice->total)->toBe(70000);
+
+    $invoice->applyOptionalItemSelection([$label->id, $chat->id]);
+    $invoice->refresh();
+    $label->refresh();
+    $chat->refresh();
+
+    expect((float) $label->quantity)->toBe(1.0)
+        ->and((int) $label->total)->toBe(20000)
+        ->and((float) $chat->quantity)->toBe(1.0)
+        ->and((int) $chat->total)->toBe(10000)
+        ->and((int) $chat->price)->toBe(20000)
+        ->and((int) $chat->discount_val)->toBe(10000)
+        ->and((int) $invoice->total)->toBe(80000);
+
+    $invoice->capturePaidLineItems([$label->id, $chat->id]);
+    $invoice->refresh()->load('items');
+    $chat = $invoice->items->firstWhere('id', $chat->id);
+
+    expect($invoice->items)->toHaveCount(3)
+        ->and($invoice->items->pluck('name')->sort()->values()->all())->toBe([
+            'Agentic Chat',
+            'Booksy™ White Label',
+            'Railway Web Hosting (required)',
+        ])
+        ->and((int) $chat->price)->toBe(10000)
+        ->and((int) $chat->total)->toBe(10000)
+        ->and((int) $chat->discount_val)->toBe(0)
+        ->and((int) $invoice->total)->toBe(80000);
+});
+
 test('capturing paid line items drops declined add-ons and unused group plans', function () {
     $invoice = Invoice::factory()->create([
         'tax' => 0,

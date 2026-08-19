@@ -134,7 +134,7 @@ POST {CRATER_URL}/api/custom/invoice/{id}/items
 PUT  {CRATER_URL}/api/custom/invoice/{invoiceId}/items/{itemId}
 ```
 
-`GET` returns line items with stored `name` (including `(optional)` / `(required)` tags), `quantity`, and dollar `price` / `total`.
+`GET` returns line items with stored `name` (including `(optional)` / `(required)` / `(group_01)` / `(discount_01)` tags), `quantity`, and dollar `price` / `total`.
 
 `PUT /invoice/{id}` updates status, due date, or notes only — **not** line item names.
 
@@ -153,7 +153,13 @@ The public page (`/invoices/{unique_hash}`) is what clients open. Recent behavio
 - **Qty and rate are hidden.** The client sees name, description, amount, and (for add-ons) a toggle.
 - **Optional rows get a switch.** Toggling live-updates subtotal / due and is sent to Stripe as `optional_item_ids` when they pay.
 - **Paid invoices lock.** Toggles do not appear after `paid_status = PAID`. Declined add-ons (qty `0`) are hidden on the paid page and on the PDF.
-- **PDF** (`/invoices/pdf/{hash}`) is the stored invoice, not the live toggles. On an unpaid proposal with add-ons the public page hides Download PDF until they pay (selection is written when the PaymentIntent is created). Invoices with no optional rows keep the button. The PDF omits qty-`0` add-ons and uses `publicDisplayName()` so `(optional)` tags do not print.
+- **After payment** (`payment_intent.succeeded` / checkout completed) `Invoice::capturePaidLineItems()` runs **before** the payment row is written. That is the save path for every public-invoice toggle:
+  1. Re-apply the customer's `optional_item_ids` (qty `1` / `0`, one winner per `(group_01)`).
+  2. If every `(discount_01)` member is on, store the `-N` cut on that line's `discount_val` (same columns as admin per-item discounts).
+  3. Delete declined add-ons and unused group plans.
+  4. Fold a completed package cut into `price` and clear `discount_val`.
+  5. Strip `(optional)` / `(group_01)` / `(discount_01-100)` from the names that remain.
+- **PDF** (`/invoices/pdf/{hash}`) is the stored invoice, not the live toggles. On an unpaid proposal with add-ons the public page hides Download PDF until they pay (selection is written when the PaymentIntent is created; the paid receipt is written on the webhook). Invoices with no optional rows keep the button. The PDF omits qty-`0` add-ons and uses `publicDisplayName()` so control tags do not print.
 - **OG card** is `/invoices/{hash}/og.png` (REΛVE icon). Share previews use that, not a screenshot of the line items. The preview **title** is `{client name} / {company name} - Invoice for Service` (`Invoice::sharePreviewTitle()`).
 
 ### How a line becomes a toggle
@@ -164,10 +170,27 @@ Detection is **name-only** (`InvoiceItem::isOptional()`). There is no separate `
 |---|---|
 | `(optional)` or `[optional]` | Toggle. Client can include or leave off. |
 | `can be added anytime` | Same as optional (converted estimates). |
+| `(group_01)` | Choose-one group. Exactly one member stays on. |
+| `(discount_01)` / `(discount_01-100)` | Package add-on (toggle). If every member is on, subtract $100 from the `-100` line. |
 | `(required)` | **Never** a toggle, even if the name also says optional. |
 | no tag | Required. No switch. Amount is fixed. |
 
-The public title is `publicDisplayName()` — it strips `(optional)`, `[optional]`, `(required)`, and `(…can be added anytime…)`. The client sees **Plausible Analytics - 1 Year - 10/2026 - 10/2027 (yearly)** plus an **Optional** badge. Keep the tag in the stored name so the switch still works.
+The public title is `publicDisplayName()` — it strips `(optional)`, `[optional]`, `(required)`, `(group_01)`, `(discount_01)` / `(discount_01-100)`, and `(…can be added anytime…)`. The client sees **Plausible Analytics - 1 Year - 10/2026 - 10/2027 (yearly)** plus an **Optional** badge. Keep the tag in the stored name so the switch still works.
+
+### Package discount
+
+Pair add-ons with the same package key. The `-N` suffix is **dollars** off that line when **all** members of the package are selected (qty `> 0`). One tagged row is not a package.
+
+```
+Booksy White Label (discount_01)
+Agentic Chat (discount_01-100)
+```
+
+Each is $200 alone. Both on → Agentic Chat is $100 (strikethrough $200.00), package is **$300** (not $400). `discount_1` and `discount_01` are the same key. Use `(discount_02-50)` for a second package that knocks $50 off its tagged line.
+
+A `(discount_01)` tag is enough — it is treated as optional (toggle + Optional badge) and the tag is stripped from the public title. You can still write `(optional) (discount_01)` if you want both tags in the stored name.
+
+Until they pay, the cut lives on that line as a fixed `discount_val` (same fields as admin per-item discounts). On the payment webhook, `finalizeCustomerItemSelection()` writes $100 onto `price` and strips the tags so the receipt is just **Agentic Chat — $100.00**.
 
 ### Quantity is the on/off bit
 
@@ -186,7 +209,8 @@ Examples:
 Web Design (required)
 Railway Web Hosting - 1 Year - 10/2026 - 10/2027 (required) (yearly)
 Plausible Analytics - 1 Year - 10/2026 - 10/2027 (optional) (yearly)
-Booxie White Label (optional) (can be added anytime)
+Booksy White Label (discount_01)
+Agentic Chat (discount_01-100)
 ```
 
 Do not invent product names. **Plausible Analytics** is the analytics add-on — never "Phaseline Analytics".

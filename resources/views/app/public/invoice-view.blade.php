@@ -89,6 +89,7 @@
         .item-row--off .description,
         .item-row--off .amount,
         .item-row--off .item-switch { opacity: 0.55; }
+        .amount-was { text-decoration: line-through; font-weight: 400; opacity: 0.55; margin-right: 0.35em; }
         .item-heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
         .item-switch { position: relative; display: inline-flex; flex: none; cursor: pointer; margin: 0; }
         .items .item-title { font-weight: 500; line-height: 1.2; min-width: 0; }
@@ -275,18 +276,45 @@
                 $paid = $invoice->paid_status === 'PAID';
                 $groupActiveIds = $invoice->activeGroupedItemIds();
                 $groupBadgeShown = [];
+                $rowMeta = [];
+                foreach ($invoice->items as $metaItem) {
+                    $metaGroup = $metaItem->optionGroup();
+                    $metaOptional = ! $paid && $metaItem->isOptional();
+                    $metaGrouped = ! $paid && $metaGroup !== null;
+                    if ($metaGrouped) {
+                        $metaIncluded = isset($groupActiveIds[$metaGroup]) && (int) $groupActiveIds[$metaGroup] === (int) $metaItem->id;
+                    } else {
+                        $metaIncluded = ! $metaOptional || (float) $metaItem->quantity > 0;
+                    }
+                    $rowMeta[(int) $metaItem->id] = [
+                        'group' => $metaGroup,
+                        'optional' => $metaOptional,
+                        'grouped' => $metaGrouped,
+                        'selectable' => $metaOptional || $metaGrouped,
+                        'included' => $metaIncluded,
+                    ];
+                }
+                $packageComplete = [];
+                foreach ($invoice->items->groupBy(fn ($i) => $i->discountPackage()) as $pkg => $members) {
+                    if ($pkg === null || $pkg === '') {
+                        continue;
+                    }
+                    $packageComplete[$pkg] = $members->count() >= 2
+                        && $members->every(fn ($i) => ! empty($rowMeta[(int) $i->id]['included']));
+                }
             @endphp
             @foreach($invoice->items as $item)
             @php
-                $group = $item->optionGroup();
-                $optional = ! $paid && $item->isOptional();
-                $grouped = ! $paid && $group !== null;
-                $selectable = $optional || $grouped;
-                if ($grouped) {
-                    $included = isset($groupActiveIds[$group]) && (int) $groupActiveIds[$group] === (int) $item->id;
-                } else {
-                    $included = ! $optional || (float) $item->quantity > 0;
-                }
+                $meta = $rowMeta[(int) $item->id];
+                $group = $meta['group'];
+                $optional = $meta['optional'];
+                $grouped = $meta['grouped'];
+                $selectable = $meta['selectable'];
+                $included = $meta['included'];
+                $packageOff = (! $paid && $included && ! empty($packageComplete[$item->discountPackage() ?? '']))
+                    ? (int) $item->packageDiscountCents()
+                    : 0;
+                $displayPrice = max(0, (int) $item->price - $packageOff);
                 $showGroupBadge = $grouped && ! isset($groupBadgeShown[$group]);
                 if ($showGroupBadge) {
                     $groupBadgeShown[$group] = true;
@@ -299,6 +327,8 @@
                 data-optional="{{ $optional ? '1' : '0' }}"
                 data-grouped="{{ $grouped ? '1' : '0' }}"
                 data-group="{{ $group ?? '' }}"
+                data-discount-package="{{ $item->discountPackage() ?? '' }}"
+                data-package-discount-cents="{{ (int) $item->packageDiscountCents() }}"
                 data-item-id="{{ $item->id }}"
                 data-price="{{ (int) $item->price }}"
                 data-fixed-cents="{{ $selectable ? 0 : (int) $item->total }}"
@@ -308,7 +338,13 @@
                 @elseif($showGroupBadge)
                     <span class="addon-badge">Choose one</span>
                 @endif
-                <div class="amount">${{ number_format(($selectable ? $item->price : $item->total) / 100, 2) }}</div>
+                <div class="amount">
+                    @if($selectable && $packageOff > 0)
+                        <s class="amount-was">${{ number_format(((int) $item->price) / 100, 2) }}</s>${{ number_format($displayPrice / 100, 2) }}
+                    @else
+                        ${{ number_format(($selectable ? $item->price : $item->total) / 100, 2) }}
+                    @endif
+                </div>
                 <div class="item-heading">
                     @if($selectable)
                     <span class="item-switch">
@@ -327,6 +363,46 @@
             @endforeach
         </div>
         @if($invoice->paid_status !== 'PAID')
+        <script>
+            window.invoicePackage = (function () {
+                const money = (cents) => (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+                const rowOn = (row) => {
+                    const box = row.querySelector('.selectable-toggle');
+                    return box ? !!box.checked : true;
+                };
+                const packageComplete = (key) => {
+                    if (!key) return false;
+                    const members = Array.from(document.querySelectorAll('.item-row[data-discount-package="' + key + '"]'));
+                    return members.length >= 2 && members.every(rowOn);
+                };
+                const rowBillCents = (row) => {
+                    const selectable = row.dataset.optional === '1' || row.dataset.grouped === '1';
+                    const on = selectable ? rowOn(row) : true;
+                    const price = selectable ? Number(row.dataset.price || 0) : Number(row.dataset.fixedCents || 0);
+                    if (selectable && !on) {
+                        return { bill: 0, display: price, original: price, off: 0 };
+                    }
+                    const off = packageComplete(row.dataset.discountPackage || '')
+                        ? Number(row.dataset.packageDiscountCents || 0)
+                        : 0;
+                    const billed = Math.max(0, price - Math.min(Math.max(0, off), price));
+                    return { bill: billed, display: billed, original: price, off: billed === price ? 0 : off };
+                };
+                const paintAmounts = () => {
+                    document.querySelectorAll('.item-row').forEach((row) => {
+                        const { display, original, off } = rowBillCents(row);
+                        const amountEl = row.querySelector('.amount');
+                        if (!amountEl) return;
+                        if (off > 0) {
+                            amountEl.innerHTML = '<s class="amount-was">' + money(original) + '</s>' + money(display);
+                        } else {
+                            amountEl.textContent = money(original);
+                        }
+                    });
+                };
+                return { money, rowOn, packageComplete, rowBillCents, paintAmounts };
+            })();
+        </script>
         <script>
             (function () {
                 const rows = document.querySelectorAll('.item-row[data-grouped="1"]');
@@ -369,7 +445,17 @@
                             box.checked = true;
                         }
                         paintGroupRows();
+                        if (window.invoicePackage) window.invoicePackage.paintAmounts();
                     });
+                });
+            })();
+        </script>
+        <script>
+            (function () {
+                if (!window.invoicePackage) return;
+                window.invoicePackage.paintAmounts();
+                document.querySelectorAll('.selectable-toggle').forEach((box) => {
+                    box.addEventListener('change', () => window.invoicePackage.paintAmounts());
                 });
             })();
         </script>
@@ -428,6 +514,10 @@
                 const liveCents = () => {
                     let subtotal = 0;
                     document.querySelectorAll('.item-row').forEach((row) => {
+                        if (window.invoicePackage) {
+                            subtotal += window.invoicePackage.rowBillCents(row).bill;
+                            return;
+                        }
                         if (rowSelectable(row)) {
                             const on = rowToggle(row)?.checked;
                             subtotal += on ? Number(row.dataset.price || 0) : 0;
@@ -444,15 +534,15 @@
                     document.querySelectorAll('.item-row').forEach((row) => {
                         const selectable = rowSelectable(row);
                         const on = selectable ? !!rowToggle(row)?.checked : true;
-                        const priceCents = selectable ? Number(row.dataset.price || 0) : Number(row.dataset.fixedCents || 0);
-                        const cents = selectable && !on ? 0 : priceCents;
-                        subtotal += cents;
-                        const amountEl = row.querySelector('.amount');
+                        const billed = window.invoicePackage
+                            ? window.invoicePackage.rowBillCents(row)
+                            : { bill: selectable && !on ? 0 : (selectable ? Number(row.dataset.price || 0) : Number(row.dataset.fixedCents || 0)) };
+                        subtotal += billed.bill;
                         const qtyEl = row.querySelector('.item-qty');
-                        if (amountEl) amountEl.textContent = money(priceCents);
                         if (selectable && qtyEl) qtyEl.textContent = on ? '1' : '0';
                         row.classList.toggle('item-row--off', selectable && !on);
                     });
+                    if (window.invoicePackage) window.invoicePackage.paintAmounts();
                     const due = document.getElementById('amount-due');
                     const sub = document.getElementById('subtotal-display');
                     const tot = document.getElementById('total-display');

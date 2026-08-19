@@ -850,7 +850,9 @@ class Invoice extends Model implements HasMedia
      * Customer-picked add-ons and group alternatives on the public invoice.
      * Optional rows {@see InvoiceItem::isOptional()} are 1 = included, 0 = left off.
      * Grouped rows keep exactly one member active per `(group_01)` pair.
-     * Required lines stay as-is. Recalculates totals and due_amount.
+     * When every member of a `(discount_01)` package is on, the line tagged
+     * `(discount_01-100)` loses $100. Required lines stay as-is.
+     * Recalculates totals and due_amount.
      */
     public function applyOptionalItemSelection(array $selectedIds): self
     {
@@ -860,7 +862,6 @@ class Invoice extends Model implements HasMedia
 
         $this->loadMissing('items');
         $selected = array_fill_keys(array_map('intval', $selectedIds), true);
-        $rate = (float) ($this->exchange_rate ?: 1);
         $groupWinner = $this->resolveGroupedSelection($selected);
 
         foreach ($this->items as $item) {
@@ -872,14 +873,10 @@ class Invoice extends Model implements HasMedia
                 continue;
             }
 
-            $qty = $include ? 1.0 : 0.0;
-            $lineTotal = (int) round(((int) $item->price) * $qty);
-
-            $item->quantity = $qty;
-            $item->total = $lineTotal;
-            $item->base_total = (int) round($lineTotal * $rate);
-            $item->save();
+            $this->writeItemLine($item, $include ? 1.0 : 0.0);
         }
+
+        $this->applyPackageDiscountsToItems();
 
         return $this->recalculateTotalsFromItems();
     }
@@ -902,8 +899,9 @@ class Invoice extends Model implements HasMedia
 
     /**
      * After a successful payment: lock in the customer's choices, drop
-     * declined add-ons and unselected group alternatives, and store clean
-     * names on the lines that remain.
+     * declined add-ons and unselected group alternatives, fold a completed
+     * `(discount_01-100)` cut into the paid rate, and store clean names on
+     * the lines that remain.
      *
      * @param  array<int, int>|null  $selectedIds  from Stripe metadata; null keeps current qty
      */
@@ -921,12 +919,17 @@ class Invoice extends Model implements HasMedia
     }
 
     /**
-     * Remove qty-0 optional/grouped rows and strip control tags from the
-     * names of the lines that were paid.
+     * Post-payment save for customer-selectable lines:
+     * 1. Re-apply package discounts while `(discount_01)` tags still exist.
+     * 2. Drop qty-0 optional / grouped rows.
+     * 3. Fold a completed package cut into `price` so the receipt no longer
+     *    depends on the tag.
+     * 4. Strip `(optional)` / `(group_01)` / `(discount_01-100)` from names.
      */
     public function finalizeCustomerItemSelection(): self
     {
         $this->loadMissing('items');
+        $this->applyPackageDiscountsToItems();
 
         foreach ($this->items as $item) {
             if (! $item->isCustomerSelectable()) {
@@ -939,11 +942,13 @@ class Invoice extends Model implements HasMedia
                 continue;
             }
 
+            $this->lockInPaidPackageDiscount($item);
+
             $display = $item->publicDisplayName();
             if ($display !== (string) $item->name) {
                 $item->name = $display;
-                $item->save();
             }
+            $item->save();
         }
 
         return $this->recalculateTotalsFromItems();
@@ -971,6 +976,82 @@ class Invoice extends Model implements HasMedia
         }
 
         return $winners;
+    }
+
+    /**
+     * When every member of a `(discount_01)` package is on the bill, subtract
+     * the `-N` dollar amount from that tagged line using the item's existing
+     * `discount` / `discount_val` fields. Incomplete packages keep full prices.
+     * A lone tagged row is not a package.
+     */
+    public function applyPackageDiscountsToItems(): self
+    {
+        $this->loadMissing('items');
+
+        foreach ($this->items->groupBy(fn ($item) => $item->discountPackage()) as $package => $members) {
+            if ($package === null || $package === '') {
+                continue;
+            }
+
+            $complete = $members->count() >= 2
+                && $members->every(fn ($item) => (float) $item->quantity > 0);
+
+            foreach ($members as $item) {
+                $qty = (float) $item->quantity;
+                $off = ($complete && $qty > 0) ? $item->packageDiscountCents() : 0;
+                $this->writeItemLine($item, $qty, $off);
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * Fold a completed package cut into `price` and clear the temporary
+     * item discount so the paid receipt / PDF / admin view match the charge
+     * without needing the `(discount_01-100)` tag.
+     */
+    private function lockInPaidPackageDiscount(InvoiceItem $item): void
+    {
+        $package = $item->discountPackage();
+        $off = $item->packageDiscountCents();
+        if ($package === null || $off <= 0 || (float) $item->quantity <= 0) {
+            return;
+        }
+
+        $members = $this->items->filter(
+            fn ($other) => $other->discountPackage() === $package
+        );
+        $complete = $members->count() >= 2
+            && $members->every(fn ($other) => (float) $other->quantity > 0);
+        if (! $complete) {
+            return;
+        }
+
+        $rate = (float) ($this->exchange_rate ?: 1);
+        $item->price = max(0, (int) $item->price - $off);
+        $item->base_price = (int) round(((int) $item->price) * $rate);
+        $this->writeItemLine($item, (float) $item->quantity, 0);
+    }
+
+    /**
+     * Persist qty / line total. `$discountCents` is a fixed item discount
+     * (package cut) stored on the same columns as admin per-item discounts.
+     */
+    private function writeItemLine(InvoiceItem $item, float $qty, int $discountCents = 0): void
+    {
+        $rate = (float) ($this->exchange_rate ?: 1);
+        $gross = (int) round(((int) $item->price) * $qty);
+        $off = min(max(0, $discountCents), $gross);
+
+        $item->quantity = $qty;
+        $item->discount_type = 'fixed';
+        $item->discount_val = $off;
+        $item->discount = $off / 100;
+        $item->base_discount_val = (int) round($off * $rate);
+        $item->total = max(0, $gross - $off);
+        $item->base_total = (int) round(((int) $item->total) * $rate);
+        $item->save();
     }
 
     public function recalculateTotalsFromItems(): self
