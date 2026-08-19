@@ -97,6 +97,10 @@ class InvoiceItem extends Model
             return false;
         }
 
+        if ($this->isDiscountPackage()) {
+            return true;
+        }
+
         return (bool) preg_match(
             '/\(\s*optional\s*\)|\[\s*optional\s*\]|can be added anytime/i',
             $name

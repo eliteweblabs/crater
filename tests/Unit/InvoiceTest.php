@@ -200,7 +200,7 @@ test('package discount applies when every member is selected', function () {
 
     $label = InvoiceItem::factory()->create([
         'invoice_id' => $invoice->id,
-        'name' => 'Booksy White Label (optional) (discount_01)',
+        'name' => 'Booksy™ White Label (discount_01)',
         'price' => 20000,
         'quantity' => 0,
         'total' => 0,
@@ -213,7 +213,7 @@ test('package discount applies when every member is selected', function () {
 
     $chat = InvoiceItem::factory()->create([
         'invoice_id' => $invoice->id,
-        'name' => 'Agentic Chat (optional) (discount_01-100)',
+        'name' => 'Agentic Chat (discount_01-100)',
         'price' => 20000,
         'quantity' => 0,
         'total' => 0,
@@ -254,7 +254,7 @@ test('package discount applies when every member is selected', function () {
     expect($invoice->items)->toHaveCount(3)
         ->and($invoice->items->pluck('name')->sort()->values()->all())->toBe([
             'Agentic Chat',
-            'Booksy White Label',
+            'Booksy™ White Label',
             'Railway Web Hosting (required)',
         ])
         ->and((int) $chat->price)->toBe(10000)

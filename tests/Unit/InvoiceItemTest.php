@@ -71,6 +71,9 @@ test('discount package tags are detected on invoice item names', function () {
         ->and($chat->discountPackage())->toBe('discount_01')
         ->and($chat->packageDiscountCents())->toBe(10000)
         ->and($alt->discountPackage())->toBe('discount_01')
+        ->and($alt->isOptional())->toBeTrue()
+        ->and($alt->publicDisplayName())->toBe('Agentic Chat')
+        ->and((new InvoiceItem(['name' => 'Booksy™ White Label (discount_01)']))->publicDisplayName())->toBe('Booksy™ White Label')
         ->and((new InvoiceItem(['name' => 'Booksy White Label (discount 01)']))->discountPackage())->toBe('discount_01')
         ->and((new InvoiceItem(['name' => 'Web Design (optional)']))->discountPackage())->toBeNull()
         ->and((new InvoiceItem(['name' => 'Web Design']))->isDiscountPackage())->toBeFalse();

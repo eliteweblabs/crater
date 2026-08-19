@@ -276,18 +276,45 @@
                 $paid = $invoice->paid_status === 'PAID';
                 $groupActiveIds = $invoice->activeGroupedItemIds();
                 $groupBadgeShown = [];
+                $rowMeta = [];
+                foreach ($invoice->items as $metaItem) {
+                    $metaGroup = $metaItem->optionGroup();
+                    $metaOptional = ! $paid && $metaItem->isOptional();
+                    $metaGrouped = ! $paid && $metaGroup !== null;
+                    if ($metaGrouped) {
+                        $metaIncluded = isset($groupActiveIds[$metaGroup]) && (int) $groupActiveIds[$metaGroup] === (int) $metaItem->id;
+                    } else {
+                        $metaIncluded = ! $metaOptional || (float) $metaItem->quantity > 0;
+                    }
+                    $rowMeta[(int) $metaItem->id] = [
+                        'group' => $metaGroup,
+                        'optional' => $metaOptional,
+                        'grouped' => $metaGrouped,
+                        'selectable' => $metaOptional || $metaGrouped,
+                        'included' => $metaIncluded,
+                    ];
+                }
+                $packageComplete = [];
+                foreach ($invoice->items->groupBy(fn ($i) => $i->discountPackage()) as $pkg => $members) {
+                    if ($pkg === null || $pkg === '') {
+                        continue;
+                    }
+                    $packageComplete[$pkg] = $members->count() >= 2
+                        && $members->every(fn ($i) => ! empty($rowMeta[(int) $i->id]['included']));
+                }
             @endphp
             @foreach($invoice->items as $item)
             @php
-                $group = $item->optionGroup();
-                $optional = ! $paid && $item->isOptional();
-                $grouped = ! $paid && $group !== null;
-                $selectable = $optional || $grouped;
-                if ($grouped) {
-                    $included = isset($groupActiveIds[$group]) && (int) $groupActiveIds[$group] === (int) $item->id;
-                } else {
-                    $included = ! $optional || (float) $item->quantity > 0;
-                }
+                $meta = $rowMeta[(int) $item->id];
+                $group = $meta['group'];
+                $optional = $meta['optional'];
+                $grouped = $meta['grouped'];
+                $selectable = $meta['selectable'];
+                $included = $meta['included'];
+                $packageOff = (! $paid && $included && ! empty($packageComplete[$item->discountPackage() ?? '']))
+                    ? (int) $item->packageDiscountCents()
+                    : 0;
+                $displayPrice = max(0, (int) $item->price - $packageOff);
                 $showGroupBadge = $grouped && ! isset($groupBadgeShown[$group]);
                 if ($showGroupBadge) {
                     $groupBadgeShown[$group] = true;
@@ -311,7 +338,13 @@
                 @elseif($showGroupBadge)
                     <span class="addon-badge">Choose one</span>
                 @endif
-                <div class="amount">${{ number_format(($selectable ? $item->price : $item->total) / 100, 2) }}</div>
+                <div class="amount">
+                    @if($selectable && $packageOff > 0)
+                        <s class="amount-was">${{ number_format(((int) $item->price) / 100, 2) }}</s>${{ number_format($displayPrice / 100, 2) }}
+                    @else
+                        ${{ number_format(($selectable ? $item->price : $item->total) / 100, 2) }}
+                    @endif
+                </div>
                 <div class="item-heading">
                     @if($selectable)
                     <span class="item-switch">

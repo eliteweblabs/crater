@@ -171,7 +171,7 @@ Detection is **name-only** (`InvoiceItem::isOptional()`). There is no separate `
 | `(optional)` or `[optional]` | Toggle. Client can include or leave off. |
 | `can be added anytime` | Same as optional (converted estimates). |
 | `(group_01)` | Choose-one group. Exactly one member stays on. |
-| `(discount_01)` / `(discount_01-100)` | Package. If every member is on, subtract $100 from the `-100` line. |
+| `(discount_01)` / `(discount_01-100)` | Package add-on (toggle). If every member is on, subtract $100 from the `-100` line. |
 | `(required)` | **Never** a toggle, even if the name also says optional. |
 | no tag | Required. No switch. Amount is fixed. |
 
@@ -182,11 +182,13 @@ The public title is `publicDisplayName()` — it strips `(optional)`, `[optional
 Pair add-ons with the same package key. The `-N` suffix is **dollars** off that line when **all** members of the package are selected (qty `> 0`). One tagged row is not a package.
 
 ```
-Booksy White Label (optional) (discount_01)
-Agentic Chat (optional) (discount_01-100)
+Booksy White Label (discount_01)
+Agentic Chat (discount_01-100)
 ```
 
-Each is $200 alone. Both on → Agentic Chat is $100, package is **$300** (not $400). `discount_1` and `discount_01` are the same key. Use `(discount_02-50)` for a second package that knocks $50 off its tagged line. Combine with `(optional)` so the client can toggle members independently.
+Each is $200 alone. Both on → Agentic Chat is $100 (strikethrough $200.00), package is **$300** (not $400). `discount_1` and `discount_01` are the same key. Use `(discount_02-50)` for a second package that knocks $50 off its tagged line.
+
+A `(discount_01)` tag is enough — it is treated as optional (toggle + Optional badge) and the tag is stripped from the public title. You can still write `(optional) (discount_01)` if you want both tags in the stored name.
 
 Until they pay, the cut lives on that line as a fixed `discount_val` (same fields as admin per-item discounts). On the payment webhook, `finalizeCustomerItemSelection()` writes $100 onto `price` and strips the tags so the receipt is just **Agentic Chat — $100.00**.
 
@@ -207,8 +209,8 @@ Examples:
 Web Design (required)
 Railway Web Hosting - 1 Year - 10/2026 - 10/2027 (required) (yearly)
 Plausible Analytics - 1 Year - 10/2026 - 10/2027 (optional) (yearly)
-Booksy White Label (optional) (discount_01)
-Agentic Chat (optional) (discount_01-100)
+Booksy White Label (discount_01)
+Agentic Chat (discount_01-100)
 ```
 
 Do not invent product names. **Plausible Analytics** is the analytics add-on — never "Phaseline Analytics".
