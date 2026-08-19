@@ -153,7 +153,13 @@ The public page (`/invoices/{unique_hash}`) is what clients open. Recent behavio
 - **Qty and rate are hidden.** The client sees name, description, amount, and (for add-ons) a toggle.
 - **Optional rows get a switch.** Toggling live-updates subtotal / due and is sent to Stripe as `optional_item_ids` when they pay.
 - **Paid invoices lock.** Toggles do not appear after `paid_status = PAID`. Declined add-ons (qty `0`) are hidden on the paid page and on the PDF.
-- **PDF** (`/invoices/pdf/{hash}`) is the stored invoice, not the live toggles. On an unpaid proposal with add-ons the public page hides Download PDF until they pay (selection is written when the PaymentIntent is created). Invoices with no optional rows keep the button. The PDF omits qty-`0` add-ons and uses `publicDisplayName()` so `(optional)` tags do not print.
+- **After payment** (`payment_intent.succeeded` / checkout completed) `Invoice::capturePaidLineItems()` runs **before** the payment row is written. That is the save path for every public-invoice toggle:
+  1. Re-apply the customer's `optional_item_ids` (qty `1` / `0`, one winner per `(group_01)`).
+  2. If every `(discount_01)` member is on, store the `-N` cut on that line's `discount_val` (same columns as admin per-item discounts).
+  3. Delete declined add-ons and unused group plans.
+  4. Fold a completed package cut into `price` and clear `discount_val`.
+  5. Strip `(optional)` / `(group_01)` / `(discount_01-100)` from the names that remain.
+- **PDF** (`/invoices/pdf/{hash}`) is the stored invoice, not the live toggles. On an unpaid proposal with add-ons the public page hides Download PDF until they pay (selection is written when the PaymentIntent is created; the paid receipt is written on the webhook). Invoices with no optional rows keep the button. The PDF omits qty-`0` add-ons and uses `publicDisplayName()` so control tags do not print.
 - **OG card** is `/invoices/{hash}/og.png` (REΛVE icon). Share previews use that, not a screenshot of the line items. The preview **title** is `{client name} / {company name} - Invoice for Service` (`Invoice::sharePreviewTitle()`).
 
 ### How a line becomes a toggle
@@ -181,6 +187,8 @@ Agentic Chat (optional) (discount_01-100)
 ```
 
 Each is $200 alone. Both on → Agentic Chat is $100, package is **$300** (not $400). `discount_1` and `discount_01` are the same key. Use `(discount_02-50)` for a second package that knocks $50 off its tagged line. Combine with `(optional)` so the client can toggle members independently.
+
+Until they pay, the cut lives on that line as a fixed `discount_val` (same fields as admin per-item discounts). On the payment webhook, `finalizeCustomerItemSelection()` writes $100 onto `price` and strips the tags so the receipt is just **Agentic Chat — $100.00**.
 
 ### Quantity is the on/off bit
 

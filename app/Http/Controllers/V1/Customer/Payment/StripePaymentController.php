@@ -473,7 +473,9 @@ class StripePaymentController extends Controller
 
             // Lock in the toggles the customer paid for before we record
             // the payment. Declined add-ons and the unselected hosting plan
-            // are removed so the paid invoice / PDF / admin view match the charge.
+            // are removed, and a completed (discount_01-100) cut is written
+            // onto the paid line, so the invoice / PDF / admin view match
+            // the charge.
             $invoice->capturePaidLineItems(
                 $this->parseOptionalItemIds($session['metadata'] ?? [])
             );

@@ -244,6 +244,7 @@ test('package discount applies when every member is selected', function () {
         ->and((float) $chat->quantity)->toBe(1.0)
         ->and((int) $chat->total)->toBe(10000)
         ->and((int) $chat->price)->toBe(20000)
+        ->and((int) $chat->discount_val)->toBe(10000)
         ->and((int) $invoice->total)->toBe(80000);
 
     $invoice->capturePaidLineItems([$label->id, $chat->id]);
@@ -258,6 +259,7 @@ test('package discount applies when every member is selected', function () {
         ])
         ->and((int) $chat->price)->toBe(10000)
         ->and((int) $chat->total)->toBe(10000)
+        ->and((int) $chat->discount_val)->toBe(0)
         ->and((int) $invoice->total)->toBe(80000);
 });
 
