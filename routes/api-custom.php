@@ -1742,3 +1742,145 @@ Route::post('/custom/repair-payment-numbers', function (Illuminate\Http\Request 
 // route win, these shadowed the canonical handlers defined earlier in this file
 // (which return `{ count, ... }` and use the real `Item` / `InvoiceItem` models).
 // Removed so the canonical implementations are the active ones.
+
+
+// Update an existing payment — fix payment method, date, notes, or amount.
+// PUT /api/custom/payment/{id}
+// Body: { "payment_method"?: "Venmo|Cash|Check|…", "payment_date"?: "YYYY-MM-DD", "notes"?: "…", "amount"?: 120 }
+Route::put('/custom/payment/{id}', function (Illuminate\Http\Request $request, $id) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $payment = Payment::with('paymentMethod')->find($id);
+    if (!$payment) {
+        return response()->json(['error' => 'Payment not found'], 404);
+    }
+
+    $validated = $request->validate([
+        'payment_method' => 'nullable|string|max:100',
+        'payment_date'   => 'nullable|date',
+        'notes'          => 'nullable|string',
+        'amount'         => 'nullable|numeric|min:0.01',
+    ]);
+
+    // Update payment method — find or create a PaymentMethod row matching the label.
+    // Custom labels (Venmo, Zelle, etc.) are stored as type=OTHER with a custom name.
+    if (!empty($validated['payment_method'])) {
+        $label = trim($validated['payment_method']);
+        $knownTypes = [
+            'cash'          => 'CASH',
+            'check'         => 'CHECK',
+            'credit card'   => 'CREDIT_CARD',
+            'bank transfer' => 'BANK_TRANSFER',
+        ];
+        $type = $knownTypes[strtolower($label)] ?? 'OTHER';
+
+        // Look for existing PaymentMethod with this name (case-insensitive)
+        $method = PaymentMethod::where('company_id', $payment->company_id)
+            ->whereRaw('LOWER(name) = ?', [strtolower($label)])
+            ->first();
+
+        if (!$method) {
+            // Create a new PaymentMethod for this label
+            $method = PaymentMethod::create([
+                'company_id' => $payment->company_id,
+                'name'       => $label,
+                'type'       => $type,
+            ]);
+        }
+
+        $payment->payment_method_id = $method->id;
+    }
+
+    if (!empty($validated['payment_date'])) {
+        $payment->payment_date = $validated['payment_date'];
+    }
+
+    if (array_key_exists('notes', $validated)) {
+        $payment->notes = $validated['notes'] ?? '';
+    }
+
+    if (!empty($validated['amount'])) {
+        $newAmountCents = (int) round($validated['amount'] * 100);
+        $oldAmountCents = (int) $payment->amount;
+        $diff = $newAmountCents - $oldAmountCents;
+
+        $payment->amount = $newAmountCents;
+
+        // Update invoice due_amount to reflect the corrected payment amount
+        if ($diff !== 0 && $payment->invoice_id) {
+            $invoice = Invoice::find($payment->invoice_id);
+            if ($invoice) {
+                $invoice->due_amount = max(0, (int) $invoice->due_amount - $diff);
+                $invoice->base_due_amount = $invoice->due_amount;
+                // Recalculate paid_status
+                if ((int) $invoice->due_amount <= 0) {
+                    $invoice->paid_status = Invoice::STATUS_PAID;
+                } elseif ((int) $invoice->due_amount < (int) $invoice->total) {
+                    $invoice->paid_status = Invoice::STATUS_PARTIALLY_PAID;
+                } else {
+                    $invoice->paid_status = Invoice::STATUS_UNPAID;
+                }
+                $invoice->save();
+            }
+        }
+    }
+
+    $payment->save();
+
+    return response()->json([
+        'success'        => true,
+        'payment_id'     => $payment->id,
+        'payment_number' => $payment->payment_number,
+        'amount'         => round((int) $payment->amount / 100, 2),
+        'payment_method' => $payment->paymentMethod->name ?? null,
+        'payment_date'   => optional($payment->payment_date)->format('Y-m-d'),
+    ]);
+});
+
+// Delete a payment and restore the invoice due_amount accordingly.
+// DELETE /api/custom/payment/{id}
+Route::delete('/custom/payment/{id}', function (Illuminate\Http\Request $request, $id) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $payment = Payment::find($id);
+    if (!$payment) {
+        return response()->json(['error' => 'Payment not found'], 404);
+    }
+
+    $amountCents = (int) $payment->amount;
+    $invoiceId   = $payment->invoice_id;
+    $paymentNumber = $payment->payment_number;
+
+    // Restore the invoice due_amount before deleting the payment row
+    if ($invoiceId) {
+        $invoice = Invoice::find($invoiceId);
+        if ($invoice) {
+            $invoice->due_amount      = (int) $invoice->due_amount + $amountCents;
+            $invoice->base_due_amount = $invoice->due_amount;
+            // Recalculate paid_status
+            if ((int) $invoice->due_amount <= 0) {
+                $invoice->paid_status = Invoice::STATUS_PAID;
+            } elseif ((int) $invoice->due_amount < (int) $invoice->total) {
+                $invoice->paid_status = Invoice::STATUS_PARTIALLY_PAID;
+            } else {
+                $invoice->paid_status = Invoice::STATUS_UNPAID;
+            }
+            $invoice->save();
+        }
+    }
+
+    $payment->delete();
+
+    return response()->json([
+        'success'        => true,
+        'payment_id'     => $id,
+        'payment_number' => $paymentNumber,
+        'deleted'        => true,
+        'amount_restored'=> round($amountCents / 100, 2),
+        'invoice_id'     => $invoiceId,
+    ]);
+});
