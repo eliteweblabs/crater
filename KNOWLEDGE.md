@@ -109,11 +109,11 @@ Headers:
 {
   "customer_name": "Client Name",
   "amount": 150.00,
-  "payment_mode": "CASH"
+  "payment_mode": "Apple Pay"
 }
 ```
 
-`payment_mode` is one of `CASH`, `CHECK`, `CREDIT_CARD`, `BANK_TRANSFER`.
+`payment_mode` is the **name** of a payment mode from Crater **Settings → Payment Modes** (Cash, Apple Pay, Venmo, Zelle, Stripe, Bank Transfer, or any custom mode). Spoken aliases like `card`, `apple pay`, and `ach` match those names. Omitting it, or sending a name that does not match, returns HTTP 300 with the configured list.
 
 ### Customers (search / export)
 
@@ -230,7 +230,7 @@ Do not invent product names. **Plausible Analytics** is the analytics add-on —
 - Create an invoice for a client (use `/api/custom/create-invoice`)
 - Mark add-ons `(optional)` with quantity `0` so the public page shows toggles off
 - Rename or fix a line on a SENT invoice (`PUT /api/custom/invoice/{id}/items/{itemId}`)
-- Record cash/check/transfer payment (use `/api/custom/record-payment`)
+- Record an offline payment against a configured payment mode (use `/api/custom/record-payment`)
 - List upcoming recurring invoices (use `/api/v1/recurring-invoices` or `/api/custom/recurring-invoices`)
 - View invoice PDF (`/api/v1/invoices/{id}` includes a `pdf_url`)
 - Send the client `public_url` (`/invoices/{unique_hash}`), not the admin view

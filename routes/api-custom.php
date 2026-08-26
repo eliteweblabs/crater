@@ -908,36 +908,105 @@ Route::post('/custom/record-payment', function (Illuminate\Http\Request $request
     }
 
     $validated = $request->validate([
-        'customer_name' => 'required|string',
-        'amount'        => 'required|numeric|min:0.01',
-        'payment_mode'  => 'nullable|in:CASH,CHECK,CREDIT_CARD,BANK_TRANSFER,OTHER',
-        'payment_date'  => 'nullable|date',
-        'notes'         => 'nullable|string',
-        'invoice_id'    => 'nullable|integer',
+        'customer_name'   => 'required|string',
+        'amount'          => 'required|numeric|min:0.01',
+        'payment_mode'    => 'nullable|string|max:100',
+        'payment_method'  => 'nullable|string|max:100',
+        'payment_date'    => 'nullable|date',
+        'notes'           => 'nullable|string',
+        'invoice_id'      => 'nullable|integer',
     ]);
 
     $companyId   = 1;
     $amountCents = (int) round($validated['amount'] * 100);
     $paymentDate = $validated['payment_date'] ?? now()->format('Y-m-d');
     $q           = trim($validated['customer_name']);
+    $rawMode     = trim((string) ($validated['payment_mode'] ?? $validated['payment_method'] ?? ''));
 
-    // If payment_mode was not supplied, ask before proceeding
-    if (empty($validated['payment_mode'])) {
+    $normalizeModeKey = static function (?string $raw): string {
+        return preg_replace('/[^a-z0-9]+/', '', strtolower(trim((string) $raw))) ?? '';
+    };
+
+    // Spoken / enum aliases → the same key we compare against method names.
+    $modeAliases = [
+        'cash'         => 'cash',
+        'check'        => 'check',
+        'cheque'       => 'check',
+        'creditcard'   => 'creditcard',
+        'card'         => 'creditcard',
+        'cc'           => 'creditcard',
+        'banktransfer' => 'banktransfer',
+        'transfer'     => 'banktransfer',
+        'ach'          => 'banktransfer',
+        'wire'         => 'banktransfer',
+        'applepay'     => 'applepay',
+        'venmo'        => 'venmo',
+        'zelle'        => 'zelle',
+        'stripe'       => 'stripe',
+        'other'        => 'other',
+    ];
+
+    $methods = PaymentMethod::where('company_id', $companyId)
+        ->orderBy('name')
+        ->get(['id', 'name', 'type']);
+
+    $methodOptions = $methods->map(fn ($m) => [
+        'value' => $m->name,
+        'label' => $m->name,
+        'id'    => $m->id,
+    ])->values();
+
+    $namesText = $methods->pluck('name')->filter()->values()->implode(', ');
+    if ($namesText === '') {
+        $namesText = 'a payment mode configured in Crater Settings → Payment Modes';
+    }
+
+    $resolvePaymentMethod = static function (string $raw) use ($methods, $normalizeModeKey, $modeAliases) {
+        $want = $normalizeModeKey($raw);
+        if ($want === '') {
+            return null;
+        }
+        $want = $modeAliases[$want] ?? $want;
+
+        $exact = $methods->first(function ($m) use ($want, $normalizeModeKey, $modeAliases) {
+            $have = $normalizeModeKey($m->name);
+            $haveCanon = $modeAliases[$have] ?? $have;
+            return $have === $want || $haveCanon === $want;
+        });
+        if ($exact) {
+            return $exact;
+        }
+
+        $partials = $methods->filter(function ($m) use ($want, $normalizeModeKey) {
+            $have = $normalizeModeKey($m->name);
+            return $have !== '' && (str_contains($have, $want) || str_contains($want, $have));
+        });
+
+        return $partials->count() === 1 ? $partials->first() : null;
+    };
+
+    // If payment_mode was not supplied, ask with the company's configured modes
+    if ($rawMode === '') {
         return response()->json([
             'needs_selection' => true,
             'selection_type'  => 'payment_mode',
-            'message'         => 'How was this payment received? Re-send with payment_mode set to one of the options.',
-            'options'         => [
-                ['value' => 'CASH',          'label' => 'Cash'],
-                ['value' => 'CHECK',         'label' => 'Check'],
-                ['value' => 'CREDIT_CARD',   'label' => 'Credit Card'],
-                ['value' => 'BANK_TRANSFER', 'label' => 'Bank Transfer'],
-                ['value' => 'OTHER',         'label' => 'Other'],
-            ],
+            'message'         => "How was this payment received? Re-send with payment_mode set to one of: {$namesText}.",
+            'options'         => $methodOptions,
         ], 300);
     }
 
-    $paymentMode = $validated['payment_mode'];
+    $matchedMethod = $resolvePaymentMethod($rawMode);
+    if (!$matchedMethod) {
+        return response()->json([
+            'needs_selection' => true,
+            'selection_type'  => 'payment_mode',
+            'message'         => "Payment mode \"{$rawMode}\" did not match. Use one of: {$namesText}.",
+            'options'         => $methodOptions,
+        ], 300);
+    }
+
+    $paymentMode     = $matchedMethod->name;
+    $paymentMethodId = $matchedMethod->id;
 
     // ── 1. Resolve customer ───────────────────────────────────────────────────
     $customers = Customer::where('company_id', $companyId)
@@ -977,10 +1046,7 @@ Route::post('/custom/record-payment', function (Illuminate\Http\Request $request
         ], 300);
     }
 
-    // ── 2. Resolve payment method (optional — null if not configured) ─────────
-    $paymentMethodId = optional(
-        PaymentMethod::where('company_id', $companyId)->where('type', $paymentMode)->first()
-    )->id;
+    // ── 2. Payment method already resolved from Settings → Payment Modes ──────
 
     // ── 3. Resolve invoice ────────────────────────────────────────────────────
     $invoiceCreated = false;
