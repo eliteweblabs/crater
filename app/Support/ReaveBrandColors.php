@@ -2,46 +2,72 @@
 
 namespace Crater\Support;
 
+use Illuminate\Support\Facades\Cache;
+
 /**
  * Company brand colors from reΛVe admin → Company (Postgres).
  * Fetches GET {REAVE_APP_URL}/api/branding/colors.
  */
 class ReaveBrandColors
 {
-    /** Hardcoded invoice CTA stops in vendor/mail/html/button.blade.php */
-    public const MAIL_BUTTON_PRIMARY = '#f472b6';
-    public const MAIL_BUTTON_SECONDARY = '#c026d3';
-    public const MAIL_BUTTON_ACCENT = '#6366f1';
+    public const FALLBACK_PRIMARY = '#000000';
+    public const FALLBACK_SECONDARY = '#505050';
 
     public static function fetch(): array
+    {
+        return Cache::remember('reave_brand_colors', 60, fn () => self::fetchFresh());
+    }
+
+    public static function fetchFresh(): array
     {
         $origin = rtrim((string) config('crater.reave_app_url'), '/');
         $payload = $origin !== '' ? self::getJson($origin.'/api/branding/colors') : null;
 
-        $primary = is_string($payload['primary'] ?? null) ? $payload['primary'] : self::MAIL_BUTTON_PRIMARY;
-        $secondary = is_string($payload['secondary'] ?? null) ? $payload['secondary'] : self::MAIL_BUTTON_SECONDARY;
+        $primary = self::hex($payload['primary'] ?? null) ?? self::FALLBACK_PRIMARY;
+        $secondary = self::hex($payload['secondary'] ?? null) ?? self::FALLBACK_SECONDARY;
+        $accent = self::hex($payload['accent'] ?? null) ?? $secondary;
+        $secondaryRgb = is_string($payload['secondaryRgb'] ?? null)
+            ? $payload['secondaryRgb']
+            : '80, 80, 80';
 
         return [
             'ok' => true,
             'primary' => $primary,
             'secondary' => $secondary,
-            'accent' => is_string($payload['accent'] ?? null) ? $payload['accent'] : self::MAIL_BUTTON_ACCENT,
+            'accent' => $accent,
             'primaryRgb' => $payload['primaryRgb'] ?? null,
-            'secondaryRgb' => $payload['secondaryRgb'] ?? null,
-            'gradient' => $payload['gradient'] ?? ('linear-gradient(135deg, '.$primary.', '.$secondary.')'),
+            'secondaryRgb' => $secondaryRgb,
+            'gradient' => 'linear-gradient(145deg, '.$primary.' 0%, '.$secondary.' 100%)',
+            'shadow' => '0 2px 16px rgba('.$secondaryRgb.', 0.35)',
             'source' => $payload['source'] ?? 'fallback',
             'stored' => $payload['stored'] ?? ['primary' => null, 'secondary' => null],
             'defaults' => $payload['defaults'] ?? [
-                'primary' => self::MAIL_BUTTON_PRIMARY,
-                'secondary' => self::MAIL_BUTTON_SECONDARY,
+                'primary' => self::FALLBACK_PRIMARY,
+                'secondary' => self::FALLBACK_SECONDARY,
             ],
             'mail_button' => [
-                'primary' => self::MAIL_BUTTON_PRIMARY,
-                'secondary' => self::MAIL_BUTTON_SECONDARY,
-                'accent' => self::MAIL_BUTTON_ACCENT,
-                'wired' => false,
+                'primary' => $primary,
+                'secondary' => $secondary,
+                'accent' => $accent,
+                'wired' => true,
             ],
         ];
+    }
+
+    public static function hex(mixed $raw): ?string
+    {
+        if (! is_string($raw)) {
+            return null;
+        }
+        $t = trim($raw);
+        if (! preg_match('/^#([0-9a-f]{3}|[0-9a-f]{6})$/i', $t)) {
+            return null;
+        }
+        if (strlen($t) === 4) {
+            return '#'.$t[1].$t[1].$t[2].$t[2].$t[3].$t[3];
+        }
+
+        return strtolower($t);
     }
 
     protected static function getJson(string $url): ?array
