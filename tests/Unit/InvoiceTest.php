@@ -103,6 +103,251 @@ test('optional add-on selection recalculates invoice totals', function () {
         ->and($doc->first()->name)->toBe('Railway Web Hosting (required)');
 });
 
+test('grouped plan selection keeps one alternative active', function () {
+    $invoice = Invoice::factory()->create([
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'sub_total' => 24000,
+        'total' => 24000,
+        'due_amount' => 24000,
+        'paid_status' => Invoice::STATUS_UNPAID,
+        'exchange_rate' => 1,
+    ]);
+
+    $yearly = InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'One Year Hosting Plan (group_01)',
+        'price' => 24000,
+        'quantity' => 0,
+        'total' => 0,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    $monthly = InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'Monthly Hosting Plan (group_01)',
+        'price' => 2500,
+        'quantity' => 1,
+        'total' => 2500,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    expect($invoice->activeGroupedItemIds())->toBe(['group_01' => $yearly->id]);
+
+    $invoice->applyOptionalItemSelection([$monthly->id]);
+    $invoice->refresh();
+    $yearly->refresh();
+    $monthly->refresh();
+
+    expect((float) $yearly->quantity)->toBe(0.0)
+        ->and((int) $yearly->total)->toBe(0)
+        ->and((float) $monthly->quantity)->toBe(1.0)
+        ->and((int) $monthly->total)->toBe(2500)
+        ->and((int) $invoice->total)->toBe(2500)
+        ->and((int) $invoice->due_amount)->toBe(2500);
+
+    $invoice->applyOptionalItemSelection([]);
+    $invoice->refresh();
+    $yearly->refresh();
+    $monthly->refresh();
+
+    expect((float) $yearly->quantity)->toBe(1.0)
+        ->and((int) $yearly->total)->toBe(24000)
+        ->and((float) $monthly->quantity)->toBe(0.0)
+        ->and((int) $invoice->total)->toBe(24000);
+
+    $doc = $invoice->documentItems();
+    expect($doc)->toHaveCount(1)
+        ->and($doc->first()->id)->toBe($yearly->id)
+        ->and($doc->first()->publicDisplayName())->toBe('One Year Hosting Plan');
+});
+
+test('package discount applies when every member is selected', function () {
+    $invoice = Invoice::factory()->create([
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'sub_total' => 50000,
+        'total' => 50000,
+        'due_amount' => 50000,
+        'paid_status' => Invoice::STATUS_UNPAID,
+        'exchange_rate' => 1,
+    ]);
+
+    InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'Railway Web Hosting (required)',
+        'price' => 50000,
+        'quantity' => 1,
+        'total' => 50000,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    $label = InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'Booksy™ White Label (discount_01)',
+        'price' => 20000,
+        'quantity' => 0,
+        'total' => 0,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    $chat = InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'Agentic Chat (discount_01-100)',
+        'price' => 20000,
+        'quantity' => 0,
+        'total' => 0,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    $invoice->applyOptionalItemSelection([$label->id]);
+    $invoice->refresh();
+    $label->refresh();
+    $chat->refresh();
+
+    expect((float) $label->quantity)->toBe(1.0)
+        ->and((int) $label->total)->toBe(20000)
+        ->and((float) $chat->quantity)->toBe(0.0)
+        ->and((int) $invoice->total)->toBe(70000);
+
+    $invoice->applyOptionalItemSelection([$label->id, $chat->id]);
+    $invoice->refresh();
+    $label->refresh();
+    $chat->refresh();
+
+    expect((float) $label->quantity)->toBe(1.0)
+        ->and((int) $label->total)->toBe(20000)
+        ->and((float) $chat->quantity)->toBe(1.0)
+        ->and((int) $chat->total)->toBe(10000)
+        ->and((int) $chat->price)->toBe(20000)
+        ->and((int) $chat->discount_val)->toBe(10000)
+        ->and((int) $invoice->total)->toBe(80000);
+
+    $invoice->capturePaidLineItems([$label->id, $chat->id]);
+    $invoice->refresh()->load('items');
+    $chat = $invoice->items->firstWhere('id', $chat->id);
+
+    expect($invoice->items)->toHaveCount(3)
+        ->and($invoice->items->pluck('name')->sort()->values()->all())->toBe([
+            'Agentic Chat',
+            'Booksy™ White Label',
+            'Railway Web Hosting (required)',
+        ])
+        ->and((int) $chat->price)->toBe(10000)
+        ->and((int) $chat->total)->toBe(10000)
+        ->and((int) $chat->discount_val)->toBe(0)
+        ->and((int) $invoice->total)->toBe(80000);
+});
+
+test('capturing paid line items drops declined add-ons and unused group plans', function () {
+    $invoice = Invoice::factory()->create([
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'sub_total' => 74000,
+        'total' => 74000,
+        'due_amount' => 74000,
+        'paid_status' => Invoice::STATUS_UNPAID,
+        'exchange_rate' => 1,
+    ]);
+
+    InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'Web Design',
+        'price' => 50000,
+        'quantity' => 1,
+        'total' => 50000,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    $yearly = InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'One Year Hosting Plan (group_01)',
+        'price' => 24000,
+        'quantity' => 1,
+        'total' => 24000,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    $monthly = InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'Monthly Hosting Plan (group_01)',
+        'price' => 2500,
+        'quantity' => 1,
+        'total' => 2500,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    $optional = InvoiceItem::factory()->create([
+        'invoice_id' => $invoice->id,
+        'name' => 'Booksy White Labeling (optional)',
+        'price' => 20000,
+        'quantity' => 1,
+        'total' => 20000,
+        'tax' => 0,
+        'discount' => 0,
+        'discount_val' => 0,
+        'discount_type' => 'fixed',
+        'exchange_rate' => 1,
+    ]);
+
+    $invoice->capturePaidLineItems([$yearly->id]);
+    $invoice->refresh()->load('items');
+
+    expect($invoice->items)->toHaveCount(2)
+        ->and($invoice->items->pluck('name')->sort()->values()->all())->toBe([
+            'One Year Hosting Plan',
+            'Web Design',
+        ])
+        ->and(InvoiceItem::find($monthly->id))->toBeNull()
+        ->and(InvoiceItem::find($optional->id))->toBeNull()
+        ->and((int) $invoice->total)->toBe(74000);
+
+    $invoice->paid_status = Invoice::STATUS_PAID;
+    $invoice->save();
+    $invoice->capturePaidLineItems([]);
+    $invoice->refresh()->load('items');
+
+    expect($invoice->items)->toHaveCount(2);
+});
+
 test('get previous status', function () {
     $invoice = Invoice::factory()->create();
 

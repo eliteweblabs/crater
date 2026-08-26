@@ -78,15 +78,18 @@
         .items { margin: 24px -40px 20px; overflow: visible; border-top: 1px solid #eee; }
         .item-row { display: block; position: relative; overflow: visible; padding: 16px 40px; border-bottom: 1px solid #eee; }
         .item-row::after { content: ''; display: table; clear: both; }
-        .item-row--optional { background: #faf7ff; cursor: pointer; }
-        /* Own top rule after a required row so the Optional chip sits on this
-           row’s edge, not the white item above. Consecutive optionals keep a
-           single shared border. */
-        .item-row:not(.item-row--optional) + .item-row--optional { border-top: 1px solid #eee; }
+        .item-row--optional,
+        .item-row--grouped { background: #faf7ff; cursor: pointer; }
+        /* Own top rule after a required row so the Optional / Choose one chip
+           sits on this row’s edge, not the white item above. Consecutive
+           selectable rows keep a single shared border. */
+        .item-row:not(.item-row--optional):not(.item-row--grouped) + .item-row--optional,
+        .item-row:not(.item-row--optional):not(.item-row--grouped) + .item-row--grouped { border-top: 1px solid #eee; }
         .item-row--off .item-title,
         .item-row--off .description,
         .item-row--off .amount,
         .item-row--off .item-switch { opacity: 0.55; }
+        .amount-was { text-decoration: line-through; font-weight: 400; opacity: 0.55; margin-right: 0.35em; }
         .item-heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
         .item-switch { position: relative; display: inline-flex; flex: none; cursor: pointer; margin: 0; }
         .items .item-title { font-weight: 500; line-height: 1.2; min-width: 0; }
@@ -268,30 +271,84 @@
             <p><strong>Due Date:</strong> {{ $invoice->formattedDueDate }}</p>
         </div>
 
-        <div class="items">
-            @foreach($invoice->items as $item)
+        <div class="items" autocomplete="off">
             @php
                 $paid = $invoice->paid_status === 'PAID';
-                $optional = ! $paid && $item->isOptional();
-                $included = ! $optional || (float) $item->quantity > 0;
+                $groupActiveIds = $invoice->activeGroupedItemIds();
+                $groupBadgeShown = [];
+                $rowMeta = [];
+                foreach ($invoice->items as $metaItem) {
+                    $metaGroup = $metaItem->optionGroup();
+                    $metaOptional = ! $paid && $metaItem->isOptional();
+                    $metaGrouped = ! $paid && $metaGroup !== null;
+                    if ($metaGrouped) {
+                        $metaIncluded = isset($groupActiveIds[$metaGroup]) && (int) $groupActiveIds[$metaGroup] === (int) $metaItem->id;
+                    } else {
+                        $metaIncluded = ! $metaOptional || (float) $metaItem->quantity > 0;
+                    }
+                    $rowMeta[(int) $metaItem->id] = [
+                        'group' => $metaGroup,
+                        'optional' => $metaOptional,
+                        'grouped' => $metaGrouped,
+                        'selectable' => $metaOptional || $metaGrouped,
+                        'included' => $metaIncluded,
+                    ];
+                }
+                $packageComplete = [];
+                foreach ($invoice->items->groupBy(fn ($i) => $i->discountPackage()) as $pkg => $members) {
+                    if ($pkg === null || $pkg === '') {
+                        continue;
+                    }
+                    $packageComplete[$pkg] = $members->count() >= 2
+                        && $members->every(fn ($i) => ! empty($rowMeta[(int) $i->id]['included']));
+                }
             @endphp
-            @if($paid && $item->isOptional() && (float) $item->quantity <= 0)
+            @foreach($invoice->items as $item)
+            @php
+                $meta = $rowMeta[(int) $item->id];
+                $group = $meta['group'];
+                $optional = $meta['optional'];
+                $grouped = $meta['grouped'];
+                $selectable = $meta['selectable'];
+                $included = $meta['included'];
+                $packageOff = (! $paid && $included && ! empty($packageComplete[$item->discountPackage() ?? '']))
+                    ? (int) $item->packageDiscountCents()
+                    : 0;
+                $displayPrice = max(0, (int) $item->price - $packageOff);
+                $showGroupBadge = $grouped && ! isset($groupBadgeShown[$group]);
+                if ($showGroupBadge) {
+                    $groupBadgeShown[$group] = true;
+                }
+            @endphp
+            @if($paid && $item->isCustomerSelectable() && (float) $item->quantity <= 0)
                 @continue
             @endif
-            <{{ $optional ? 'label' : 'div' }} class="item-row {{ $optional ? 'item-row--optional' : '' }} {{ $optional && ! $included ? 'item-row--off' : '' }}"
+            <{{ $selectable ? 'label' : 'div' }} class="item-row {{ $selectable ? 'item-row--optional' : '' }} {{ $grouped ? 'item-row--grouped' : '' }} {{ $selectable && ! $included ? 'item-row--off' : '' }}"
                 data-optional="{{ $optional ? '1' : '0' }}"
+                data-grouped="{{ $grouped ? '1' : '0' }}"
+                data-group="{{ $group ?? '' }}"
+                data-discount-package="{{ $item->discountPackage() ?? '' }}"
+                data-package-discount-cents="{{ (int) $item->packageDiscountCents() }}"
                 data-item-id="{{ $item->id }}"
                 data-price="{{ (int) $item->price }}"
-                data-fixed-cents="{{ $optional ? 0 : (int) $item->total }}"
+                data-fixed-cents="{{ $selectable ? 0 : (int) $item->total }}"
                 data-included="{{ $included ? '1' : '0' }}">
                 @if($optional)
                     <span class="addon-badge">Optional</span>
+                @elseif($showGroupBadge)
+                    <span class="addon-badge">Choose one</span>
                 @endif
-                <div class="amount">${{ number_format(($optional ? $item->price : $item->total) / 100, 2) }}</div>
+                <div class="amount">
+                    @if($selectable && $packageOff > 0)
+                        <s class="amount-was">${{ number_format(((int) $item->price) / 100, 2) }}</s>${{ number_format($displayPrice / 100, 2) }}
+                    @else
+                        ${{ number_format(($selectable ? $item->price : $item->total) / 100, 2) }}
+                    @endif
+                </div>
                 <div class="item-heading">
-                    @if($optional)
+                    @if($selectable)
                     <span class="item-switch">
-                        <input type="checkbox" class="optional-toggle" value="{{ $item->id }}" autocomplete="off" {{ $included ? 'checked' : '' }} aria-label="Add {{ $item->publicDisplayName() }}">
+                        <input type="checkbox" class="optional-toggle selectable-toggle" value="{{ $item->id }}" autocomplete="off" data-default-on="{{ $included ? '1' : '0' }}" {{ $included ? 'checked' : '' }} aria-label="{{ $grouped ? 'Select' : 'Add' }} {{ $item->publicDisplayName() }}">
                         <span class="item-switch-track" aria-hidden="true"></span>
                     </span>
                     @endif
@@ -302,9 +359,107 @@
                 @if($item->description)
                     <div class="description" x-apple-data-detectors="false">{{ $item->description }}</div>
                 @endif
-            </{{ $optional ? 'label' : 'div' }}>
+            </{{ $selectable ? 'label' : 'div' }}>
             @endforeach
         </div>
+        @if($invoice->paid_status !== 'PAID')
+        <script>
+            window.invoicePackage = (function () {
+                const money = (cents) => (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+                const rowOn = (row) => {
+                    const box = row.querySelector('.selectable-toggle');
+                    return box ? !!box.checked : true;
+                };
+                const packageComplete = (key) => {
+                    if (!key) return false;
+                    const members = Array.from(document.querySelectorAll('.item-row[data-discount-package="' + key + '"]'));
+                    return members.length >= 2 && members.every(rowOn);
+                };
+                const rowBillCents = (row) => {
+                    const selectable = row.dataset.optional === '1' || row.dataset.grouped === '1';
+                    const on = selectable ? rowOn(row) : true;
+                    const price = selectable ? Number(row.dataset.price || 0) : Number(row.dataset.fixedCents || 0);
+                    if (selectable && !on) {
+                        return { bill: 0, display: price, original: price, off: 0 };
+                    }
+                    const off = packageComplete(row.dataset.discountPackage || '')
+                        ? Number(row.dataset.packageDiscountCents || 0)
+                        : 0;
+                    const billed = Math.max(0, price - Math.min(Math.max(0, off), price));
+                    return { bill: billed, display: billed, original: price, off: billed === price ? 0 : off };
+                };
+                const paintAmounts = () => {
+                    document.querySelectorAll('.item-row').forEach((row) => {
+                        const { display, original, off } = rowBillCents(row);
+                        const amountEl = row.querySelector('.amount');
+                        if (!amountEl) return;
+                        if (off > 0) {
+                            amountEl.innerHTML = '<s class="amount-was">' + money(original) + '</s>' + money(display);
+                        } else {
+                            amountEl.textContent = money(original);
+                        }
+                    });
+                };
+                return { money, rowOn, packageComplete, rowBillCents, paintAmounts };
+            })();
+        </script>
+        <script>
+            (function () {
+                const rows = document.querySelectorAll('.item-row[data-grouped="1"]');
+                if (!rows.length) return;
+
+                const peers = (group) =>
+                    document.querySelectorAll('.item-row[data-group="' + group + '"] .selectable-toggle');
+
+                const paintGroupRows = () => {
+                    rows.forEach((row) => {
+                        const on = !!row.querySelector('.selectable-toggle')?.checked;
+                        row.classList.toggle('item-row--off', !on);
+                    });
+                };
+
+                const firstByGroup = {};
+                rows.forEach((row) => {
+                    const group = row.dataset.group;
+                    const box = row.querySelector('.selectable-toggle');
+                    if (!group || !box) return;
+                    const isFirst = !firstByGroup[group];
+                    firstByGroup[group] = firstByGroup[group] || box;
+                    box.checked = isFirst;
+                    box.defaultChecked = isFirst;
+                });
+                paintGroupRows();
+
+                rows.forEach((row) => {
+                    const box = row.querySelector('.selectable-toggle');
+                    if (!box) return;
+                    box.addEventListener('change', () => {
+                        const group = row.dataset.group;
+                        if (!group) return;
+                        const boxes = peers(group);
+                        if (box.checked) {
+                            boxes.forEach((other) => {
+                                if (other !== box) other.checked = false;
+                            });
+                        } else if (![...boxes].some((el) => el.checked)) {
+                            box.checked = true;
+                        }
+                        paintGroupRows();
+                        if (window.invoicePackage) window.invoicePackage.paintAmounts();
+                    });
+                });
+            })();
+        </script>
+        <script>
+            (function () {
+                if (!window.invoicePackage) return;
+                window.invoicePackage.paintAmounts();
+                document.querySelectorAll('.selectable-toggle').forEach((box) => {
+                    box.addEventListener('change', () => window.invoicePackage.paintAmounts());
+                });
+            })();
+        </script>
+        @endif
 
         @if($invoice->tax > 0)
         <div class="totals">
@@ -351,13 +506,20 @@
                 const money = (cents) => (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
                 const selectedOptionalIds = () =>
-                    Array.from(document.querySelectorAll('.optional-toggle:checked')).map((el) => Number(el.value));
+                    Array.from(document.querySelectorAll('.selectable-toggle:checked')).map((el) => Number(el.value));
+
+                const rowToggle = (row) => row.querySelector('.selectable-toggle');
+                const rowSelectable = (row) => row.dataset.optional === '1' || row.dataset.grouped === '1';
 
                 const liveCents = () => {
                     let subtotal = 0;
                     document.querySelectorAll('.item-row').forEach((row) => {
-                        if (row.dataset.optional === '1') {
-                            const on = row.querySelector('.optional-toggle')?.checked;
+                        if (window.invoicePackage) {
+                            subtotal += window.invoicePackage.rowBillCents(row).bill;
+                            return;
+                        }
+                        if (rowSelectable(row)) {
+                            const on = rowToggle(row)?.checked;
                             subtotal += on ? Number(row.dataset.price || 0) : 0;
                         } else {
                             subtotal += Number(row.dataset.fixedCents || 0);
@@ -370,17 +532,17 @@
                     const total = liveCents();
                     let subtotal = 0;
                     document.querySelectorAll('.item-row').forEach((row) => {
-                        const optional = row.dataset.optional === '1';
-                        const on = optional ? !!row.querySelector('.optional-toggle')?.checked : true;
-                        const priceCents = optional ? Number(row.dataset.price || 0) : Number(row.dataset.fixedCents || 0);
-                        const cents = optional && !on ? 0 : priceCents;
-                        subtotal += cents;
-                        const amountEl = row.querySelector('.amount');
+                        const selectable = rowSelectable(row);
+                        const on = selectable ? !!rowToggle(row)?.checked : true;
+                        const billed = window.invoicePackage
+                            ? window.invoicePackage.rowBillCents(row)
+                            : { bill: selectable && !on ? 0 : (selectable ? Number(row.dataset.price || 0) : Number(row.dataset.fixedCents || 0)) };
+                        subtotal += billed.bill;
                         const qtyEl = row.querySelector('.item-qty');
-                        if (amountEl) amountEl.textContent = money(priceCents);
-                        if (optional && qtyEl) qtyEl.textContent = on ? '1' : '0';
-                        row.classList.toggle('item-row--off', optional && !on);
+                        if (selectable && qtyEl) qtyEl.textContent = on ? '1' : '0';
+                        row.classList.toggle('item-row--off', selectable && !on);
                     });
+                    if (window.invoicePackage) window.invoicePackage.paintAmounts();
                     const due = document.getElementById('amount-due');
                     const sub = document.getElementById('subtotal-display');
                     const tot = document.getElementById('total-display');
@@ -531,8 +693,20 @@
                     }
                 };
 
-                document.querySelectorAll('.optional-toggle').forEach((box) => {
+                document.querySelectorAll('.selectable-toggle').forEach((box) => {
                     box.addEventListener('change', () => {
+                        const row = box.closest('.item-row');
+                        const group = row && row.dataset.group;
+                        if (group) {
+                            const peers = document.querySelectorAll('.item-row[data-group="' + group + '"] .selectable-toggle');
+                            if (box.checked) {
+                                peers.forEach((other) => {
+                                    if (other !== box) other.checked = false;
+                                });
+                            } else if (![...peers].some((el) => el.checked)) {
+                                box.checked = true;
+                            }
+                        }
                         paintTotals();
                         destroyCheckout();
                     });
@@ -579,7 +753,7 @@
 
         @php
             $pdfReady = $invoice->paid_status === 'PAID'
-                || ! $invoice->items->contains(fn ($item) => $item->isOptional());
+                || ! $invoice->hasCustomerSelectableItems();
         @endphp
         @if($pdfReady)
         <div style="margin-top: 20px; text-align: center;">

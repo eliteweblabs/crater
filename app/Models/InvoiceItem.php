@@ -83,13 +83,22 @@ class InvoiceItem extends Model
      * Optional add-on the customer can toggle on the public invoice.
      * Required wins if both tags appear. Also treats the EST-000001 phrasing
      * "can be added anytime" as optional so converted estimates work as-is.
+     * Grouped alternatives ({@see optionGroup()}) are exclusive choices, not add-ons.
      */
     public function isOptional(): bool
     {
+        if ($this->isGrouped()) {
+            return false;
+        }
+
         $name = (string) $this->name;
 
         if (preg_match('/\(\s*required\s*\)/i', $name)) {
             return false;
+        }
+
+        if ($this->isDiscountPackage()) {
+            return true;
         }
 
         return (bool) preg_match(
@@ -98,10 +107,86 @@ class InvoiceItem extends Model
         );
     }
 
+    /**
+     * Mutually exclusive choice group from a `(group_01)` name tag.
+     * `group_1` and `group_01` resolve to the same key. Also accepts
+     * `(group 01)` / `[group-01]` and a tag in the description.
+     */
+    public function optionGroup(): ?string
+    {
+        $haystack = trim((string) $this->name.' '.(string) $this->description);
+        if (! preg_match('/[\(\[]\s*group[\s_-]*(\d+)\s*[\)\]]/i', $haystack, $matches)) {
+            return null;
+        }
+
+        return 'group_'.str_pad((string) ((int) $matches[1]), 2, '0', STR_PAD_LEFT);
+    }
+
+    public function isGrouped(): bool
+    {
+        return $this->optionGroup() !== null;
+    }
+
+    /**
+     * Package-discount group from a `(discount_01)` or `(discount_01-100)` tag.
+     * `discount_1` and `discount_01` resolve to the same key. The optional
+     * `-100` suffix is dollars off that line when every member is selected
+     * ({@see packageDiscountCents()}). Also accepts a tag in the description.
+     */
+    public function discountPackage(): ?string
+    {
+        $parsed = $this->parseDiscountPackageTag();
+
+        return $parsed['package'] ?? null;
+    }
+
+    /**
+     * Cents to subtract from this line when its discount package is complete.
+     * `(discount_01-100)` → 10000. A plain `(discount_01)` is a member only.
+     */
+    public function packageDiscountCents(): int
+    {
+        $parsed = $this->parseDiscountPackageTag();
+
+        return (int) ($parsed['cents'] ?? 0);
+    }
+
+    public function isDiscountPackage(): bool
+    {
+        return $this->discountPackage() !== null;
+    }
+
+    /**
+     * @return array{package: string, cents: int}|null
+     */
+    private function parseDiscountPackageTag(): ?array
+    {
+        $haystack = trim((string) $this->name.' '.(string) $this->description);
+        if (! preg_match('/[\(\[]\s*discount[\s_-]*(\d+)(?:[\s_-]+(\d+))?\s*[\)\]]/i', $haystack, $matches)) {
+            return null;
+        }
+
+        return [
+            'package' => 'discount_'.str_pad((string) ((int) $matches[1]), 2, '0', STR_PAD_LEFT),
+            'cents' => isset($matches[2]) && $matches[2] !== ''
+                ? ((int) $matches[2]) * 100
+                : 0,
+        ];
+    }
+
+    /**
+     * Line the customer can change on the public invoice: an optional add-on
+     * or one alternative in a `(group_01)` pair.
+     */
+    public function isCustomerSelectable(): bool
+    {
+        return $this->isOptional() || $this->isGrouped();
+    }
+
     public function publicDisplayName(): string
     {
         $name = preg_replace(
-            '/\s*[\(\[]\s*(optional|required)\s*[\)\]]/i',
+            '/\s*[\(\[]\s*(optional|required|group[\s_-]*\d+|discount[\s_-]*\d+(?:[\s_-]+\d+)?)\s*[\)\]]/i',
             '',
             (string) $this->name
         );
