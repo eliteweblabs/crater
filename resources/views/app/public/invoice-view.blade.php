@@ -168,7 +168,7 @@
         #payment-element { margin-top: 24px; width: 100%; }
         #payment-element:empty { display: none; margin: 0; }
         .pay-error { color: #d32f2f; margin-top: 12px; font-size: 14px; }
-        .btn { display: inline-block; padding: 14px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; text-align: center; cursor: pointer; border: none; font-size: 16px; transition: all 0.2s; width: 100%; }
+        .btn { display: inline-block; padding: 14px 32px; border-radius: 999px; text-decoration: none; font-weight: 600; text-align: center; cursor: pointer; border: none; font-size: 16px; transition: all 0.2s; width: 100%; }
         .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
         .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); }
         .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -486,7 +486,7 @@
         <div style="margin-top: 16px; text-align: center;">
             <a id="venmo-pay" href="https://venmo.com/?txn=pay&recipients={{ env('VENMO_HANDLE') }}&amount={{ number_format($invoice->total / 100, 2) }}&note=Invoice+{{ $invoice->invoice_number }}"
                target="_blank"
-               style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: #008CFF; color: #fff; font-size: 15px; font-weight: 600; text-decoration: none; border-radius: 8px;">
+               style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: #008CFF; color: #fff; font-size: 15px; font-weight: 600; text-decoration: none; border-radius: 999px;">
                 <svg width="18" height="18" viewBox="0 0 300 300" fill="white"><path d="M232.3 30c9.5 15.7 13.8 31.9 13.8 52.1 0 64.9-55.4 149.3-100.4 208.5H57.4L18 38.5l80.2-7.6 22.1 88.7c20.6-37.8 46-97.4 46-137.3 0-22.1-3.8-37.2-9.7-49.3L232.3 30z"/></svg>
                 Pay with Venmo
             </a>
