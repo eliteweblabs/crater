@@ -15,6 +15,17 @@ use Crater\Models\PaymentMethod;
 use Crater\Models\RecurringInvoice;
 use Crater\Services\SerialNumberFormatter;
 use Vinkla\Hashids\Facades\Hashids;
+use Crater\Support\ReaveBrandColors;
+
+// GET /api/custom/branding — company colors from reΛVe company_config
+Route::get('/custom/branding', function (Illuminate\Http\Request $request) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    return response()->json(ReaveBrandColors::fetch());
+});
+
 // Simple invoice creation endpoint for custom API
 // POST /api/custom/create-invoice
 Route::post('/custom/create-invoice', function (Illuminate\Http\Request $request) {
