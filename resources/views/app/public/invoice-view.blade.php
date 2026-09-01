@@ -175,6 +175,20 @@
         #payment-element { margin-top: 24px; width: 100%; }
         #payment-element:empty { display: none; margin: 0; }
         .pay-error { color: #d32f2f; margin-top: 12px; font-size: 14px; }
+        .alt-pay { margin-top: 16px; text-align: center; }
+        .alt-pay-card {
+            display: inline-block;
+            width: 100%;
+            max-width: 420px;
+            padding: 16px 20px;
+            border: 1px solid #e5e5e5;
+            border-radius: 12px;
+            background: #fafafa;
+            text-align: left;
+        }
+        .alt-pay-card h4 { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: #333; }
+        .alt-pay-card p { margin: 4px 0; font-size: 14px; color: #555; line-height: 1.5; }
+        .alt-pay-card .alt-pay-hint { margin-top: 10px; font-size: 12px; color: #888; }
         .btn { display: inline-block; padding: 14px 32px; border-radius: 999px; text-decoration: none; font-weight: 600; text-align: center; cursor: pointer; border: none; font-size: 16px; transition: all 0.2s; width: 100%; }
         .btn-primary { background: var(--brand-gradient); color: white; }
         .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--brand-shadow); }
@@ -567,6 +581,8 @@
                         url.searchParams.set('amount', (total / 100).toFixed(2));
                         venmo.href = url.toString();
                     }
+                    const zelleAmount = document.getElementById('zelle-amount');
+                    if (zelleAmount) zelleAmount.textContent = money(total);
                     return total;
                 };
 
@@ -664,7 +680,7 @@
                                 '.Tab': {
                                     border: '1px solid #d9d9d9',
                                     boxShadow: 'none',
-                                    padding: '10px 14px',
+                                    padding: '12px 18px',
                                 },
                                 '.Tab--selected': {
                                     border: '1px solid ' + @json($brand['secondary'] ?? '#505050'),
@@ -672,6 +688,8 @@
                                 },
                                 '.TabIcon': {
                                     padding: '0px',
+                                    marginLeft: 'auto',
+                                    marginRight: 'auto',
                                 },
                             },
                         },
@@ -683,6 +701,10 @@
                         layout: {
                             type: 'tabs',
                             defaultCollapsed: false,
+                        },
+                        wallets: {
+                            applePay: 'auto',
+                            googlePay: 'auto',
                         },
                         defaultValues: { billingDetails },
                     });
@@ -779,10 +801,22 @@
         @endif
 
         @if(env('PAYPAL_EMAIL'))
-        <div style="margin-top: 20px; text-align: center;">
+        <div class="alt-pay">
             <a href="https://www.paypal.com/paypalme/{{ env('PAYPAL_EMAIL') }}/{{ number_format($invoice->total / 100, 2) }}" class="btn btn-secondary" target="_blank" style="background: #003087; color: white;">
                 🅿️ Pay with PayPal
             </a>
+        </div>
+        @endif
+
+        @if(env('ZELLE_EMAIL') || env('ZELLE_PHONE'))
+        <div class="alt-pay">
+            <div class="alt-pay-card" style="border-color: #d8c8f5; background: #faf7ff;">
+                <h4 style="color: #6D1ED4;">Pay with Zelle</h4>
+                <p>Send <strong id="zelle-amount">${{ number_format($invoice->total / 100, 2) }}</strong> to
+                    <strong>{{ env('ZELLE_EMAIL') ?: env('ZELLE_PHONE') }}</strong></p>
+                <p>Memo: <strong>Invoice {{ $invoice->invoice_number }}</strong></p>
+                <p class="alt-pay-hint">Open your bank app → Zelle → send to the address above. Zelle has no payment link like Venmo — the customer initiates the transfer. We mark the invoice paid once it arrives (usually minutes).</p>
+            </div>
         </div>
         @endif
 
