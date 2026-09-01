@@ -50,6 +50,7 @@ sed -i '/^CONTACT_API_KEY=/d' .env 2>/dev/null || true
 sed -i '/^CONTACT_API_ENABLED=/d' .env 2>/dev/null || true
 sed -i '/^CONTACT_API_TIMEOUT=/d' .env 2>/dev/null || true
 sed -i '/^CONTACT_API_SYSTEM_NAME=/d' .env 2>/dev/null || true
+sed -i '/^CRON_JOB_AUTH_TOKEN=/d' .env 2>/dev/null || true
 
 # Calculate DB values from Railway env vars
 DB_HOST_VAL="${DB_HOST:-${MYSQL_HOST:-${MYSQLHOST:-db.railway.internal}}}"
@@ -91,6 +92,9 @@ echo "CONTACT_API_KEY=${CONTACT_API_KEY}" >> .env
 if [ -n "$CONTACT_API_ENABLED" ];     then echo "CONTACT_API_ENABLED=${CONTACT_API_ENABLED}" >> .env; fi
 if [ -n "$CONTACT_API_TIMEOUT" ];     then echo "CONTACT_API_TIMEOUT=${CONTACT_API_TIMEOUT}" >> .env; fi
 if [ -n "$CONTACT_API_SYSTEM_NAME" ]; then echo "CONTACT_API_SYSTEM_NAME=${CONTACT_API_SYSTEM_NAME}" >> .env; fi
+
+# Scheduler (external ping to /api/cron is optional when the in-container loop runs)
+if [ -n "$CRON_JOB_AUTH_TOKEN" ]; then echo "CRON_JOB_AUTH_TOKEN=${CRON_JOB_AUTH_TOKEN}" >> .env; fi
 
 # Mail
 echo "MAIL_MAILER=${MAIL_MAILER:-smtp}" >> .env
@@ -202,6 +206,10 @@ if [ "$AUTO_MIGRATE" = "true" ]; then
     echo "Migrations complete."
 fi
 
+# Fix recurring invoice next dates and generate any missed invoices (e.g. scheduler was down)
+php artisan recurring-invoices:recalculate-next-dates 2>&1 || true
+php artisan recurring-invoices:generate-due 2>&1 || true
+
 # Set permissions for storage and cache directories
 chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
 chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
@@ -214,6 +222,19 @@ if [ -f ".env" ]; then
     chmod 666 .env 2>/dev/null || chmod 664 .env 2>/dev/null || true
     echo "Final .env permissions check complete"
 fi
+
+echo "============================================"
+echo "Starting Laravel scheduler (background)"
+echo "============================================"
+
+# Run schedule:run every minute, aligned to the clock so yearly/monthly crons
+# (e.g. 0 0 1 9 *) are not missed due to sleep drift.
+(
+  while true; do
+    php artisan schedule:run >> storage/logs/scheduler.log 2>&1
+    sleep $((60 - $(date +%S % 60)))
+  done
+) &
 
 echo "============================================"
 echo "Starting Apache on port ${PORT}"

@@ -94,6 +94,30 @@ Make sure these are set in Railway:
 | `ADMIN_NAME` | Admin name | `Admin` |
 | `COMPANY_NAME` | Company name | `My Company` |
 
+### Recurring invoice scheduler
+
+Recurring invoices need `php artisan schedule:run` every minute. The Railway
+Docker entrypoint (`start-apache.sh`) starts that loop automatically on deploy.
+
+Verify after deploy:
+
+```
+GET https://your-app.up.railway.app/api/v1/health
+```
+
+Look for `scheduler.in_container_loop: true` and a recent
+`scheduler.scheduler_log_last_line`.
+
+If a recurring invoice shows the wrong **Next Invoice Date** (e.g. Sep 2027 when
+it should be Sep 2026), run in Railway shell:
+
+```
+php artisan recurring-invoices:recalculate-next-dates
+```
+
+Then open the recurring invoice, confirm the date, and save. Generated invoices
+appear under **Invoices → Draft** unless **Send Automatically** is on.
+
 ---
 
 ## If All Else Fails

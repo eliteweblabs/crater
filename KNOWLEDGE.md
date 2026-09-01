@@ -68,6 +68,15 @@ Frequencies use cron format:
 | `0 0 1 */3 *` | Quarterly |
 | `0 0 1 * *` | Monthly, 1st of month |
 
+Generation runs via Laravel's scheduler at the cron time in the **company timezone**
+(Settings → Company). Invoices are created as **DRAFT**; email only when
+`send_automatically` is enabled. On Railway, `start-apache.sh` runs
+`php artisan schedule:run` every minute in the background. Optional external ping:
+`GET /api/cron` with header `x-authorization-token: CRON_JOB_AUTH_TOKEN`.
+
+After fixing next-date logic, run once on deploy:
+`php artisan recurring-invoices:recalculate-next-dates`
+
 Always fetch current totals from the API at request time — never cache or hardcode
 amounts in agent context, since rates and clients change.
 

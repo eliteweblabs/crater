@@ -390,16 +390,36 @@ class RecurringInvoice extends Model
         }
     }
 
-    public static function getNextInvoiceDate($frequency, $starts_at)
+    /**
+     * Next cron run on or after $referenceAt.
+     * Uses allowCurrentDate so a start date on the cron day is not skipped to the following year.
+     */
+    public static function getNextInvoiceDate($frequency, $starts_at, $allowCurrentDate = true)
     {
         $cron = new Cron\CronExpression($frequency);
 
-        return $cron->getNextRunDate($starts_at)->format('Y-m-d H:i:s');
+        return $cron->getNextRunDate($starts_at, 0, $allowCurrentDate)->format('Y-m-d H:i:s');
+    }
+
+    /**
+     * Most recent cron run on or before now that is still on/after starts_at.
+     */
+    public static function getCurrentDueInvoiceDate($frequency, $starts_at, $timeZone = null)
+    {
+        $cron = new Cron\CronExpression($frequency);
+        $previousRun = $cron->getPreviousRunDate('now', 0, true, $timeZone);
+
+        if (Carbon::parse($previousRun)->lt(Carbon::parse($starts_at))) {
+            return null;
+        }
+
+        return Carbon::parse($previousRun)->format('Y-m-d H:i:s');
     }
 
     public function updateNextInvoiceDate()
     {
-        $nextInvoiceAt = self::getNextInvoiceDate($this->frequency, $this->starts_at);
+        $referenceAt = Carbon::now()->format('Y-m-d H:i:s');
+        $nextInvoiceAt = self::getNextInvoiceDate($this->frequency, $referenceAt, false);
 
         $this->next_invoice_at = $nextInvoiceAt;
         $this->save();

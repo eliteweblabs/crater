@@ -167,11 +167,29 @@ Route::prefix('/v1')->group(function () {
     //----------------------------------
 
     Route::get('/health', function () {
+        $cronToken = config('services.cron_job.auth_token');
+        $schedulerLog = storage_path('logs/scheduler.log');
+        $schedulerLastRun = null;
+
+        if (is_readable($schedulerLog)) {
+            $lines = @file($schedulerLog, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            if (is_array($lines) && count($lines) > 0) {
+                $schedulerLastRun = end($lines);
+            }
+        }
+
         $status = [
             'status' => 'ok',
             'timestamp' => now()->toISOString(),
             'php_version' => PHP_VERSION,
             'database_created_file' => \Storage::disk('local')->has('database_created'),
+            'scheduler' => [
+                'in_container_loop' => true,
+                'cron_endpoint' => url('/api/cron'),
+                'cron_token_configured' => ! empty($cronToken) && $cronToken !== '0',
+                'scheduler_log_exists' => is_readable($schedulerLog),
+                'scheduler_log_last_line' => $schedulerLastRun,
+            ],
             // Debug: show what Laravel thinks the DB config is
             'config_db_host' => config('database.connections.mysql.host'),
             'config_db_port' => config('database.connections.mysql.port'),
