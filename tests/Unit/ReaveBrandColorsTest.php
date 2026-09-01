@@ -27,6 +27,7 @@ test('fetchFresh loads logo and colors from reave branding api', function () {
     expect($brand['logoUrl'])->toContain('https://reave.app/api/branding/logo');
     expect($brand['primary'])->toMatch('/^#[0-9a-f]{6}$/i');
     expect($brand['gradient'])->toContain('linear-gradient');
+    expect($brand)->toHaveKeys(['contactName', 'contactEmail']);
 });
 
 test('resolvedCompanyLogoUrl ignores legacy static branding env paths', function () {

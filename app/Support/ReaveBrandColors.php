@@ -80,6 +80,8 @@ class ReaveBrandColors
             ? $payload['logoEmailUrl']
             : null;
         $logoUrl = self::resolveLogoUrl($origin, $logoEmailUrl);
+        $contactName = self::nonEmptyString($payload['contactName'] ?? null);
+        $contactEmail = self::nonEmptyString($payload['contactEmail'] ?? null);
 
         return [
             'ok' => true,
@@ -94,6 +96,8 @@ class ReaveBrandColors
             'shadow' => '0 2px 16px rgba('.$secondaryRgb.', 0.35)',
             'logoEmailUrl' => $logoEmailUrl,
             'logoUrl' => $logoUrl,
+            'contactName' => $contactName,
+            'contactEmail' => $contactEmail,
             'source' => $payload['source'] ?? 'fallback',
             'stored' => $payload['stored'] ?? ['primary' => null, 'secondary' => null],
             'defaults' => $payload['defaults'] ?? [
@@ -137,6 +141,16 @@ class ReaveBrandColors
         }
 
         return strtolower($t);
+    }
+
+    protected static function nonEmptyString(mixed $raw): ?string
+    {
+        if (! is_string($raw)) {
+            return null;
+        }
+        $t = trim($raw);
+
+        return $t !== '' ? $t : null;
     }
 
     protected static function getJson(string $url): ?array

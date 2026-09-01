@@ -21,16 +21,21 @@ class PublicInvoiceController extends Controller
             ->firstOrFail();
 
         $owner = $invoice->company->owner;
+        $brand = ReaveBrandColors::fetch();
         $fromContact = [
-            'name' => $owner?->name ?: config('mail.from.name'),
-            'email' => $owner?->email ?: config('mail.from.address'),
+            'name' => $brand['contactName']
+                ?? $owner?->contact_name
+                ?? $owner?->name
+                ?: config('mail.from.name'),
+            'email' => $brand['contactEmail']
+                ?? $owner?->email
+                ?: config('mail.from.address'),
         ];
 
         $hasOptionalItems = $invoice->paid_status !== Invoice::STATUS_PAID
             && $invoice->hasCustomerSelectableItems();
 
         $ogImageUrl = url('/invoices/'.$invoice->unique_hash.'/og.png').'?v=reave';
-        $brand = ReaveBrandColors::fetch();
 
         // Get all non-draft invoices for the same customer
         $customerInvoices = Invoice::where('customer_id', $invoice->customer_id)
