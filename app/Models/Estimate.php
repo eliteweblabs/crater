@@ -421,13 +421,7 @@ class Estimate extends Model implements HasMedia
 
     public function getCompanyAddress()
     {
-        if ($this->company && (! $this->company->address()->exists())) {
-            return false;
-        }
-
-        $format = CompanySetting::getSetting('estimate_company_address_format', $this->company_id);
-
-        return $this->getFormattedString($format);
+        return $this->getFormattedCompanyAddress('estimate_company_address_format');
     }
 
     public function getCustomerShippingAddress()

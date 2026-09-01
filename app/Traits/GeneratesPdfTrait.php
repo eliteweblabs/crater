@@ -181,4 +181,36 @@ trait GeneratesPdfTrait
 
         return $str;
     }
+
+    protected function getFormattedCompanyAddress(string $settingKey)
+    {
+        if ($this->company && (! $this->company->address()->exists())) {
+            return false;
+        }
+
+        $format = CompanySetting::getSetting($settingKey, $this->company_id);
+
+        if ($this->company && $this->company->logo_path) {
+            $format = $this->omitCompanyNameFromAddressFormat($format);
+        }
+
+        return $this->getFormattedString($format);
+    }
+
+    protected function omitCompanyNameFromAddressFormat(string $format): string
+    {
+        $patterns = [
+            '#<h3>\s*<strong>\{COMPANY_NAME\}</strong>\s*</h3>\s*#i',
+            '#<h3>\s*\{COMPANY_NAME\}\s*</h3>\s*#i',
+            '#<p>\s*<strong>\{COMPANY_NAME\}</strong>\s*</p>\s*#i',
+            '#<p>\s*\{COMPANY_NAME\}\s*</p>\s*#i',
+            '#\{COMPANY_NAME\}\s*(<br\s*/?>)?\s*#i',
+        ];
+
+        foreach ($patterns as $pattern) {
+            $format = preg_replace($pattern, '', $format);
+        }
+
+        return $format;
+    }
 }

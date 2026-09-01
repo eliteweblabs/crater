@@ -640,13 +640,7 @@ class Invoice extends Model implements HasMedia
 
     public function getCompanyAddress()
     {
-        if ($this->company && (! $this->company->address()->exists())) {
-            return false;
-        }
-
-        $format = CompanySetting::getSetting('invoice_company_address_format', $this->company_id);
-
-        return $this->getFormattedString($format);
+        return $this->getFormattedCompanyAddress('invoice_company_address_format');
     }
 
     public function getCustomerShippingAddress()
