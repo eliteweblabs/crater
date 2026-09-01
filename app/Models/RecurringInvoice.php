@@ -267,6 +267,10 @@ class RecurringInvoice extends Model
             return;
         }
 
+        if ($this->invoiceExistsForCurrentBillingPeriod()) {
+            return;
+        }
+
         if ($this->limit_by == 'DATE') {
             $startDate = Carbon::today()->format('Y-m-d');
 
@@ -394,6 +398,42 @@ class RecurringInvoice extends Model
      * Next cron run on or after $referenceAt.
      * Uses allowCurrentDate so a start date on the cron day is not skipped to the following year.
      */
+    /**
+     * True when this recurring schedule already has an invoice for the current cron period.
+     */
+    public function invoiceExistsForCurrentBillingPeriod(): bool
+    {
+        $timeZone = CompanySetting::getSetting('time_zone', $this->company_id);
+        $dueAt = self::getCurrentDueInvoiceDate($this->frequency, $this->starts_at, $timeZone);
+
+        if (! $dueAt) {
+            return true;
+        }
+
+        return self::invoiceExistsForBillingPeriod($this, $dueAt);
+    }
+
+    /**
+     * Skip generation when an invoice already exists on the due date or within the same cron period.
+     */
+    public static function invoiceExistsForBillingPeriod(RecurringInvoice $recurring, string $dueAt): bool
+    {
+        $due = Carbon::parse($dueAt);
+        $dueDate = $due->format('Y-m-d');
+
+        if ($recurring->invoices()->whereDate('invoice_date', $dueDate)->exists()) {
+            return true;
+        }
+
+        $cron = new Cron\CronExpression($recurring->frequency);
+        $periodStart = Carbon::parse($cron->getPreviousRunDate($dueAt, 1, true));
+
+        return $recurring->invoices()
+            ->whereDate('invoice_date', '>', $periodStart->format('Y-m-d'))
+            ->whereDate('invoice_date', '<=', $dueDate)
+            ->exists();
+    }
+
     public static function getNextInvoiceDate($frequency, $starts_at, $allowCurrentDate = true)
     {
         $cron = new Cron\CronExpression($frequency);

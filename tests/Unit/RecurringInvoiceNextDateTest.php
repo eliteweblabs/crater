@@ -1,5 +1,6 @@
 <?php
 
+use Crater\Models\Invoice;
 use Crater\Models\RecurringInvoice;
 
 test('getNextInvoiceDate includes the first cron match on the start day', function () {
@@ -28,4 +29,23 @@ test('getCurrentDueInvoiceDate returns the latest cron run on or before now', fu
     expect($due)->toBe('2026-09-01 00:00:00');
 
     Carbon::setTestNow();
+});
+
+test('invoiceExistsForBillingPeriod skips when an invoice exists in the same annual period', function () {
+    $recurring = RecurringInvoice::factory()->create([
+        'frequency' => '0 0 1 9 *',
+        'starts_at' => '2024-09-01 00:00:00',
+        'status' => RecurringInvoice::ACTIVE,
+    ]);
+
+    Invoice::factory()->create([
+        'recurring_invoice_id' => $recurring->id,
+        'company_id' => $recurring->company_id,
+        'customer_id' => $recurring->customer_id,
+        'invoice_date' => '2026-03-15',
+    ]);
+
+    expect(
+        RecurringInvoice::invoiceExistsForBillingPeriod($recurring, '2026-09-01 00:00:00')
+    )->toBeTrue();
 });

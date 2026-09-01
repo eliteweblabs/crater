@@ -118,6 +118,11 @@ php artisan recurring-invoices:recalculate-next-dates
 Then open the recurring invoice, confirm the date, and save. Generated invoices
 appear under **Invoices → Draft** unless **Send Automatically** is on.
 
+Deploy does **not** run catch-up generation by default. To generate missed recurring
+invoices once (e.g. after a long outage), set `RECURRING_INVOICE_CATCHUP=true` for
+one deploy, or run `php artisan recurring-invoices:generate-due` manually in Railway shell.
+Use `--dry-run` first to preview.
+
 ---
 
 ## If All Else Fails

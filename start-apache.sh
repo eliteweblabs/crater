@@ -212,9 +212,13 @@ if [ "$AUTO_MIGRATE" = "true" ]; then
     echo "Migrations complete."
 fi
 
-# Fix recurring invoice next dates and generate any missed invoices (e.g. scheduler was down)
+# Recalculate stale next_invoice_at after cron logic fixes (metadata only — does not create invoices).
 php artisan recurring-invoices:recalculate-next-dates 2>&1 || true
-php artisan recurring-invoices:generate-due 2>&1 || true
+
+# Optional one-shot catch-up; off by default so deploys do not bulk-generate invoices.
+if [ "${RECURRING_INVOICE_CATCHUP:-false}" = "true" ]; then
+    php artisan recurring-invoices:generate-due 2>&1 || true
+fi
 
 # Set permissions for storage and cache directories
 chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true

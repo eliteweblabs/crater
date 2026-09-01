@@ -74,8 +74,11 @@ Generation runs via Laravel's scheduler at the cron time in the **company timezo
 `php artisan schedule:run` every minute in the background. Optional external ping:
 `GET /api/cron` with header `x-authorization-token: CRON_JOB_AUTH_TOKEN`.
 
-After fixing next-date logic, run once on deploy:
-`php artisan recurring-invoices:recalculate-next-dates`
+After fixing next-date logic, deploy runs
+`php artisan recurring-invoices:recalculate-next-dates` automatically (metadata only).
+It does **not** bulk-generate invoices on deploy. For a one-time missed catch-up,
+set `RECURRING_INVOICE_CATCHUP=true` on one deploy or run manually:
+`php artisan recurring-invoices:generate-due --dry-run` then without `--dry-run`.
 
 Always fetch current totals from the API at request time — never cache or hardcode
 amounts in agent context, since rates and clients change.

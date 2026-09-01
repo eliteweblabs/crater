@@ -36,11 +36,8 @@ class GenerateDueRecurringInvoices extends Command
                     }
 
                     $dueDate = Carbon::parse($dueAt)->format('Y-m-d');
-                    $exists = $recurringInvoice->invoices()
-                        ->whereDate('invoice_date', $dueDate)
-                        ->exists();
 
-                    if ($exists) {
+                    if (RecurringInvoice::invoiceExistsForBillingPeriod($recurringInvoice, $dueAt)) {
                         continue;
                     }
 
