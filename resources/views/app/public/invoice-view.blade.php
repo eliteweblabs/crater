@@ -172,8 +172,10 @@
         .pay-cta { display: none; margin: 16px 0 0; width: 100%; padding: 14px 28px; border: none; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #ffffff; cursor: pointer; background: var(--brand-gradient); box-shadow: var(--brand-shadow); }
         .pay-cta.is-visible { display: block; }
         .pay-cta:disabled { opacity: 0.6; cursor: not-allowed; }
-        #payment-element { margin-top: 24px; width: 100%; }
+        #payment-element { margin-top: 16px; width: 100%; }
         #payment-element:empty { display: none; margin: 0; }
+        #express-checkout-element { margin-top: 24px; width: 100%; }
+        #express-checkout-element:empty { display: none; margin: 0; }
         .pay-error { color: #d32f2f; margin-top: 12px; font-size: 14px; }
         .alt-pay { margin-top: 16px; text-align: center; }
         .alt-pay-card {
@@ -505,6 +507,7 @@
         @endif
 
         @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
+        <div id="express-checkout-element"></div>
         <div id="payment-element"></div>
         <p id="pay-error" class="pay-error" hidden></p>
         <button type="button" id="pay-cta" class="pay-cta"></button>
@@ -589,10 +592,12 @@
                 let stripe = null;
                 let elements = null;
                 let paymentElement = null;
+                let expressCheckoutElement = null;
                 let paymentReady = { type: null, complete: false };
                 let ignoreConfirmUntil = 0;
                 const payBtn = document.getElementById('pay-cta');
                 const mountEl = document.getElementById('payment-element');
+                const expressMountEl = document.getElementById('express-checkout-element');
                 const errorEl = document.getElementById('pay-error');
                 const returnUrl = window.location.origin + '/invoices/' + invoiceHash + '?payment=success';
 
@@ -616,6 +621,10 @@
                 };
 
                 const destroyCheckout = () => {
+                    if (expressCheckoutElement) {
+                        try { expressCheckoutElement.unmount(); } catch (e) {}
+                        expressCheckoutElement = null;
+                    }
                     if (paymentElement) {
                         try { paymentElement.unmount(); } catch (e) {}
                         paymentElement = null;
@@ -623,6 +632,7 @@
                     elements = null;
                     paymentReady = { type: null, complete: false };
                     ignoreConfirmUntil = 0;
+                    if (expressMountEl) expressMountEl.innerHTML = '';
                     if (mountEl) mountEl.innerHTML = '';
                     showError('');
                     labelPay();
@@ -636,6 +646,7 @@
                         paymentElement = null;
                     }
                     elements = null;
+                    if (expressMountEl) expressMountEl.innerHTML = '';
                     mountEl.innerHTML = '';
                     showError('');
                     if (payBtn) {
@@ -660,62 +671,45 @@
                     elements = stripe.elements({
                         clientSecret: data.clientSecret,
                         appearance: {
-                            theme: 'flat',
+                            theme: 'stripe',
                             variables: {
                                 colorPrimary: @json($brand['secondary'] ?? '#505050'),
                                 colorBackground: '#ffffff',
                                 colorText: '#333333',
                                 fontFamily: 'Mozilla Text, system-ui, sans-serif',
-                                borderRadius: '10px',
-                                tabSpacing: '10px',
-                                tabLogoColor: 'dark',
-                                tabLogoSelectedColor: 'dark',
-                                iconColor: '#333333',
-                                tabIconColor: '#333333',
-                                tabIconSelectedColor: '#111111',
-                            },
-                            rules: {
-                                '.TabLabel': {
-                                    fontSize: '0px',
-                                    lineHeight: '0px',
-                                    padding: '0px',
-                                },
-                                '.Tab': {
-                                    border: '1px solid #d4d4d4',
-                                    boxShadow: 'none',
-                                    padding: '10px 16px',
-                                    backgroundColor: '#ffffff',
-                                },
-                                '.Tab:hover': {
-                                    boxShadow: 'none',
-                                    borderColor: '#bdbdbd',
-                                },
-                                '.Tab:focus': {
-                                    boxShadow: 'none',
-                                },
-                                '.Tab--selected': {
-                                    border: '2px solid ' + @json($brand['secondary'] ?? '#505050'),
-                                    boxShadow: 'none',
-                                    padding: '9px 15px',
-                                    backgroundColor: '#ffffff',
-                                },
-                                '.TabIcon': {
-                                    padding: '0px',
-                                },
+                                borderRadius: '8px',
                             },
                         },
                     });
                     const billingDetails = {};
                     if (customerEmail) billingDetails.email = customerEmail;
                     if (customerName) billingDetails.name = customerName;
+                    if (expressMountEl) {
+                        expressCheckoutElement = elements.create('expressCheckout', {
+                            buttonHeight: 44,
+                        });
+                        expressCheckoutElement.on('confirm', async () => {
+                            showError('');
+                            const { error } = await stripe.confirmPayment({
+                                elements,
+                                confirmParams: { return_url: returnUrl },
+                            });
+                            if (error) {
+                                showError(error.message || 'Payment failed.');
+                            }
+                        });
+                        expressCheckoutElement.mount('#express-checkout-element');
+                    }
                     paymentElement = elements.create('payment', {
                         layout: {
-                            type: 'tabs',
+                            type: 'accordion',
                             defaultCollapsed: false,
+                            radios: 'never',
+                            spacedAccordionItems: true,
                         },
                         wallets: {
-                            applePay: 'auto',
-                            googlePay: 'auto',
+                            applePay: 'never',
+                            googlePay: 'never',
                         },
                         defaultValues: { billingDetails },
                     });

@@ -20,6 +20,11 @@ class InvoicePdfController extends Controller
             return $invoice->getPDFData();
         }
 
-        return $invoice->getGeneratedPDFOrStream('invoice');
+        $pdf = $invoice->getPDFData();
+
+        return response()->make($pdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.$invoice->invoice_number.'.pdf"',
+        ]);
     }
 }
