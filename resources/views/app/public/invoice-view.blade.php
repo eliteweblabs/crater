@@ -660,16 +660,19 @@
                     elements = stripe.elements({
                         clientSecret: data.clientSecret,
                         appearance: {
-                            theme: 'stripe',
+                            theme: 'flat',
                             variables: {
                                 colorPrimary: @json($brand['secondary'] ?? '#505050'),
                                 colorBackground: '#ffffff',
                                 colorText: '#333333',
                                 fontFamily: 'Mozilla Text, system-ui, sans-serif',
-                                borderRadius: '8px',
-                                tabSpacing: '8px',
+                                borderRadius: '10px',
+                                tabSpacing: '10px',
                                 tabLogoColor: 'dark',
                                 tabLogoSelectedColor: 'dark',
+                                iconColor: '#333333',
+                                tabIconColor: '#333333',
+                                tabIconSelectedColor: '#111111',
                             },
                             rules: {
                                 '.TabLabel': {
@@ -678,18 +681,26 @@
                                     padding: '0px',
                                 },
                                 '.Tab': {
-                                    border: '1px solid #d9d9d9',
+                                    border: '1px solid #d4d4d4',
                                     boxShadow: 'none',
-                                    padding: '12px 18px',
+                                    padding: '10px 16px',
+                                    backgroundColor: '#ffffff',
+                                },
+                                '.Tab:hover': {
+                                    boxShadow: 'none',
+                                    borderColor: '#bdbdbd',
+                                },
+                                '.Tab:focus': {
+                                    boxShadow: 'none',
                                 },
                                 '.Tab--selected': {
-                                    border: '1px solid ' + @json($brand['secondary'] ?? '#505050'),
+                                    border: '2px solid ' + @json($brand['secondary'] ?? '#505050'),
                                     boxShadow: 'none',
+                                    padding: '9px 15px',
+                                    backgroundColor: '#ffffff',
                                 },
                                 '.TabIcon': {
                                     padding: '0px',
-                                    marginLeft: 'auto',
-                                    marginRight: 'auto',
                                 },
                             },
                         },
