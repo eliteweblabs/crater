@@ -651,6 +651,28 @@
                                 colorText: '#333333',
                                 fontFamily: 'Mozilla Text, system-ui, sans-serif',
                                 borderRadius: '8px',
+                                tabSpacing: '8px',
+                                tabLogoColor: 'dark',
+                                tabLogoSelectedColor: 'dark',
+                            },
+                            rules: {
+                                '.TabLabel': {
+                                    fontSize: '0px',
+                                    lineHeight: '0px',
+                                    padding: '0px',
+                                },
+                                '.Tab': {
+                                    border: '1px solid #d9d9d9',
+                                    boxShadow: 'none',
+                                    padding: '10px 14px',
+                                },
+                                '.Tab--selected': {
+                                    border: '1px solid ' + @json($brand['secondary'] ?? '#505050'),
+                                    boxShadow: 'none',
+                                },
+                                '.TabIcon': {
+                                    padding: '0px',
+                                },
                             },
                         },
                     });
@@ -658,6 +680,10 @@
                     if (customerEmail) billingDetails.email = customerEmail;
                     if (customerName) billingDetails.name = customerName;
                     paymentElement = elements.create('payment', {
+                        layout: {
+                            type: 'tabs',
+                            defaultCollapsed: false,
+                        },
                         defaultValues: { billingDetails },
                     });
                     paymentElement.on('change', (event) => {
