@@ -16,9 +16,15 @@ class PublicInvoiceController extends Controller
 
     public function show($uniqueHash)
     {
-        $invoice = Invoice::with(['customer', 'company', 'items'])
+        $invoice = Invoice::with(['customer', 'company.owner', 'company.address', 'items'])
             ->where('unique_hash', $uniqueHash)
             ->firstOrFail();
+
+        $owner = $invoice->company->owner;
+        $fromContact = [
+            'name' => $owner?->name ?: config('mail.from.name'),
+            'email' => $owner?->email ?: config('mail.from.address'),
+        ];
 
         $hasOptionalItems = $invoice->paid_status !== Invoice::STATUS_PAID
             && $invoice->hasCustomerSelectableItems();
@@ -39,7 +45,8 @@ class PublicInvoiceController extends Controller
             'customerInvoices',
             'hasOptionalItems',
             'ogImageUrl',
-            'brand'
+            'brand',
+            'fromContact'
         ));
     }
 

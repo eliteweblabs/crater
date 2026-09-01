@@ -254,6 +254,12 @@
             <div class="party">
                 <h3>From</h3>
                 <p><strong>{{ $invoice->company->name }}</strong></p>
+                @if(!empty($fromContact['name']) && strcasecmp($fromContact['name'], (string) $invoice->company->name) !== 0)
+                    <p>{{ $fromContact['name'] }}</p>
+                @endif
+                @if(!empty($fromContact['email']))
+                    <p>{{ $fromContact['email'] }}</p>
+                @endif
                 @if($invoice->company->address_street_1)
                     <p>{{ $invoice->company->address_street_1 }}</p>
                 @endif
