@@ -515,7 +515,6 @@
                 const customerName = @json($invoice->customer->contact_name ?: $invoice->customer->name ?: null);
                 const taxCents = {{ (int) $invoice->tax }};
                 const discountCents = {{ (int) ($invoice->discount_val ?? 0) }};
-                const hasOptional = {{ !empty($hasOptionalItems) ? 'true' : 'false' }};
                 const money = (cents) => (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
                 const selectedOptionalIds = () =>
@@ -722,6 +721,7 @@
                         }
                         paintTotals();
                         destroyCheckout();
+                        mountCheckout();
                     });
                 });
 
@@ -731,11 +731,7 @@
                     payBtn.addEventListener('click', confirmPay);
                 }
 
-                if (hasOptional) {
-                    labelPay();
-                } else {
-                    mountCheckout();
-                }
+                mountCheckout();
             })();
         </script>
         @endif
