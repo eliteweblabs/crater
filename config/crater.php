@@ -33,6 +33,19 @@ return [
     'reave_app_url' => env('REAVE_APP_URL', 'https://reave.app'),
 
     /*
+    * When true, invoice send (admin UI + recurring auto-send) POSTs the mail
+    * payload to REΛVE instead of rendering Crater's Laravel mail template.
+    * Falls back to local mail unless INVOICE_MAIL_REAVE_ONLY=true.
+    */
+    'invoice_mail_via_reave' => filter_var(env('INVOICE_MAIL_VIA_REAVE', false), FILTER_VALIDATE_BOOLEAN),
+
+    /*
+    * When true with invoice_mail_via_reave, do not fall back to Crater mail on
+    * REΛVE failure — surface an error instead.
+    */
+    'invoice_mail_reave_only' => filter_var(env('INVOICE_MAIL_REAVE_ONLY', false), FILTER_VALIDATE_BOOLEAN),
+
+    /*
     * Minimum php version.
     */
     'min_php_version' => '7.4.0',

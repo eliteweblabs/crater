@@ -16,6 +16,8 @@ use Crater\Models\RecurringInvoice;
 use Crater\Services\SerialNumberFormatter;
 use Vinkla\Hashids\Facades\Hashids;
 use Crater\Support\ReaveBrandColors;
+use Crater\Support\InvoiceMailPayload;
+use Crater\Services\ReaveInvoiceMailDispatcher;
 
 // GET /api/custom/branding — company colors from reΛVe company_config
 Route::get('/custom/branding', function (Illuminate\Http\Request $request) {
@@ -616,6 +618,81 @@ Route::get('/custom/invoice/{id}', function (Illuminate\Http\Request $request, $
         'public_url' => $hash ? url("/invoices/{$hash}") : null,
         'pdf_url' => $hash ? url("/invoices/pdf/{$hash}") : null,
         'payment_url' => $hash ? url("/invoices/{$hash}/pay") : null,
+    ]);
+});
+
+// REΛVE mail payload — normalized JSON for external send (no email sent).
+// GET /api/custom/invoice/{id}/mail-payload?to=&from=&subject=&body=
+Route::get('/custom/invoice/{id}/mail-payload', function (Illuminate\Http\Request $request, $id) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $invoice = Invoice::with(['items', 'customer'])->find($id);
+    if (! $invoice) {
+        return response()->json(['error' => 'Invoice not found'], 404);
+    }
+
+    $companyId = (int) $invoice->company_id;
+    $sendData = [
+        'to' => $request->query('to', $invoice->customer?->email),
+        'from' => $request->query('from', CompanySetting::getSetting('from_mail', $companyId) ?: config('mail.from.address')),
+        'subject' => $request->query('subject', 'New Invoice'),
+        'body' => $request->query('body', CompanySetting::getSetting('invoice_mail_body', $companyId) ?: ''),
+    ];
+
+    $merged = $invoice->sendInvoiceData($sendData);
+
+    return response()->json([
+        'payload' => InvoiceMailPayload::fromSendData($invoice, $merged),
+        'reave_endpoint' => rtrim((string) config('crater.reave_app_url'), '/').'/api/crater/send-invoice-email',
+        'invoice_mail_via_reave' => (bool) config('crater.invoice_mail_via_reave'),
+    ]);
+});
+
+// Send invoice via REΛVE mailer (or Crater fallback) from integrations.
+// POST /api/custom/invoice/{id}/send
+Route::post('/custom/invoice/{id}/send', function (Illuminate\Http\Request $request, $id) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $invoice = Invoice::with('customer')->find($id);
+    if (! $invoice) {
+        return response()->json(['error' => 'Invoice not found'], 404);
+    }
+
+    $validated = $request->validate([
+        'to' => 'nullable|email',
+        'from' => 'nullable|email',
+        'subject' => 'nullable|string',
+        'body' => 'nullable|string',
+    ]);
+
+    $companyId = (int) $invoice->company_id;
+    $sendData = [
+        'to' => $validated['to'] ?? $invoice->customer?->email,
+        'from' => $validated['from'] ?? CompanySetting::getSetting('from_mail', $companyId) ?: config('mail.from.address'),
+        'subject' => $validated['subject'] ?? 'New Invoice',
+        'body' => $validated['body'] ?? CompanySetting::getSetting('invoice_mail_body', $companyId) ?: '',
+    ];
+
+    if (empty($sendData['to'])) {
+        return response()->json(['error' => 'Customer has no email and none was provided.'], 422);
+    }
+
+    try {
+        $result = $invoice->send($sendData);
+    } catch (\RuntimeException $e) {
+        return response()->json(['error' => $e->getMessage()], 502);
+    }
+
+    return response()->json([
+        'success' => true,
+        'delivery' => $result['type'] ?? 'send',
+        'invoice_id' => $invoice->id,
+        'status' => $invoice->fresh()->status,
+        'public_url' => $invoice->unique_hash ? url('/invoices/'.$invoice->unique_hash) : null,
     ]);
 });
 

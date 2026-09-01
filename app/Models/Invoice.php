@@ -494,7 +494,16 @@ class Invoice extends Model implements HasMedia
     {
         $data = $this->sendInvoiceData($data);
 
-        \Mail::to($data['to'])->send(new SendInvoiceMail($data));
+        $dispatcher = app(\Crater\Services\ReaveInvoiceMailDispatcher::class);
+        $sentViaReave = $dispatcher->dispatch($data);
+
+        if (! $sentViaReave) {
+            if ($dispatcher->isEnabled() && config('crater.invoice_mail_reave_only')) {
+                throw new \RuntimeException('REΛVE invoice mail delivery failed and fallback is disabled.');
+            }
+
+            \Mail::to($data['to'])->send(new SendInvoiceMail($data));
+        }
 
         if ($this->status == Invoice::STATUS_DRAFT) {
             $this->status = Invoice::STATUS_SENT;
@@ -504,7 +513,7 @@ class Invoice extends Model implements HasMedia
 
         return [
             'success' => true,
-            'type' => 'send',
+            'type' => $sentViaReave ? 'reave' : 'send',
         ];
     }
 

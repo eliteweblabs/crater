@@ -51,6 +51,9 @@ sed -i '/^CONTACT_API_ENABLED=/d' .env 2>/dev/null || true
 sed -i '/^CONTACT_API_TIMEOUT=/d' .env 2>/dev/null || true
 sed -i '/^CONTACT_API_SYSTEM_NAME=/d' .env 2>/dev/null || true
 sed -i '/^CRON_JOB_AUTH_TOKEN=/d' .env 2>/dev/null || true
+sed -i '/^REAVE_APP_URL=/d' .env 2>/dev/null || true
+sed -i '/^INVOICE_MAIL_VIA_REAVE=/d' .env 2>/dev/null || true
+sed -i '/^INVOICE_MAIL_REAVE_ONLY=/d' .env 2>/dev/null || true
 
 # Calculate DB values from Railway env vars
 DB_HOST_VAL="${DB_HOST:-${MYSQL_HOST:-${MYSQLHOST:-db.railway.internal}}}"
@@ -92,6 +95,9 @@ echo "CONTACT_API_KEY=${CONTACT_API_KEY}" >> .env
 if [ -n "$CONTACT_API_ENABLED" ];     then echo "CONTACT_API_ENABLED=${CONTACT_API_ENABLED}" >> .env; fi
 if [ -n "$CONTACT_API_TIMEOUT" ];     then echo "CONTACT_API_TIMEOUT=${CONTACT_API_TIMEOUT}" >> .env; fi
 if [ -n "$CONTACT_API_SYSTEM_NAME" ]; then echo "CONTACT_API_SYSTEM_NAME=${CONTACT_API_SYSTEM_NAME}" >> .env; fi
+if [ -n "$REAVE_APP_URL" ];             then echo "REAVE_APP_URL=${REAVE_APP_URL}" >> .env; fi
+if [ -n "$INVOICE_MAIL_VIA_REAVE" ];    then echo "INVOICE_MAIL_VIA_REAVE=${INVOICE_MAIL_VIA_REAVE}" >> .env; fi
+if [ -n "$INVOICE_MAIL_REAVE_ONLY" ];   then echo "INVOICE_MAIL_REAVE_ONLY=${INVOICE_MAIL_REAVE_ONLY}" >> .env; fi
 
 # Scheduler (external ping to /api/cron is optional when the in-container loop runs)
 if [ -n "$CRON_JOB_AUTH_TOKEN" ]; then echo "CRON_JOB_AUTH_TOKEN=${CRON_JOB_AUTH_TOKEN}" >> .env; fi

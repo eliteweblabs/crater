@@ -84,6 +84,46 @@ amounts in agent context, since rates and clients change.
 
 See `routes/api-custom.php` for the full list. Key routes:
 
+### Send Invoice (REΛVE mail delegation)
+
+When `INVOICE_MAIL_VIA_REAVE=true`, admin **Send Invoice** and recurring
+auto-send POST the normalized payload to REΛVE instead of using Crater's
+Laravel mail template (fixes logo/branding — no `COMPANY_LOGO_URL` needed).
+
+Inspect payload without sending:
+
+```
+GET {CRATER_URL}/api/custom/invoice/{id}/mail-payload
+Headers:
+  X-Crater-Api-Token: <token>
+```
+
+Send from integrations (Telegram, agents, recurring catch-up):
+
+```
+POST {CRATER_URL}/api/custom/invoice/{id}/send
+Headers:
+  X-Crater-Api-Token: <token>
+  Content-Type: application/json
+
+{
+  "to": "client@email.com",
+  "subject": "Invoice from reave.app",
+  "body": "Optional override body"
+}
+```
+
+REΛVE receiver (implement on reave.app):
+
+```
+POST {REAVE_APP_URL}/api/crater/send-invoice-email
+Header: X-API-Key: {CONTACT_API_KEY}
+Body: payload from mail-payload (event, customer, invoice, urls, branding, …)
+```
+
+Crater falls back to local mail if REΛVE is unreachable unless
+`INVOICE_MAIL_REAVE_ONLY=true`.
+
 ### Create Invoice
 
 ```
@@ -229,6 +269,9 @@ Do not invent product names. **Plausible Analytics** is the analytics add-on —
 | Var | Purpose |
 |---|---|
 | `CRATER_API_TOKEN` | Auth token for `/api/custom/*` endpoints (same value on Astro as `CRATER_API_TOKEN`) |
+| `REAVE_APP_URL` | Public REΛVE origin for branding + optional invoice mail delegation |
+| `INVOICE_MAIL_VIA_REAVE` | When `true`, invoice send POSTs payload to `{REAVE_APP_URL}/api/crater/send-invoice-email` |
+| `CONTACT_API_KEY` | Shared secret for contact-api and REΛVE mail delegation (`X-API-Key`) |
 | `STRIPE_KEY` | Stripe publishable key (Stripe integration) |
 | `STRIPE_SECRET` | Stripe secret key |
 
