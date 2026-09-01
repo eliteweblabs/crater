@@ -172,9 +172,9 @@ class Company extends Model implements HasMedia
         }
 
         try {
-            $data = Storage::disk($resolved['disk'])->get($resolved['path']);
+            $data = file_get_contents($resolved['path']);
 
-            if ($data === false || $data === null || $data === '') {
+            if ($data === false || $data === '') {
                 return null;
             }
 
@@ -190,7 +190,7 @@ class Company extends Model implements HasMedia
     }
 
     /**
-     * @return array{disk: string, path: string, mime: string}|null
+     * @return array{path: string, mime: string}|null
      */
     protected function resolveLogoMediaFile(): ?array
     {
@@ -200,35 +200,21 @@ class Company extends Model implements HasMedia
             return null;
         }
 
-        $relativePath = $logo->getPathRelativeToRoot();
-        $disks = array_values(array_unique(array_filter([
-            $logo->disk,
-            config('media-library.disk_name'),
-            'public',
-            'media',
-        ])));
-
-        foreach ($disks as $diskName) {
-            if (! config('filesystems.disks.'.$diskName)) {
-                continue;
+        try {
+            $path = $logo->getPath();
+            if (! is_string($path) || $path === '' || ! is_readable($path)) {
+                return null;
             }
 
-            try {
-                $disk = Storage::disk($diskName);
+            return [
+                'path' => $path,
+                'mime' => $logo->mime_type ?? 'image/png',
+            ];
+        } catch (\Exception $e) {
+            \Log::warning('Failed to resolve company logo media: ' . $e->getMessage());
 
-                if ($disk->exists($relativePath)) {
-                    return [
-                        'disk' => $diskName,
-                        'path' => $relativePath,
-                        'mime' => $logo->mime_type ?? 'image/png',
-                    ];
-                }
-            } catch (\Exception $e) {
-                \Log::warning("Failed to look up company logo on disk {$diskName}: " . $e->getMessage());
-            }
+            return null;
         }
-
-        return null;
     }
 
     public function customers()
