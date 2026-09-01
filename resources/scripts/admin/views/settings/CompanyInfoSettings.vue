@@ -251,6 +251,12 @@ async function updateCompanyData() {
       await companyStore.updateCompanyLogo(logoData)
       logoFileBlob.value = null
       isCompanyLogoRemoved.value = false
+
+      if (companyStore.selectedCompany?.logo) {
+        previewLogo.value = [{ image: companyStore.selectedCompany.logo }]
+      } else {
+        previewLogo.value = []
+      }
     }
 
     isSaving.value = false

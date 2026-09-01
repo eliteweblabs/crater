@@ -17,6 +17,7 @@ use Crater\Http\Controllers\V1\PDF\DownloadReceiptController;
 use Crater\Http\Controllers\V1\PDF\EstimatePdfController;
 use Crater\Http\Controllers\V1\PDF\InvoicePdfController;
 use Crater\Http\Controllers\V1\PDF\PaymentPdfController;
+use Crater\Http\Controllers\CompanyLogoController;
 use Crater\Models\Company;
 use Illuminate\Support\Facades\Route;
 
@@ -102,6 +103,9 @@ Route::middleware('pdf-auth')->group(function () {
 
 // customer pdf endpoints for invoice, estimate and Payment
 // -------------------------------------------------
+
+// Company logo from the media library (not the public directory tree)
+Route::get('/companies/{company}/logo', CompanyLogoController::class)->name('company.logo');
 
 // Public invoice view (like Harvest - shows invoice + payment button)
 Route::get('/invoices/{uniqueHash}/og.png', [\Crater\Http\Controllers\PublicInvoiceController::class, 'ogImage']);

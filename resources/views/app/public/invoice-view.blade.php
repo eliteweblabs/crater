@@ -33,6 +33,13 @@
     @endif
 
     <style>
+        :root {
+            --brand-primary: {{ $brand['primary'] ?? '#000000' }};
+            --brand-secondary: {{ $brand['secondary'] ?? '#505050' }};
+            --brand-accent: {{ $brand['accent'] ?? ($brand['secondary'] ?? '#505050') }};
+            --brand-gradient: {{ $brand['gradient'] ?? 'linear-gradient(145deg, #000000 0%, #505050 100%)' }};
+            --brand-shadow: {{ $brand['shadow'] ?? '0 2px 16px rgba(80, 80, 80, 0.35)' }};
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { overflow-x: hidden; }
         body {
@@ -128,14 +135,14 @@
             transition: transform 0.18s ease;
         }
         .item-switch input:checked + .item-switch-track {
-            background: linear-gradient(145deg, #f472b6 0%, #c026d3 52%, #6366f1 100%);
-            box-shadow: 0 2px 10px rgba(192, 38, 211, 0.35);
+            background: var(--brand-gradient);
+            box-shadow: var(--brand-shadow);
         }
         .item-switch input:checked + .item-switch-track::after {
             transform: translateX(10px);
         }
         .item-switch input:focus-visible + .item-switch-track {
-            outline: 2px solid #c026d3;
+            outline: 2px solid var(--brand-secondary);
             outline-offset: 2px;
         }
         .addon-badge {
@@ -152,8 +159,8 @@
             line-height: 1.2;
             text-transform: uppercase;
             color: #ffffff;
-            background: linear-gradient(145deg, #f472b6 0%, #c026d3 52%, #6366f1 100%);
-            box-shadow: 0 2px 8px rgba(192, 38, 211, 0.28);
+            background: var(--brand-gradient);
+            box-shadow: var(--brand-shadow);
             /* Hang by the pill’s end-cap radius so the card edge bisects that circle. */
             transform: translate(9px, -50%);
             pointer-events: none;
@@ -162,15 +169,15 @@
         .totals { margin-left: auto; width: 300px; margin-top: 20px; }
         .totals .row { display: flex; justify-content: space-between; padding: 8px 0; }
         .totals .row.total { font-size: 20px; font-weight: 600; }
-        .pay-cta { display: none; margin: 16px 0 0; width: 100%; padding: 14px 28px; border: none; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #ffffff; cursor: pointer; background: linear-gradient(145deg, #f472b6 0%, #c026d3 52%, #6366f1 100%); box-shadow: 0 2px 16px rgba(192, 38, 211, 0.35); }
+        .pay-cta { display: none; margin: 16px 0 0; width: 100%; padding: 14px 28px; border: none; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #ffffff; cursor: pointer; background: var(--brand-gradient); box-shadow: var(--brand-shadow); }
         .pay-cta.is-visible { display: block; }
         .pay-cta:disabled { opacity: 0.6; cursor: not-allowed; }
         #payment-element { margin-top: 24px; width: 100%; }
         #payment-element:empty { display: none; margin: 0; }
         .pay-error { color: #d32f2f; margin-top: 12px; font-size: 14px; }
         .btn { display: inline-block; padding: 14px 32px; border-radius: 999px; text-decoration: none; font-weight: 600; text-align: center; cursor: pointer; border: none; font-size: 16px; transition: all 0.2s; width: 100%; }
-        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
-        .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); }
+        .btn-primary { background: var(--brand-gradient); color: white; }
+        .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--brand-shadow); }
         .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
         .btn-secondary { background: white; color: #666; border: 1px solid #ddd; margin-top: 12px; }
         .btn-secondary:hover { border-color: #999; color: #333; }
@@ -230,7 +237,7 @@
 
         <div class="header">
             <div class="logo">
-                <img src="{{ $invoice->company->logo ?? asset('build/img/crater-logo.png') }}" alt="{{ $invoice->company->name }}">
+                <img src="{{ $brand['logoUrl'] ?? $invoice->company->logo ?? asset('build/img/crater-logo.png') }}" alt="{{ $invoice->company->name }}">
             </div>
             <div class="invoice-info">
                 @php
@@ -634,7 +641,7 @@
                         appearance: {
                             theme: 'stripe',
                             variables: {
-                                colorPrimary: '#c026d3',
+                                colorPrimary: @json($brand['secondary'] ?? '#505050'),
                                 colorBackground: '#ffffff',
                                 colorText: '#333333',
                                 fontFamily: 'Mozilla Text, system-ui, sans-serif',
@@ -771,7 +778,7 @@
             <p>Thank you for your business!</p>
             <p style="margin-top: 8px;">{{ $invoice->company->name }}</p>
             @if($invoice->company->website)
-            <p style="margin-top: 4px;"><a href="{{ $invoice->company->website }}" target="_blank" style="color: #667eea;">{{ $invoice->company->website }}</a></p>
+            <p style="margin-top: 4px;"><a href="{{ $invoice->company->website }}" target="_blank" style="color: var(--brand-primary);">{{ $invoice->company->website }}</a></p>
             @endif
             <p style="margin-top: 8px;">
                 <span class="foot-tag" aria-label="Baked in Boston">
@@ -803,7 +810,7 @@
                             @if($inv->unique_hash === $invoice->unique_hash)
                             <strong>{{ $inv->invoice_number }}</strong>
                             @else
-                            <a href="{{ url("/invoices/{$inv->unique_hash}") }}" style="color: #667eea; font-weight: 500;">{{ $inv->invoice_number }}</a>
+                            <a href="{{ url("/invoices/{$inv->unique_hash}") }}" style="color: var(--brand-primary); font-weight: 500;">{{ $inv->invoice_number }}</a>
                             @endif
                         </td>
                         <td style="padding: 12px 0; border-bottom: 1px solid #f5f5f5; color: #666;">{{ $inv->formattedInvoiceDate }}</td>

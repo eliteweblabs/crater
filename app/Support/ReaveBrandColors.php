@@ -5,8 +5,8 @@ namespace Crater\Support;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * Company brand colors from reΛVe admin → Company (Postgres).
- * Fetches GET {REAVE_APP_URL}/api/branding/colors.
+ * Company branding from reΛVe admin → Company (Postgres).
+ * Fetches GET {REAVE_APP_URL}/api/branding (logo + colors).
  */
 class ReaveBrandColors
 {
@@ -18,10 +18,57 @@ class ReaveBrandColors
         return Cache::remember('reave_brand_colors', 60, fn () => self::fetchFresh());
     }
 
+    /**
+     * Logo for light backgrounds (public invoice page, admin UI).
+     */
+    public static function logoUrl(): ?string
+    {
+        $brand = self::fetch();
+
+        return $brand['logoUrl'] ?? null;
+    }
+
+    /**
+     * Logo rasterized for email / dark backgrounds.
+     */
+    public static function logoEmailUrl(): ?string
+    {
+        $brand = self::fetch();
+
+        return $brand['logoEmailUrl'] ?? null;
+    }
+
+    /**
+     * Prefer reΛVe admin branding API; ignore legacy static /branding/* env paths.
+     */
+    public static function resolvedCompanyLogoUrl(): ?string
+    {
+        return self::logoUrl() ?: self::envLogoUrlIfValid();
+    }
+
+    protected static function envLogoUrlIfValid(): ?string
+    {
+        $env = trim((string) config('crater.company_logo_url'));
+        if ($env === '' || self::isLegacyBrandingPath($env)) {
+            return null;
+        }
+
+        return $env;
+    }
+
+    protected static function isLegacyBrandingPath(string $url): bool
+    {
+        return str_contains($url, '/branding/logo.alt')
+            || str_contains($url, '/branding/logo.');
+    }
+
     public static function fetchFresh(): array
     {
         $origin = rtrim((string) config('crater.reave_app_url'), '/');
-        $payload = $origin !== '' ? self::getJson($origin.'/api/branding/colors') : null;
+        $payload = $origin !== '' ? self::getJson($origin.'/api/branding') : null;
+        if ($payload === null && $origin !== '') {
+            $payload = self::getJson($origin.'/api/branding/colors');
+        }
 
         $primary = self::hex($payload['primary'] ?? null) ?? self::FALLBACK_PRIMARY;
         $secondary = self::hex($payload['secondary'] ?? null) ?? self::FALLBACK_SECONDARY;
@@ -29,6 +76,10 @@ class ReaveBrandColors
         $secondaryRgb = is_string($payload['secondaryRgb'] ?? null)
             ? $payload['secondaryRgb']
             : '80, 80, 80';
+        $logoEmailUrl = is_string($payload['logoEmailUrl'] ?? null) && $payload['logoEmailUrl'] !== ''
+            ? $payload['logoEmailUrl']
+            : null;
+        $logoUrl = self::resolveLogoUrl($origin, $logoEmailUrl);
 
         return [
             'ok' => true,
@@ -37,8 +88,12 @@ class ReaveBrandColors
             'accent' => $accent,
             'primaryRgb' => $payload['primaryRgb'] ?? null,
             'secondaryRgb' => $secondaryRgb,
-            'gradient' => 'linear-gradient(145deg, '.$primary.' 0%, '.$secondary.' 100%)',
+            'gradient' => is_string($payload['gradient'] ?? null) && $payload['gradient'] !== ''
+                ? $payload['gradient']
+                : 'linear-gradient(145deg, '.$primary.' 0%, '.$secondary.' 100%)',
             'shadow' => '0 2px 16px rgba('.$secondaryRgb.', 0.35)',
+            'logoEmailUrl' => $logoEmailUrl,
+            'logoUrl' => $logoUrl,
             'source' => $payload['source'] ?? 'fallback',
             'stored' => $payload['stored'] ?? ['primary' => null, 'secondary' => null],
             'defaults' => $payload['defaults'] ?? [
@@ -52,6 +107,20 @@ class ReaveBrandColors
                 'wired' => true,
             ],
         ];
+    }
+
+    protected static function resolveLogoUrl(string $origin, ?string $logoEmailUrl): ?string
+    {
+        if ($origin === '') {
+            return null;
+        }
+
+        $cacheBust = '';
+        if ($logoEmailUrl && preg_match('/[?&]v=([^&]+)/', $logoEmailUrl, $matches)) {
+            $cacheBust = '?v='.urlencode(urldecode($matches[1]));
+        }
+
+        return $origin.'/api/branding/logo'.$cacheBust;
     }
 
     public static function hex(mixed $raw): ?string

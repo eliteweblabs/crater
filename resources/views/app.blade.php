@@ -66,9 +66,12 @@
 
         @endif    
 
-        @if(config('crater.company_logo_url'))
+        @php
+            $brandLogoUrl = \Crater\Support\ReaveBrandColors::resolvedCompanyLogoUrl();
+        @endphp
+        @if($brandLogoUrl)
 
-        window.company_logo_url = "{{ config('crater.company_logo_url') }}"
+        window.company_logo_url = "{{ $brandLogoUrl }}"
 
         @endif
 

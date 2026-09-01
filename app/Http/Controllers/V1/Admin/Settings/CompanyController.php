@@ -75,18 +75,16 @@ class CompanyController extends Controller
             $company->clearMediaCollection('logo');
         }
         if ($data) {
-            $company = Company::find($request->header('company'));
+            $company->clearMediaCollection('logo');
 
-            if ($company) {
-                $company->clearMediaCollection('logo');
-
-                $company->addMediaFromBase64($data->data)
-                    ->usingFileName($data->name)
-                    ->toMediaCollection('logo');
-            }
+            $company->addMediaFromBase64($data->data)
+                ->usingFileName($data->name)
+                ->toMediaCollection('logo', config('media-library.disk_name'));
         }
 
-        return response()->json([
+        $company->unsetRelation('media');
+
+        return (new CompanyResource($company))->additional([
             'success' => true,
         ]);
     }

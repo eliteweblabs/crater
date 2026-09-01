@@ -2,8 +2,10 @@
 
 namespace Crater\Models;
 
+use Crater\Support\ReaveBrandColors;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 use Silber\Bouncer\BouncerFacade;
 use Silber\Bouncer\Database\Role;
 use Spatie\MediaLibrary\HasMedia;
@@ -32,13 +34,17 @@ class Company extends Model implements HasMedia
 
     public function getLogoPathAttribute()
     {
-        // Check for config logo URL first (reads from COMPANY_LOGO_URL env var)
-        $envLogoUrl = config('crater.company_logo_url');
-        if ($envLogoUrl) {
-            $imageData = $this->fetchRemoteImage($envLogoUrl);
+        $logo = $this->getLogoMediaContents();
+
+        if ($logo) {
+            return 'data:' . $logo['mime'] . ';base64,' . base64_encode($logo['data']);
+        }
+
+        $logoUrl = ReaveBrandColors::resolvedCompanyLogoUrl();
+        if ($logoUrl) {
+            $imageData = $this->fetchRemoteImage($logoUrl);
             if ($imageData) {
-                // Detect mime type from URL or default to png
-                $extension = strtolower(pathinfo(parse_url($envLogoUrl, PHP_URL_PATH), PATHINFO_EXTENSION));
+                $extension = strtolower(pathinfo(parse_url($logoUrl, PHP_URL_PATH), PATHINFO_EXTENSION));
                 $mimeTypes = [
                     'png' => 'image/png',
                     'jpg' => 'image/jpeg',
@@ -48,38 +54,11 @@ class Company extends Model implements HasMedia
                     'svg' => 'image/svg+xml',
                 ];
                 $mimeType = $mimeTypes[$extension] ?? 'image/png';
+
                 return 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
             }
-            // If fetching fails, log and return null (don't return URL as dompdf can't fetch it either)
-            \Log::warning('Failed to fetch company logo from URL: ' . $envLogoUrl);
-            return null;
-        }
 
-        $logo = $this->getMedia('logo')->first();
-
-        if ($logo) {
-            try {
-                // For PDFs, convert logo to base64 data URI for reliable rendering
-                $path = $logo->getPath();
-                if (file_exists($path)) {
-                    $imageData = file_get_contents($path);
-                    $mimeType = $logo->mime_type ?? 'image/png';
-                    return 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
-                }
-
-                // Try fetching from URL if local file doesn't exist
-                $url = $logo->getFullUrl();
-                $imageData = $this->fetchRemoteImage($url);
-                if ($imageData) {
-                    $mimeType = $logo->mime_type ?? 'image/png';
-                    return 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
-                }
-
-                return null;
-            } catch (\Exception $e) {
-                \Log::warning('Failed to load company logo: ' . $e->getMessage());
-                return null;
-            }
+            \Log::warning('Failed to fetch company logo from URL: ' . $logoUrl);
         }
 
         return null;
@@ -165,16 +144,88 @@ class Company extends Model implements HasMedia
 
     public function getLogoAttribute()
     {
-        // Check for config logo URL first (reads from COMPANY_LOGO_URL env var)
-        $envLogoUrl = config('crater.company_logo_url');
-        if ($envLogoUrl) {
-            return $envLogoUrl;
+        $logo = $this->getFirstMedia('logo');
+
+        if ($logo && $this->resolveLogoMediaFile()) {
+            return route('company.logo', [
+                'company' => $this->id,
+                'v' => optional($logo->updated_at)->timestamp ?? $logo->id,
+            ], false);
         }
 
-        $logo = $this->getMedia('logo')->first();
+        return ReaveBrandColors::resolvedCompanyLogoUrl();
+    }
 
-        if ($logo) {
-            return $logo->getFullUrl();
+    /**
+     * Read logo bytes from the media library disk, not the old public directory tree.
+     * Tries the media record's disk first, then the current media disk and legacy local disks
+     * in case files were moved between `public` and `media`.
+     *
+     * @return array{data: string, mime: string}|null
+     */
+    public function getLogoMediaContents(): ?array
+    {
+        $resolved = $this->resolveLogoMediaFile();
+
+        if (! $resolved) {
+            return null;
+        }
+
+        try {
+            $data = Storage::disk($resolved['disk'])->get($resolved['path']);
+
+            if ($data === false || $data === null || $data === '') {
+                return null;
+            }
+
+            return [
+                'data' => $data,
+                'mime' => $resolved['mime'],
+            ];
+        } catch (\Exception $e) {
+            \Log::warning('Failed to read company logo from media library: ' . $e->getMessage());
+
+            return null;
+        }
+    }
+
+    /**
+     * @return array{disk: string, path: string, mime: string}|null
+     */
+    protected function resolveLogoMediaFile(): ?array
+    {
+        $logo = $this->getFirstMedia('logo');
+
+        if (! $logo) {
+            return null;
+        }
+
+        $relativePath = $logo->getPathRelativeToRoot();
+        $disks = array_values(array_unique(array_filter([
+            $logo->disk,
+            config('media-library.disk_name'),
+            'public',
+            'media',
+        ])));
+
+        foreach ($disks as $diskName) {
+            if (! config('filesystems.disks.'.$diskName)) {
+                continue;
+            }
+
+            try {
+                $disk = Storage::disk($diskName);
+
+                if ($disk->exists($relativePath)) {
+                    return [
+                        'disk' => $diskName,
+                        'path' => $relativePath,
+                        'mime' => $logo->mime_type ?? 'image/png',
+                    ];
+                }
+            } catch (\Exception $e) {
+                \Log::warning("Failed to look up company logo on disk {$diskName}: " . $e->getMessage());
+            }
         }
 
         return null;

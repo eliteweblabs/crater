@@ -66,6 +66,9 @@ export const useCompanyStore = (useWindow = false) => {
           axios
             .post('/api/v1/company/upload-logo', data)
             .then((response) => {
+              if (response.data.data) {
+                this.selectedCompany = response.data.data
+              }
               resolve(response)
             })
             .catch((err) => {

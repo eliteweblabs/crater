@@ -4,6 +4,7 @@ namespace Crater\Http\Controllers;
 
 use Crater\Models\Invoice;
 use Crater\Support\InvoiceOgIcons;
+use Crater\Support\ReaveBrandColors;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Http;
 
@@ -23,6 +24,7 @@ class PublicInvoiceController extends Controller
             && $invoice->hasCustomerSelectableItems();
 
         $ogImageUrl = url('/invoices/'.$invoice->unique_hash.'/og.png').'?v=reave';
+        $brand = ReaveBrandColors::fetch();
 
         // Get all non-draft invoices for the same customer
         $customerInvoices = Invoice::where('customer_id', $invoice->customer_id)
@@ -36,7 +38,8 @@ class PublicInvoiceController extends Controller
             'invoice',
             'customerInvoices',
             'hasOptionalItems',
-            'ogImageUrl'
+            'ogImageUrl',
+            'brand'
         ));
     }
 

@@ -1,9 +1,13 @@
 @component('mail::layout')
+    @php
+        $brandLogo = \Crater\Support\ReaveBrandColors::logoEmailUrl()
+            ?: \Crater\Support\ReaveBrandColors::resolvedCompanyLogoUrl();
+    @endphp
     {{-- Header --}}
     @slot('header')
         @component('mail::header', ['url' => config('app.url')])
-            @if(config('crater.company_logo_url'))
-                <img src="{{ config('crater.company_logo_url') }}" alt="{{ config('app.name') }}" style="max-height: 50px; max-width: 200px;">
+            @if($brandLogo)
+                <img src="{{ $brandLogo }}" alt="{{ config('app.name') }}" style="max-height: 50px; max-width: 200px;">
             @else
                 {{ config('app.name') }}
             @endif
