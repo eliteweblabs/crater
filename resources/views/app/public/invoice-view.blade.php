@@ -226,6 +226,40 @@
         .success-message { background: #e8f5e9; border: 1px solid #388e3c; color: #2e7d32; padding: 16px; border-radius: 6px; margin-bottom: 20px; }
         .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; color: #999; font-size: 14px; text-align: center; }
         .pdf-hint { margin-top: 20px; text-align: center; color: #999; font-size: 13px; }
+        .customer-invoices { padding: 20px; background: #f9f9f9; border-radius: 8px; }
+        .customer-invoices h3 { font-size: 18px; margin-bottom: 16px; color: #333; }
+        .invoice-list { list-style: none; margin: 0; padding: 0; }
+        .invoice-list-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .invoice-list-item:last-child { border-bottom: none; padding-bottom: 0; }
+        .invoice-list-item:first-child { padding-top: 0; }
+        .invoice-list-left { min-width: 0; flex: 1; }
+        .invoice-list-number {
+            display: block;
+            font-weight: 500;
+            color: var(--brand-primary);
+            text-decoration: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .invoice-list-number strong { color: #333; }
+        .invoice-list-date { display: block; margin-top: 4px; font-size: 13px; color: #888; }
+        .invoice-list-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+        .invoice-list-amount { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .invoice-list-right .status { padding: 4px 8px; font-size: 11px; }
         @media (max-width: 640px) {
             .container { padding: 20px; margin: 20px; }
             .header {
@@ -862,40 +896,32 @@
     <!-- All Invoices Section -->
     @if($customerInvoices && $customerInvoices->count() > 0)
     <div class="container" style="margin-top: 20px;">
-        <div style="padding: 20px; background: #f9f9f9; border-radius: 8px;">
-            <h3 style="font-size: 18px; margin-bottom: 16px; color: #333;">All Open Invoices</h3>
-            <table style="width: 100%; border-collapse: collapse;">
-                <thead>
-                    <tr>
-                        <th style="text-align: left; padding: 12px 0; border-bottom: 2px solid #eee; font-size: 12px; text-transform: uppercase; color: #999;">Invoice #</th>
-                        <th style="text-align: left; padding: 12px 0; border-bottom: 2px solid #eee; font-size: 12px; text-transform: uppercase; color: #999;">Date</th>
-                        <th style="text-align: left; padding: 12px 0; border-bottom: 2px solid #eee; font-size: 12px; text-transform: uppercase; color: #999;">Due</th>
-                        <th style="text-align: right; padding: 12px 0; border-bottom: 2px solid #eee; font-size: 12px; text-transform: uppercase; color: #999;">Amount</th>
-                        <th style="text-align: center; padding: 12px 0; border-bottom: 2px solid #eee; font-size: 12px; text-transform: uppercase; color: #999;">Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach($customerInvoices as $inv)
-                    <tr>
-                        <td style="padding: 12px 0; border-bottom: 1px solid #f5f5f5;">
-                            @if($inv->unique_hash === $invoice->unique_hash)
-                            <strong>{{ $inv->invoice_number }}</strong>
-                            @else
-                            <a href="{{ url("/invoices/{$inv->unique_hash}") }}" style="color: var(--brand-primary); font-weight: 500;">{{ $inv->invoice_number }}</a>
-                            @endif
-                        </td>
-                        <td style="padding: 12px 0; border-bottom: 1px solid #f5f5f5; color: #666;">{{ $inv->formattedInvoiceDate }}</td>
-                        <td style="padding: 12px 0; border-bottom: 1px solid #f5f5f5; color: #666;">{{ $inv->formattedDueDate }}</td>
-                        <td style="padding: 12px 0; border-bottom: 1px solid #f5f5f5; text-align: right; font-weight: 500;">${{ number_format($inv->total / 100, 2) }}</td>
-                        <td style="padding: 12px 0; border-bottom: 1px solid #f5f5f5; text-align: center;">
-                            <span class="status {{ strtolower($inv->paid_status === 'PAID' ? 'paid' : $inv->status) }}" style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase;">
-                                {{ $inv->paid_status === 'PAID' ? 'PAID' : $inv->status }}
-                            </span>
-                        </td>
-                    </tr>
-                    @endforeach
-                </tbody>
-            </table>
+        <div class="customer-invoices">
+            <h3>All Invoices</h3>
+            <ul class="invoice-list">
+                @foreach($customerInvoices as $inv)
+                <li class="invoice-list-item">
+                    <div class="invoice-list-left">
+                        @if($inv->unique_hash === $invoice->unique_hash)
+                        <span class="invoice-list-number"><strong>{{ $inv->invoice_number }}</strong></span>
+                        @else
+                        <a href="{{ url("/invoices/{$inv->unique_hash}") }}" class="invoice-list-number">{{ $inv->invoice_number }}</a>
+                        @endif
+                        @if($inv->formattedDueDate)
+                        <span class="invoice-list-date">Due {{ $inv->formattedDueDate }}</span>
+                        @elseif($inv->formattedInvoiceDate)
+                        <span class="invoice-list-date">{{ $inv->formattedInvoiceDate }}</span>
+                        @endif
+                    </div>
+                    <div class="invoice-list-right">
+                        <span class="invoice-list-amount">${{ number_format($inv->total / 100, 2) }}</span>
+                        <span class="status {{ strtolower($inv->paid_status === 'PAID' ? 'paid' : $inv->status) }}">
+                            {{ $inv->paid_status === 'PAID' ? 'PAID' : $inv->status }}
+                        </span>
+                    </div>
+                </li>
+                @endforeach
+            </ul>
         </div>
     </div>
     @endif

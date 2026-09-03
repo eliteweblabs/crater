@@ -37,7 +37,7 @@ class PublicInvoiceController extends Controller
             ->where('status', '<>', 'DRAFT')
             ->where('id', '<>', $invoice->id)  // Exclude current invoice
             ->orderBy('created_at', 'desc')
-            ->get(['id', 'invoice_number', 'total', 'status', 'paid_status', 'due_date', 'unique_hash']);
+            ->get(['id', 'company_id', 'invoice_number', 'invoice_date', 'total', 'status', 'paid_status', 'due_date', 'unique_hash']);
 
         return view('app.public.invoice-view', compact(
             'invoice',
