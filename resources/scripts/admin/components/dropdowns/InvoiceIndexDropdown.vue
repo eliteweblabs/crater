@@ -30,6 +30,18 @@
       {{ $t('general.copy_pdf_url') }}
     </BaseDropdownItem>
 
+    <!-- Copy invoice url  -->
+    <BaseDropdownItem
+      v-if="route.name === 'invoices.view'"
+      @click="copyInvoiceUrl"
+    >
+      <BaseIcon
+        name="LinkIcon"
+        class="w-5 h-5 mr-3 text-gray-400 group-hover:text-gray-500"
+      />
+      {{ $t('general.copy_invoice_url') }}
+    </BaseDropdownItem>
+
     <!-- View Invoice  -->
     <router-link
       v-if="
@@ -256,6 +268,17 @@ function copyPdfUrl() {
   notificationStore.showNotification({
     type: 'success',
     message: t('general.copied_pdf_url_clipboard'),
+  })
+}
+
+function copyInvoiceUrl() {
+  const invoiceUrl = `${window.location.origin}/invoices/${props.row.unique_hash}`
+
+  utils.copyTextToClipboard(invoiceUrl)
+
+  notificationStore.showNotification({
+    type: 'success',
+    message: t('general.copied_url_clipboard'),
   })
 }
 </script>
