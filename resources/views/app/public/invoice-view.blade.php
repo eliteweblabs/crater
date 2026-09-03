@@ -506,7 +506,7 @@
         @if($invoice->notes)
         <div style="margin-top: 40px; padding: 20px; background: #f9f9f9; border-radius: 6px;">
             <h3 style="font-size: 14px; text-transform: uppercase; color: #999; margin-bottom: 8px;">Notes</h3>
-            <p style="color: #666;">{{ $invoice->notes }}</p>
+            <div style="color: #666;">{!! $invoice->getNotes() !!}</div>
         </div>
         @endif
 
