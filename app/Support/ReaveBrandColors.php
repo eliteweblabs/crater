@@ -39,6 +39,16 @@ class ReaveBrandColors
     }
 
     /**
+     * Default 1200×630 share card from reΛVe admin branding.
+     */
+    public static function ogUrl(): ?string
+    {
+        $brand = self::fetch();
+
+        return $brand['ogUrl'] ?? null;
+    }
+
+    /**
      * Prefer reΛVe admin branding API; ignore legacy static /branding/* env paths.
      */
     public static function resolvedCompanyLogoUrl(): ?string
@@ -79,7 +89,11 @@ class ReaveBrandColors
         $logoEmailUrl = is_string($payload['logoEmailUrl'] ?? null) && $payload['logoEmailUrl'] !== ''
             ? $payload['logoEmailUrl']
             : null;
+        $payloadOgUrl = is_string($payload['ogUrl'] ?? null) && $payload['ogUrl'] !== ''
+            ? $payload['ogUrl']
+            : null;
         $logoUrl = self::resolveLogoUrl($origin, $logoEmailUrl);
+        $ogUrl = self::resolveOgUrl($origin, $logoEmailUrl, $payloadOgUrl);
         $contactName = self::nonEmptyString($payload['contactName'] ?? null);
         $contactEmail = self::nonEmptyString($payload['contactEmail'] ?? null);
 
@@ -96,6 +110,7 @@ class ReaveBrandColors
             'shadow' => '0 2px 16px rgba('.$secondaryRgb.', 0.35)',
             'logoEmailUrl' => $logoEmailUrl,
             'logoUrl' => $logoUrl,
+            'ogUrl' => $ogUrl,
             'contactName' => $contactName,
             'contactEmail' => $contactEmail,
             'source' => $payload['source'] ?? 'fallback',
@@ -125,6 +140,24 @@ class ReaveBrandColors
         }
 
         return $origin.'/api/branding/logo'.$cacheBust;
+    }
+
+    protected static function resolveOgUrl(string $origin, ?string $logoEmailUrl, ?string $payloadOgUrl): ?string
+    {
+        if ($origin === '') {
+            return null;
+        }
+
+        if ($payloadOgUrl) {
+            return $payloadOgUrl;
+        }
+
+        $cacheBust = '';
+        if ($logoEmailUrl && preg_match('/[?&]v=([^&]+)/', $logoEmailUrl, $matches)) {
+            $cacheBust = '?v='.urlencode(urldecode($matches[1]));
+        }
+
+        return $origin.'/api/branding/og.png'.$cacheBust;
     }
 
     public static function hex(mixed $raw): ?string

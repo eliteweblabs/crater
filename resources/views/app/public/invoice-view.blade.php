@@ -12,17 +12,21 @@
     <meta property="og:type" content="website">
     <meta property="og:title" content="{{ $pageTitle }}">
     <meta property="og:description" content="{{ $invoice->customer->name }}{{ $invoice->formattedDueDate ? ' · Due '.$invoice->formattedDueDate : '' }}">
-    <meta property="og:image" content="{{ $ogImageUrl ?? url('/invoices/'.$invoice->unique_hash.'/og.png').'?v=reave' }}">
+    @if(!empty($ogImageUrl))
+    <meta property="og:image" content="{{ $ogImageUrl }}">
     <meta property="og:image:type" content="image/png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:image:alt" content="Invoice {{ $invoice->invoice_number }} for {{ $invoice->customer->name }}">
+    @endif
     <meta property="og:url" content="{{ url('/invoices/'.$invoice->unique_hash) }}">
     <meta property="og:site_name" content="{{ $invoice->company->name ?? 'Invoice' }}">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{ $pageTitle }}">
     <meta name="twitter:description" content="{{ $invoice->customer->name }}{{ $invoice->formattedDueDate ? ' · Due '.$invoice->formattedDueDate : '' }}">
-    <meta name="twitter:image" content="{{ $ogImageUrl ?? url('/invoices/'.$invoice->unique_hash.'/og.png').'?v=reave' }}">
+    @if(!empty($ogImageUrl))
+    <meta name="twitter:image" content="{{ $ogImageUrl }}">
+    @endif
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

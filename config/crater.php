@@ -15,20 +15,12 @@ use Crater\Models\TaxType;
 return [
 
     /*
-    * Company logo URL (from environment variable)
-    * Set COMPANY_LOGO_URL in your .env or Railway variables
+    * Legacy override only — logo/colors/OG share card come from GET {reave_app_url}/api/branding.
     */
     'company_logo_url' => env('COMPANY_LOGO_URL'),
 
     /*
-    * Square company icon for OG / share cards (from COMPANY_ICON_URL).
-    * Prefer a PNG/WebP app icon. Falls back to COMPANY_LOGO_URL when unset.
-    */
-    'company_icon_url' => env('COMPANY_ICON_URL'),
-
-    /*
-    * Public Reave origin — used to fetch company + client icons for OG cards.
-    * Uploaded client icons are served at /api/clients/{uid}/icon on this host.
+    * Public Reave origin — branding API (logo, colors, OG card) + optional invoice mail.
     */
     'reave_app_url' => env('REAVE_APP_URL', 'https://reave.app'),
 

@@ -23,5 +23,6 @@ test('invoice mail payload includes reave branding urls and public links', funct
         ->and($payload['invoice']['total'])->toBe(500.0)
         ->and($payload['urls']['public'])->toContain('/invoices/')
         ->and($payload['branding']['logo_url'])->toBe('https://reave.app/api/branding/logo')
-        ->and($payload['branding']['icon_url'])->toBe(InvoiceOgIcons::companyBrandIconUrl('https://reave.app'));
+        ->and($payload['branding']['icon_url'])->toBe(InvoiceOgIcons::companyBrandIconUrl('https://reave.app'))
+        ->and($payload['branding']['og_url'])->toContain('https://reave.app/api/branding/og.png');
 });

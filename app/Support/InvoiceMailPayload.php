@@ -69,6 +69,7 @@ class InvoiceMailPayload
                 'reave_origin' => $origin,
                 'logo_url' => rtrim($origin, '/').'/api/branding/logo',
                 'icon_url' => InvoiceOgIcons::companyBrandIconUrl($origin),
+                'og_url' => ReaveBrandColors::ogUrl(),
                 'colors' => ReaveBrandColors::fetch(),
             ],
             'options' => [
