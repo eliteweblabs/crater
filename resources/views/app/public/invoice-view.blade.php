@@ -28,9 +28,18 @@
     <meta name="twitter:image" content="{{ $ogImageUrl }}">
     @endif
 
+    @php
+        $brand = $brand ?? \Crater\Support\ReaveBrandColors::fetch();
+        $brandFonts = $brand['fonts'] ?? \Crater\Support\ReaveBrandColors::normalizeFonts(null);
+        $brandGoogleFontsHref = $brandFonts['googleFontsHref'];
+        $brandFontContent = $brandFonts['content'];
+        $brandFontPrimary = $brandFonts['primary'];
+        $brandFontStripe = \Crater\Support\ReaveBrandColors::stripeFontFamily($brandFontContent);
+    @endphp
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Mozilla+Text:ital,wght@0,400;0,500;0,600;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="{{ $brandGoogleFontsHref }}" rel="stylesheet">
 
     @if($invoice->paid_status !== 'PAID' && config('services.stripe.key'))
     <script src="https://js.stripe.com/v3/"></script>
@@ -47,13 +56,13 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { overflow-x: hidden; }
         body {
-            font-family: "Mozilla Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: {!! $brandFontContent !!};
             background: #f5f5f5;
             color: #333;
             line-height: 1.6;
         }
         h1, h2, h3, .invoice-info, .item-title, .amount, .totals, .status, .pay-cta, .btn {
-            font-family: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: {!! $brandFontPrimary !!};
         }
         .container { max-width: 800px; margin: 40px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: visible; }
         .header {
@@ -714,7 +723,7 @@
                                 colorPrimary: @json($brand['secondary'] ?? '#505050'),
                                 colorBackground: '#ffffff',
                                 colorText: '#333333',
-                                fontFamily: 'Mozilla Text, system-ui, sans-serif',
+                                fontFamily: @json($brandFontStripe),
                                 borderRadius: '8px',
                             },
                         },

@@ -13,6 +13,14 @@ class ReaveBrandColors
     public const FALLBACK_PRIMARY = '#000000';
     public const FALLBACK_SECONDARY = '#505050';
 
+    public const FALLBACK_FONT_CONTENT = '"Mozilla Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+    public const FALLBACK_FONT_PRIMARY = '"Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+    public const FALLBACK_FONT_SECONDARY = self::FALLBACK_FONT_PRIMARY;
+
+    public const FALLBACK_GOOGLE_FONTS_HREF = 'https://fonts.googleapis.com/css2?family=Mozilla+Text:ital,wght@0,400;0,500;0,600;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap';
+
     public static function fetch(): array
     {
         return Cache::remember('reave_brand_colors', 60, fn () => self::fetchFresh());
@@ -96,6 +104,7 @@ class ReaveBrandColors
         $ogUrl = self::resolveOgUrl($origin, $logoEmailUrl, $payloadOgUrl);
         $contactName = self::nonEmptyString($payload['contactName'] ?? null);
         $contactEmail = self::nonEmptyString($payload['contactEmail'] ?? null);
+        $fonts = self::normalizeFonts(is_array($payload['fonts'] ?? null) ? $payload['fonts'] : null);
 
         return [
             'ok' => true,
@@ -119,6 +128,7 @@ class ReaveBrandColors
                 'primary' => self::FALLBACK_PRIMARY,
                 'secondary' => self::FALLBACK_SECONDARY,
             ],
+            'fonts' => $fonts,
             'mail_button' => [
                 'primary' => $primary,
                 'secondary' => $secondary,
@@ -126,6 +136,73 @@ class ReaveBrandColors
                 'wired' => true,
             ],
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $raw
+     * @return array{
+     *     primary: string,
+     *     secondary: string,
+     *     content: string,
+     *     googleFontsHref: string,
+     *     primaryId: string|null,
+     *     secondaryId: string|null,
+     *     contentId: string|null
+     * }
+     */
+    public static function normalizeFonts(?array $raw): array
+    {
+        $raw ??= [];
+
+        $primary = self::fontFamilyCss($raw['fontPrimary'] ?? null) ?? self::FALLBACK_FONT_PRIMARY;
+        $secondary = self::fontFamilyCss($raw['fontSecondary'] ?? null) ?? self::FALLBACK_FONT_SECONDARY;
+        $content = self::fontFamilyCss($raw['fontContent'] ?? null) ?? self::FALLBACK_FONT_CONTENT;
+        $href = self::googleFontsHref($raw['googleFontsHref'] ?? null) ?? self::FALLBACK_GOOGLE_FONTS_HREF;
+
+        return [
+            'primary' => $primary,
+            'secondary' => $secondary,
+            'content' => $content,
+            'googleFontsHref' => $href,
+            'primaryId' => is_string($raw['fontPrimaryId'] ?? null) ? $raw['fontPrimaryId'] : null,
+            'secondaryId' => is_string($raw['fontSecondaryId'] ?? null) ? $raw['fontSecondaryId'] : null,
+            'contentId' => is_string($raw['fontContentId'] ?? null) ? $raw['fontContentId'] : null,
+        ];
+    }
+
+    public static function fontFamilyCss(mixed $raw): ?string
+    {
+        if (! is_string($raw)) {
+            return null;
+        }
+        $t = trim($raw);
+        if ($t === '' || strlen($t) > 512) {
+            return null;
+        }
+
+        return $t;
+    }
+
+    public static function googleFontsHref(mixed $raw): ?string
+    {
+        if (! is_string($raw)) {
+            return null;
+        }
+        $t = trim($raw);
+        if ($t === '' || ! str_starts_with($t, 'https://fonts.googleapis.com/')) {
+            return null;
+        }
+
+        return $t;
+    }
+
+    public static function stripeFontFamily(string $fontFamilyCss): string
+    {
+        if (preg_match('/"([^"]+)"/', $fontFamilyCss, $m)) {
+            return $m[1].', system-ui, sans-serif';
+        }
+
+        return 'system-ui, sans-serif';
     }
 
     protected static function resolveLogoUrl(string $origin, ?string $logoEmailUrl): ?string
