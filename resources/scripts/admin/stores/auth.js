@@ -2,6 +2,7 @@ import axios from 'axios'
 import { defineStore } from 'pinia'
 import { useNotificationStore } from '@/scripts/stores/notification'
 import { handleError } from '@/scripts/helpers/error-handling'
+import Ls from '@/scripts/services/ls.js'
 
 export const useAuthStore = (useWindow = false) => {
   const defineStoreFunc = useWindow ? window.pinia.defineStore : defineStore
@@ -27,6 +28,9 @@ export const useAuthStore = (useWindow = false) => {
               axios
                 .post('/login', data)
                 .then((response) => {
+                  // Cookie session is the source of truth on Railway; a stale install token breaks API auth.
+                  Ls.remove('auth.token')
+
                   resolve(response)
 
                   setTimeout(() => {
@@ -48,6 +52,8 @@ export const useAuthStore = (useWindow = false) => {
           axios
             .post('/auth/logout')
             .then((response) => {
+              Ls.remove('auth.token')
+
               const notificationStore = useNotificationStore()
               notificationStore.showNotification({
                 type: 'success',
