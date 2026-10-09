@@ -65,7 +65,7 @@ class InvoiceOgIcons
      *
      * @return list<array{data?: string, url?: string}>
      */
-    public static function clientIconSources(array $portal, string $origin = 'https://reave.app'): array
+    public static function clientIconSources(array $portal, string $origin = BrandSite::DEFAULT_ORIGIN): array
     {
         $sources = [];
 
@@ -99,7 +99,7 @@ class InvoiceOgIcons
             return rtrim($configured, '/');
         }
 
-        return 'https://reave.app';
+        return BrandSite::DEFAULT_ORIGIN;
     }
 
     /**
@@ -142,7 +142,7 @@ class InvoiceOgIcons
     }
 
     /**
-     * When the company logo lives on reave.app, also try the raster branding icon.
+     * When the company logo lives on the brand site, also try the raster branding icon.
      */
     public static function reaveBrandingIconUrl(?string $url): ?string
     {
@@ -154,7 +154,7 @@ class InvoiceOgIcons
         $parts = parse_url($url);
         $host = strtolower((string) ($parts['host'] ?? ''));
         $path = (string) ($parts['path'] ?? '');
-        if (!in_array($host, ['reave.app', 'www.reave.app'], true)) {
+        if (! BrandSite::isBrandingHost($host)) {
             return null;
         }
         if (str_contains($path, '/api/branding/icon')) {

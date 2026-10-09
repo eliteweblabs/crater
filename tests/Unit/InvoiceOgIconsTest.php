@@ -37,18 +37,18 @@ test('resolves relative reave icon paths and skips unsafe urls', function () {
     $sources = InvoiceOgIcons::clientIconSources([
         'iconUrl' => '/api/clients/abc/icon',
         'logoUrl' => 'javascript:alert(1)',
-    ], 'https://reave.app');
+    ], 'https://rekko.studio');
 
-    expect($sources)->toBe([['url' => 'https://reave.app/api/clients/abc/icon']]);
+    expect($sources)->toBe([['url' => 'https://rekko.studio/api/clients/abc/icon']]);
 });
 
 test('builds reave client serve urls from a contact uid', function () {
-    expect(InvoiceOgIcons::clientServeUrls('abc-123', 'https://reave.app'))->toBe([
-        'https://reave.app/api/clients/abc-123/icon',
-        'https://reave.app/api/clients/abc-123/logo',
+    expect(InvoiceOgIcons::clientServeUrls('abc-123', 'https://rekko.studio'))->toBe([
+        'https://rekko.studio/api/clients/abc-123/icon',
+        'https://rekko.studio/api/clients/abc-123/logo',
     ]);
-    expect(InvoiceOgIcons::companyBrandIconUrl('https://reave.app'))
-        ->toBe('https://reave.app/api/branding/icon?size=256&transparent=1');
+    expect(InvoiceOgIcons::companyBrandIconUrl('https://rekko.studio'))
+        ->toBe('https://rekko.studio/api/branding/icon?size=256&transparent=1');
 });
 
 test('decodes raw and data-uri image payloads and rejects svg', function () {
@@ -59,10 +59,12 @@ test('decodes raw and data-uri image payloads and rejects svg', function () {
     expect(InvoiceOgIcons::decodeImageData(''))->toBeNull();
 });
 
-test('derives a reave.app branding icon from a logo url on that host', function () {
-    expect(InvoiceOgIcons::reaveBrandingIconUrl('https://reave.app/logo.svg'))
-        ->toBe('https://reave.app/api/branding/icon?size=256&transparent=1');
+test('derives a rekko.studio branding icon from a logo url on that host', function () {
+    expect(InvoiceOgIcons::reaveBrandingIconUrl('https://rekko.studio/logo.svg'))
+        ->toBe('https://rekko.studio/api/branding/icon?size=256&transparent=1');
+    expect(InvoiceOgIcons::reaveBrandingIconUrl('https://ap.rekko.studio/logo.png'))
+        ->toBe('https://ap.rekko.studio/api/branding/icon?size=256&transparent=1');
     expect(InvoiceOgIcons::reaveBrandingIconUrl('https://ap.reave.app/logo.png'))->toBeNull();
     expect(InvoiceOgIcons::reaveBrandingIconUrl('https://cdn.example/logo.png'))->toBeNull();
-    expect(InvoiceOgIcons::reaveBrandingIconUrl('https://reave.app/api/branding/icon?size=64'))->toBeNull();
+    expect(InvoiceOgIcons::reaveBrandingIconUrl('https://rekko.studio/api/branding/icon?size=64'))->toBeNull();
 });

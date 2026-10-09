@@ -77,7 +77,11 @@ if [ -z "$APP_URL" ]; then
     exit 1
 fi
 
-echo "APP_NAME=\"${COMPANY_NAME:-My Company}\"" >> .env
+if echo "$APP_URL" | grep -qiE 'reave\.app'; then
+    echo "WARNING: APP_URL references reave.app — use https://ap.rekko.studio for invoicing."
+fi
+
+echo "APP_NAME=\"${COMPANY_NAME:-rekko studio}\"" >> .env
 echo "APP_URL=${APP_URL}" >> .env
 echo "SESSION_DRIVER=cookie" >> .env
 echo "SESSION_LIFETIME=10080" >> .env
@@ -95,7 +99,7 @@ echo "CONTACT_API_KEY=${CONTACT_API_KEY}" >> .env
 if [ -n "$CONTACT_API_ENABLED" ];     then echo "CONTACT_API_ENABLED=${CONTACT_API_ENABLED}" >> .env; fi
 if [ -n "$CONTACT_API_TIMEOUT" ];     then echo "CONTACT_API_TIMEOUT=${CONTACT_API_TIMEOUT}" >> .env; fi
 if [ -n "$CONTACT_API_SYSTEM_NAME" ]; then echo "CONTACT_API_SYSTEM_NAME=${CONTACT_API_SYSTEM_NAME}" >> .env; fi
-if [ -n "$REAVE_APP_URL" ];             then echo "REAVE_APP_URL=${REAVE_APP_URL}" >> .env; fi
+echo "REAVE_APP_URL=${REAVE_APP_URL:-https://rekko.studio}" >> .env
 if [ -n "$INVOICE_MAIL_VIA_REAVE" ];    then echo "INVOICE_MAIL_VIA_REAVE=${INVOICE_MAIL_VIA_REAVE}" >> .env; fi
 if [ -n "$INVOICE_MAIL_REAVE_ONLY" ];   then echo "INVOICE_MAIL_REAVE_ONLY=${INVOICE_MAIL_REAVE_ONLY}" >> .env; fi
 
@@ -110,8 +114,8 @@ echo "MAIL_PORT=${MAIL_PORT:-587}" >> .env
 echo "MAIL_USERNAME=${MAIL_USERNAME:-resend}" >> .env
 echo "MAIL_PASSWORD=${MAIL_PASSWORD}" >> .env
 echo "MAIL_ENCRYPTION=${MAIL_ENCRYPTION:-tls}" >> .env
-echo "MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-noreply@example.com}" >> .env
-echo "MAIL_FROM_NAME=\"${MAIL_FROM_NAME:-${COMPANY_NAME:-My Company}}\"" >> .env
+echo "MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-ap@rekko.studio}" >> .env
+echo "MAIL_FROM_NAME=\"${MAIL_FROM_NAME:-${COMPANY_NAME:-rekko studio}}\"" >> .env
 
 # Filesystem
 echo "FILESYSTEM_DRIVER=public" >> .env

@@ -181,6 +181,10 @@ Route::prefix('/v1')->group(function () {
         $status = [
             'status' => 'ok',
             'timestamp' => now()->toISOString(),
+            'app_url' => config('app.url'),
+            'app_name' => config('app.name'),
+            'mail_from' => config('mail.from'),
+            'brand_site_url' => config('crater.reave_app_url'),
             'php_version' => PHP_VERSION,
             'database_created_file' => \Storage::disk('local')->has('database_created'),
             'scheduler' => [

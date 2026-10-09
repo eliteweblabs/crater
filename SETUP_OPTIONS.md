@@ -82,7 +82,18 @@ Make sure these are set in Railway:
 | `DB_USERNAME` | Database user | `root` |
 | `DB_PASSWORD` | Database password | (from Railway MySQL) |
 | `APP_KEY` | Laravel app key | `base64:...` (auto-generated) |
-| `APP_URL` | Your app URL | `https://crater-production.up.railway.app` |
+| `APP_URL` | Invoicing app URL (browser + email links) | `https://ap.rekko.studio` |
+| `COMPANY_NAME` | App name in emails (“Regards, …”, footer) | `rekko studio` |
+| `MAIL_FROM_ADDRESS` | From address | `ap@rekko.studio` |
+| `MAIL_FROM_NAME` | From display name (defaults to `COMPANY_NAME`) | `rekko studio` |
+| `REAVE_APP_URL` | Brand site for `/api/branding` (legacy env name) | `https://rekko.studio` |
+
+Do **not** leave `APP_URL` on `ap.reave.app` after moving to rekko.studio — password
+reset links and session cookies use `APP_URL`. Check `GET /api/v1/health` for
+`app_url`, `app_name`, and `mail_from` after deploy.
+
+Also update **Settings → Customization** in the admin UI if login footer or copyright
+still mention the old name (stored in the database, not Railway).
 
 ### Optional for Auto-Setup
 

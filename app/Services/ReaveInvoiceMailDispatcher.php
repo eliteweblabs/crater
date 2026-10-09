@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Log;
 /**
  * Delegate invoice email delivery to REΛVE so the official template + branding apply.
  *
- * REΛVE endpoint (to implement on reave.app):
+ * Brand site endpoint:
  *   POST {REAVE_APP_URL}/api/crater/send-invoice-email
  *   Header: X-API-Key: {CONTACT_API_KEY}
  *   Body: InvoiceMailPayload JSON (see InvoiceMailPayload::fromSendData)

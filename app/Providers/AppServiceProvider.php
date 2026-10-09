@@ -6,6 +6,7 @@ use Crater\Models\Customer;
 use Crater\Observers\CustomerContactSyncObserver;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -17,6 +18,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot()
     {
+        if ($root = config('app.url')) {
+            URL::forceRootUrl($root);
+        }
+
         Paginator::useBootstrapThree();
         $this->loadJsonTranslationsFrom(resource_path('scripts/locales'));
 

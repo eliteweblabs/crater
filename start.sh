@@ -49,6 +49,7 @@ sed -i '/^DB_PASSWORD=/d' .env 2>/dev/null || true
 sed -i '/^APP_URL=/d' .env 2>/dev/null || true
 sed -i '/^APP_NAME=/d' .env 2>/dev/null || true
 sed -i '/^SESSION_DRIVER=/d' .env 2>/dev/null || true
+sed -i '/^REAVE_APP_URL=/d' .env 2>/dev/null || true
 
 # Write Railway vars to .env
 # Check multiple possible variable names (Railway uses different formats)
@@ -78,8 +79,13 @@ if [ -z "$APP_URL" ]; then
     exit 1
 fi
 
-echo "APP_NAME=\"${COMPANY_NAME:-My Company}\"" >> .env
+if echo "$APP_URL" | grep -qiE 'reave\.app'; then
+    echo "WARNING: APP_URL references reave.app — use https://ap.rekko.studio for invoicing."
+fi
+
+echo "APP_NAME=\"${COMPANY_NAME:-rekko studio}\"" >> .env
 echo "APP_URL=${APP_URL}" >> .env
+echo "REAVE_APP_URL=${REAVE_APP_URL:-https://rekko.studio}" >> .env
 echo "SESSION_DRIVER=cookie" >> .env
 echo "SESSION_LIFETIME=10080" >> .env
 echo "SESSION_SECURE_COOKIE=true" >> .env
@@ -98,8 +104,8 @@ echo "MAIL_PORT=${MAIL_PORT:-587}" >> .env
 echo "MAIL_USERNAME=${MAIL_USERNAME:-resend}" >> .env
 echo "MAIL_PASSWORD=${MAIL_PASSWORD}" >> .env
 echo "MAIL_ENCRYPTION=${MAIL_ENCRYPTION:-tls}" >> .env
-echo "MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-sen@eliteweblabs.com}" >> .env
-echo "MAIL_FROM_NAME=\"${MAIL_FROM_NAME:-Elite Web Labs}\"" >> .env
+echo "MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-ap@rekko.studio}" >> .env
+echo "MAIL_FROM_NAME=\"${MAIL_FROM_NAME:-${COMPANY_NAME:-rekko studio}}\"" >> .env
 
 # Write filesystem configuration (use local storage)
 echo "FILESYSTEM_DRIVER=public" >> .env

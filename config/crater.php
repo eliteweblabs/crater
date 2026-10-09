@@ -20,20 +20,18 @@ return [
     'company_logo_url' => env('COMPANY_LOGO_URL'),
 
     /*
-    * Public Reave origin — branding API (logo, colors, OG card) + optional invoice mail.
+    * Public rekko.studio origin — branding API (logo, colors, OG card) + optional invoice mail delegation.
+    * Env name REAVE_APP_URL is legacy; set to https://rekko.studio (not the ap.* invoicing host).
     */
-    'reave_app_url' => env('REAVE_APP_URL', 'https://reave.app'),
+    'reave_app_url' => env('REAVE_APP_URL', \Crater\Support\BrandSite::DEFAULT_ORIGIN),
 
     /*
-    * When true, invoice send (admin UI + recurring auto-send) POSTs the mail
-    * payload to REΛVE instead of rendering Crater's Laravel mail template.
-    * Falls back to local mail unless INVOICE_MAIL_REAVE_ONLY=true.
+    * When true, invoice send POSTs the mail payload to the brand site mailer instead of Crater templates.
     */
     'invoice_mail_via_reave' => filter_var(env('INVOICE_MAIL_VIA_REAVE', false), FILTER_VALIDATE_BOOLEAN),
 
     /*
-    * When true with invoice_mail_via_reave, do not fall back to Crater mail on
-    * REΛVE failure — surface an error instead.
+    * When true with invoice_mail_via_reave, do not fall back to Crater mail on remote failure.
     */
     'invoice_mail_reave_only' => filter_var(env('INVOICE_MAIL_REAVE_ONLY', false), FILTER_VALIDATE_BOOLEAN),
 

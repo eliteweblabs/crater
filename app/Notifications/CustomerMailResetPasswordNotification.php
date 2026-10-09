@@ -41,7 +41,8 @@ class CustomerMailResetPasswordNotification extends ResetPassword
      */
     public function toMail($notifiable)
     {
-        $link = url("/{$notifiable->company->slug}/customer/reset/password/".$this->token);
+        $base = rtrim((string) config('app.url'), '/');
+        $link = $base.'/'.$notifiable->company->slug.'/customer/reset/password/'.$this->token;
 
         return ( new MailMessage() )
             ->subject('Reset Password Notification')

@@ -111,12 +111,12 @@ Headers:
 
 {
   "to": "client@email.com",
-  "subject": "Invoice from reave.app",
+  "subject": "Invoice from rekko.studio",
   "body": "Optional override body"
 }
 ```
 
-REΛVE receiver (implement on reave.app):
+Brand site receiver (rekko.studio):
 
 ```
 POST {REAVE_APP_URL}/api/crater/send-invoice-email
@@ -272,7 +272,7 @@ Do not invent product names. **Plausible Analytics** is the analytics add-on —
 | Var | Purpose |
 |---|---|
 | `CRATER_API_TOKEN` | Auth token for `/api/custom/*` endpoints (same value on Astro as `CRATER_API_TOKEN`) |
-| `REAVE_APP_URL` | Public REΛVE origin for branding + optional invoice mail delegation |
+| `REAVE_APP_URL` | Brand site origin (`https://rekko.studio`) for `/api/branding` + optional invoice mail delegation |
 | `INVOICE_MAIL_VIA_REAVE` | When `true`, invoice send POSTs payload to `{REAVE_APP_URL}/api/crater/send-invoice-email` |
 | `CONTACT_API_KEY` | Shared secret for contact-api and REΛVE mail delegation (`X-API-Key`) |
 | `STRIPE_KEY` | Stripe publishable key (Stripe integration) |
