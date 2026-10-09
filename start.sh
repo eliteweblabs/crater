@@ -74,7 +74,7 @@ echo "DB_PASSWORD=${DB_PASS_VAL}" >> .env
 # APP_URL is required - fail fast if not set
 if [ -z "$APP_URL" ]; then
     echo "ERROR: APP_URL environment variable is required but not set!"
-    echo "Please set APP_URL in Railway variables (e.g., https://ap.reave.app)"
+    echo "Please set APP_URL in Railway variables (e.g., https://ap.rekko.studio)"
     exit 1
 fi
 
