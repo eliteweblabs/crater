@@ -31,6 +31,7 @@ class Kernel extends HttpKernel
      */
     protected $middlewareGroups = [
         'web' => [
+            \Crater\Http\Middleware\MatchSessionDomainToHost::class,
             \Crater\Http\Middleware\EncryptCookies::class,
             \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
             \Illuminate\Session\Middleware\StartSession::class,
@@ -41,6 +42,7 @@ class Kernel extends HttpKernel
         ],
 
         'api' => [
+            \Crater\Http\Middleware\MatchSessionDomainToHost::class,
             \Crater\Http\Middleware\ForceStatefulRequests::class,
             EnsureFrontendRequestsAreStateful::class,
             'throttle:180,1',
