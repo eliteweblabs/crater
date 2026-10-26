@@ -3,13 +3,13 @@ FROM php:8.1-apache
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     git curl libpng-dev libonig-dev libxml2-dev \
-    zip unzip libzip-dev mariadb-client \
+    zip unzip libzip-dev mariadb-client postgresql-client libpq-dev \
     libfreetype6-dev libjpeg62-turbo-dev libwebp-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions (GD needs FreeType for invoice OG TTF text)
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
-    && docker-php-ext-install pdo_mysql mbstring zip exif pcntl bcmath gd
+    && docker-php-ext-install pdo_mysql pdo_pgsql mbstring zip exif pcntl bcmath gd
 
 # Raise PHP upload limits (default 2M is too small for profile images)
 RUN echo "upload_max_filesize=20M\npost_max_size=25M\nmemory_limit=256M" \
