@@ -55,16 +55,45 @@ sed -i '/^REAVE_APP_URL=/d' .env 2>/dev/null || true
 sed -i '/^INVOICE_MAIL_VIA_REAVE=/d' .env 2>/dev/null || true
 sed -i '/^INVOICE_MAIL_REAVE_ONLY=/d' .env 2>/dev/null || true
 
-# Calculate DB values from Railway env vars
-DB_HOST_VAL="${DB_HOST:-${MYSQL_HOST:-${MYSQLHOST:-db.railway.internal}}}"
-DB_PORT_VAL="${DB_PORT:-${MYSQL_PORT:-${MYSQLPORT:-3306}}}"
-DB_NAME_VAL="${DB_DATABASE:-${MYSQL_DATABASE:-${MYSQLDATABASE:-crater}}}"
-DB_USER_VAL="${DB_USERNAME:-${MYSQL_USER:-${MYSQLUSER:-crater}}}"
+# Calculate DB values from Railway env vars (prefer explicit DB_*; else DATABASE_URL postgres)
+DB_CONN_VAL="${DB_CONNECTION:-mysql}"
+DB_HOST_VAL="${DB_HOST:-${MYSQL_HOST:-${MYSQLHOST:-}}}"
+DB_PORT_VAL="${DB_PORT:-${MYSQL_PORT:-${MYSQLPORT:-}}}"
+DB_NAME_VAL="${DB_DATABASE:-${MYSQL_DATABASE:-${MYSQLDATABASE:-}}}"
+DB_USER_VAL="${DB_USERNAME:-${MYSQL_USER:-${MYSQLUSER:-}}}"
 DB_PASS_VAL="${DB_PASSWORD:-${MYSQL_PASSWORD:-${MYSQLPASSWORD:-}}}"
+
+if [ -n "${DATABASE_URL:-}" ]; then
+    case "$DATABASE_URL" in
+        postgres://*|postgresql://*)
+            DB_CONN_VAL="pgsql"
+            if [ -z "$DB_HOST_VAL" ]; then
+                DB_HOST_VAL="$(php -r '$u=parse_url(getenv("DATABASE_URL")?: ""); echo $u["host"] ?? "";')"
+            fi
+            if [ -z "$DB_PORT_VAL" ]; then
+                DB_PORT_VAL="$(php -r '$u=parse_url(getenv("DATABASE_URL")?: ""); echo $u["port"] ?? 5432;')"
+            fi
+            if [ -z "$DB_NAME_VAL" ]; then
+                DB_NAME_VAL="$(php -r '$u=parse_url(getenv("DATABASE_URL")?: ""); $p=ltrim($u["path"] ?? "/railway", "/"); echo $p !== "" ? $p : "railway";')"
+            fi
+            if [ -z "$DB_USER_VAL" ]; then
+                DB_USER_VAL="$(php -r '$u=parse_url(getenv("DATABASE_URL")?: ""); echo $u["user"] ?? "postgres";')"
+            fi
+            if [ -z "$DB_PASS_VAL" ]; then
+                DB_PASS_VAL="$(php -r '$u=parse_url(getenv("DATABASE_URL")?: ""); echo $u["pass"] ?? "";')"
+            fi
+            ;;
+    esac
+fi
+
+DB_HOST_VAL="${DB_HOST_VAL:-db.railway.internal}"
+DB_PORT_VAL="${DB_PORT_VAL:-$([ "$DB_CONN_VAL" = "pgsql" ] && echo 5432 || echo 3306)}"
+DB_NAME_VAL="${DB_NAME_VAL:-$([ "$DB_CONN_VAL" = "pgsql" ] && echo railway || echo crater)}"
+DB_USER_VAL="${DB_USER_VAL:-$([ "$DB_CONN_VAL" = "pgsql" ] && echo postgres || echo crater)}"
 
 # Write to .env
 echo "" >> .env
-echo "DB_CONNECTION=${DB_CONNECTION:-mysql}" >> .env
+echo "DB_CONNECTION=${DB_CONN_VAL}" >> .env
 echo "DB_HOST=${DB_HOST_VAL}" >> .env
 echo "DB_PORT=${DB_PORT_VAL}" >> .env
 echo "DB_DATABASE=${DB_NAME_VAL}" >> .env
@@ -143,6 +172,7 @@ echo "DB_HOST=${DB_HOST_VAL}"
 echo "PORT=${PORT}"
 
 # Export for Apache
+export DB_CONNECTION="${DB_CONN_VAL}"
 export DB_HOST="${DB_HOST_VAL}"
 export DB_PORT="${DB_PORT_VAL}"
 export DB_DATABASE="${DB_NAME_VAL}"
@@ -209,8 +239,8 @@ php artisan config:clear 2>/dev/null || true
 php artisan view:clear 2>/dev/null || true
 php artisan cache:clear 2>/dev/null || true
 
-# Auto-migrate if database is empty
-if [ "$AUTO_MIGRATE" = "true" ]; then
+# Auto-migrate if database is empty (AUTO_SETUP alias for start.sh parity)
+if [ "$AUTO_MIGRATE" = "true" ] || [ "$AUTO_MIGRATE" = "1" ] || [ "$AUTO_SETUP" = "true" ] || [ "$AUTO_SETUP" = "1" ]; then
     echo "AUTO_MIGRATE enabled - running migrations and seeds..."
     php artisan migrate --seed --force 2>&1 || echo "Migration/seed failed"
     echo "Migrations complete."
