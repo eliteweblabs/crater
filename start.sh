@@ -178,17 +178,19 @@ wait_for_db() {
     
     for i in {1..30}; do
         RESULT=$(php -r "
-            \$host = getenv('DB_HOST') ?: '$DB_HOST';
-            \$port = getenv('DB_PORT') ?: '$DB_PORT';
-            \$db = getenv('DB_DATABASE') ?: '$DB_DATABASE';
-            \$user = getenv('DB_USERNAME') ?: '$DB_USERNAME';
-            \$pass = getenv('DB_PASSWORD') ?: '$DB_PASSWORD';
-            
-            echo \"Trying: mysql:host=\$host;port=\$port;dbname=\$db with user \$user\n\";
-            
+            \$host = getenv('DB_HOST') ?: '$DB_HOST_VAL';
+            \$port = getenv('DB_PORT') ?: '$DB_PORT_VAL';
+            \$db = getenv('DB_DATABASE') ?: '$DB_NAME_VAL';
+            \$user = getenv('DB_USERNAME') ?: '$DB_USER_VAL';
+            \$pass = getenv('DB_PASSWORD') ?: '$DB_PASS_VAL';
+            \$driver = getenv('DB_CONNECTION') ?: '$DB_CONN_VAL';
+            \$dsn = \$driver === 'pgsql'
+                ? \"pgsql:host=\$host;port=\$port;dbname=\$db\"
+                : \"mysql:host=\$host;port=\$port;dbname=\$db\";
+            echo \"Trying: \$dsn with user \$user\n\";
             try {
                 \$pdo = new PDO(
-                    \"mysql:host=\$host;port=\$port;dbname=\$db\",
+                    \$dsn,
                     \$user,
                     \$pass,
                     [PDO::ATTR_TIMEOUT => 5, PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
@@ -539,7 +541,7 @@ php artisan tinker --execute="
 
 # Export database and app vars explicitly for PHP BEFORE building config cache
 # Use the values we calculated earlier (DB_HOST_VAL etc) not defaults
-export DB_CONNECTION="${DB_CONNECTION:-mysql}"
+export DB_CONNECTION="${DB_CONN_VAL:-${DB_CONNECTION:-mysql}}"
 export DB_HOST="${DB_HOST_VAL:-${DB_HOST:-mysql.railway.internal}}"
 export DB_PORT="${DB_PORT_VAL:-${DB_PORT:-3306}}"
 export DB_DATABASE="${DB_NAME_VAL:-${DB_DATABASE:-crater}}"
