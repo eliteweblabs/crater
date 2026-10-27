@@ -16,9 +16,15 @@ class MigrateTemplatesFromVersion4 extends Migration
 
         foreach ($templates as $key => $template) {
             $templateName = Str::before(basename($template), '.blade.php');
+            $source = public_path("/assets/img/PDF/{$templateName}.png");
+            if (! file_exists($source)) {
+                continue;
+            }
             if (! file_exists(resource_path("/static/img/PDF/{$templateName}.png"))) {
-                copy(public_path("/assets/img/PDF/{$templateName}.png"), public_path("/build/img/PDF/{$templateName}.png"));
-                copy(public_path("/assets/img/PDF/{$templateName}.png"), resource_path("/static/img/PDF/{$templateName}.png"));
+                @mkdir(public_path('/build/img/PDF'), 0775, true);
+                @mkdir(resource_path('/static/img/PDF'), 0775, true);
+                @copy($source, public_path("/build/img/PDF/{$templateName}.png"));
+                @copy($source, resource_path("/static/img/PDF/{$templateName}.png"));
             }
         }
 
@@ -26,9 +32,15 @@ class MigrateTemplatesFromVersion4 extends Migration
 
         foreach ($templates as $key => $template) {
             $templateName = Str::before(basename($template), '.blade.php');
+            $source = public_path("/assets/img/PDF/{$templateName}.png");
+            if (! file_exists($source)) {
+                continue;
+            }
             if (! file_exists(resource_path("/static/img/PDF/{$templateName}.png"))) {
-                copy(public_path("/assets/img/PDF/{$templateName}.png"), public_path("/build/img/PDF/{$templateName}.png"));
-                copy(public_path("/assets/img/PDF/{$templateName}.png"), resource_path("/static/img/PDF/{$templateName}.png"));
+                @mkdir(public_path('/build/img/PDF'), 0775, true);
+                @mkdir(resource_path('/static/img/PDF'), 0775, true);
+                @copy($source, public_path("/build/img/PDF/{$templateName}.png"));
+                @copy($source, resource_path("/static/img/PDF/{$templateName}.png"));
             }
         }
     }
