@@ -18,6 +18,7 @@ use Crater\Services\SerialNumberFormatter;
 use Vinkla\Hashids\Facades\Hashids;
 use Crater\Support\ReaveBrandColors;
 use Crater\Support\InvoiceMailPayload;
+use Crater\Support\TallyInvoice;
 use Crater\Services\ReaveInvoiceMailDispatcher;
 
 // GET /api/custom/branding — company colors from reΛVe company_config
@@ -1051,13 +1052,14 @@ Route::post('/custom/repair-invoice-numbers', function (Illuminate\Http\Request 
 //
 // Flow:
 //   1. Fuzzy-search customer by name (same LIKE matching used everywhere).
-//      • No match  → create customer + auto-draft invoice, then record payment.
+//      • No match  → create customer, then record payment.
 //      • 2+ matches → return needs_selection:customer so caller can be more specific.
-//   2. Resolve invoice (skip if invoice_id supplied directly).
-//      • 0 open invoices → create a DRAFT invoice for the amount, then record payment.
-//      • 1 open invoice  → apply payment to it.
-//      • 2+ open invoices → return needs_selection:invoice with the list; caller
-//                           re-sends with invoice_id chosen.
+//   2. Apply payment (skip FIFO if invoice_id supplied directly).
+//      • Non-tally open invoices: oldest invoice_date first (FIFO), split across
+//        multiple Payment rows when the amount covers more than one bill.
+//      • Remainder (or full amount when nothing else is due): apply to the
+//        customer's Tally invoice (ref/subject starts with "Tally"), creating
+//        one only when needed; further prepayments reuse the same Tally.
 Route::post('/custom/record-payment', function (Illuminate\Http\Request $request) {
     if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
         return response()->json(['error' => 'Unauthorized'], 401);
@@ -1204,158 +1206,16 @@ Route::post('/custom/record-payment', function (Illuminate\Http\Request $request
 
     // ── 2. Payment method already resolved from Settings → Payment Modes ──────
 
-    // ── 3. Resolve invoice ────────────────────────────────────────────────────
+    // ── 3–4. Allocate payment (FIFO) and record Payment row(s) ───────────────
     $invoiceCreated = false;
+    $tallyCreated   = false;
 
-    if (!empty($validated['invoice_id'])) {
-        $invoice = Invoice::where('company_id', $companyId)
-            ->where('customer_id', $customer->id)
-            ->find($validated['invoice_id']);
-        if (!$invoice) {
-            return response()->json(['error' => 'Invoice not found for this customer'], 404);
-        }
-    } else {
-        $openInvoices = Invoice::where('company_id', $companyId)
-            ->where('customer_id', $customer->id)
-            ->whereIn('paid_status', [Invoice::STATUS_UNPAID, Invoice::STATUS_PARTIALLY_PAID])
-            ->orderByDesc('invoice_date')
-            ->orderByDesc('id')
-            ->get(['id', 'invoice_number', 'invoice_date', 'total', 'due_amount', 'status', 'paid_status']);
-
-        if ($openInvoices->count() > 1) {
-            return response()->json([
-                'needs_selection' => true,
-                'selection_type'  => 'invoice',
-                'message'         => 'Multiple open invoices found. Re-send with invoice_id to specify which one to apply the payment to.',
-                'customer'        => ['id' => $customer->id, 'name' => $customer->name],
-                'open_invoices'   => $openInvoices->map(fn ($inv) => [
-                    'id'             => $inv->id,
-                    'invoice_number' => $inv->invoice_number,
-                    'invoice_date'   => optional($inv->invoice_date)->format('Y-m-d'),
-                    'total'          => round(((int) $inv->total) / 100, 2),
-                    'due'            => round(((int) $inv->due_amount) / 100, 2),
-                    'status'         => $inv->status,
-                    'paid_status'    => $inv->paid_status,
-                    'admin_url'      => url("/admin/invoices/{$inv->id}/view"),
-                ])->values(),
-            ], 300);
-        }
-
-        if ($openInvoices->count() === 1) {
-            $invoice = Invoice::find($openInvoices->first()->id);
-        } else {
-            // 0 open invoices — create a DRAFT invoice as a placeholder
-            $invoice = DB::transaction(function () use (
-                $customer, $amountCents, $companyId, $paymentDate, $validated
-            ) {
-                $companyCurrencyId = (int) (CompanySetting::getSetting('currency', $companyId) ?? 1);
-                $taxPerItem        = CompanySetting::getSetting('tax_per_item', $companyId) ?? 'NO';
-                $discountPerItem   = CompanySetting::getSetting('discount_per_item', $companyId) ?? 'NO';
-                $currencyId        = (int) ($customer->currency_id ?: $companyCurrencyId);
-                $exchangeRate      = 1;
-                $uniqueHash        = \Illuminate\Support\Str::random(32);
-                $creatorId         = (int) (DB::table('users')->orderBy('id')->value('id') ?? 1);
-
-                // Sequence numbers — same locking pattern as create-invoice
-                $rows = DB::table('invoices')
-                    ->where('company_id', $companyId)
-                    ->lockForUpdate()
-                    ->get(['sequence_number', 'invoice_number']);
-
-                $maxSeq = 0;
-                foreach ($rows as $row) {
-                    if ($row->sequence_number !== null && (int) $row->sequence_number > $maxSeq) {
-                        $maxSeq = (int) $row->sequence_number;
-                    }
-                    if ($row->invoice_number && preg_match('/(\d+)$/', $row->invoice_number, $m)) {
-                        if ((int) $m[1] > $maxSeq) {
-                            $maxSeq = (int) $m[1];
-                        }
-                    }
-                }
-                $nextSeq = $maxSeq + 1;
-
-                $maxCustSeq = (int) (DB::table('invoices')
-                    ->where('company_id', $companyId)
-                    ->where('customer_id', $customer->id)
-                    ->lockForUpdate()
-                    ->max('customer_sequence_number') ?? 0);
-                $nextCustSeq = $maxCustSeq + 1;
-
-                $invoiceModel = new Invoice();
-                $serial = (new SerialNumberFormatter())
-                    ->setModel($invoiceModel)
-                    ->setCompany($companyId);
-                $serial->nextSequenceNumber         = $nextSeq;
-                $serial->nextCustomerSequenceNumber = $nextCustSeq;
-                $invoiceNumber = $serial->getNextNumber();
-
-                $inv = Invoice::create([
-                    'invoice_date'             => $paymentDate,
-                    'due_date'                 => $paymentDate,
-                    'invoice_number'           => $invoiceNumber,
-                    'sequence_number'          => $nextSeq,
-                    'customer_sequence_number' => $nextCustSeq,
-                    'customer_id'              => $customer->id,
-                    'company_id'               => $companyId,
-                    'creator_id'               => $creatorId,
-                    'currency_id'              => $currencyId,
-                    'exchange_rate'            => $exchangeRate,
-                    'sub_total'                => $amountCents,
-                    'total'                    => $amountCents,
-                    'due_amount'               => $amountCents,
-                    'base_sub_total'           => $amountCents,
-                    'base_total'               => $amountCents,
-                    'base_due_amount'          => $amountCents,
-                    'tax'                      => 0,
-                    'base_tax'                 => 0,
-                    'discount'                 => 0,
-                    'discount_type'            => 'fixed',
-                    'discount_val'             => 0,
-                    'base_discount_val'        => 0,
-                    'tax_per_item'             => $taxPerItem,
-                    'discount_per_item'        => $discountPerItem,
-                    'paid_status'              => Invoice::STATUS_UNPAID,
-                    'notes'                    => $validated['notes'] ?? '',
-                    'status'                   => Invoice::STATUS_DRAFT,
-                    'template_name'            => 'invoice1',
-                    'unique_hash'              => $uniqueHash,
-                ]);
-
-                InvoiceItem::create([
-                    'invoice_id'       => $inv->id,
-                    'name'             => 'Offline Payment',
-                    'description'      => '',
-                    'quantity'         => 1,
-                    'price'            => $amountCents,
-                    'total'            => $amountCents,
-                    'base_price'       => $amountCents,
-                    'base_total'       => $amountCents,
-                    'base_discount_val'=> 0,
-                    'base_tax'         => 0,
-                    'discount'         => 0,
-                    'discount_type'    => 'fixed',
-                    'discount_val'     => 0,
-                    'tax'              => 0,
-                    'exchange_rate'    => $exchangeRate,
-                    'currency_id'      => $currencyId,
-                    'company_id'       => $companyId,
-                    'created_at'       => now(),
-                    'updated_at'       => now(),
-                ]);
-
-                return $inv;
-            });
-            $invoiceCreated = true;
-        }
-    }
-
-    // ── 4. Record the payment ─────────────────────────────────────────────────
-    $payment = DB::transaction(function () use (
-        $customer, $invoice, $amountCents, $paymentDate,
-        $paymentMethodId, $companyId, $validated
+    $recordResult = DB::transaction(function () use (
+        $customer, $amountCents, $paymentDate, $paymentMethodId, $companyId,
+        $validated, &$invoiceCreated, &$tallyCreated
     ) {
-        // Sequence numbers for payment — same locking pattern as invoices
+        $creatorId = (int) (DB::table('users')->orderBy('id')->value('id') ?? 1);
+
         $payRows = DB::table('payments')
             ->where('company_id', $companyId)
             ->lockForUpdate()
@@ -1381,57 +1241,196 @@ Route::post('/custom/record-payment', function (Illuminate\Http\Request $request
             ->max('customer_sequence_number') ?? 0);
         $nextCustPaySeq = $maxCustPaySeq + 1;
 
-        $paymentModel = new Payment();
-        $serial = (new SerialNumberFormatter())
-            ->setModel($paymentModel)
-            ->setCompany($companyId);
-        $serial->nextSequenceNumber         = $nextPaySeq;
-        $serial->nextCustomerSequenceNumber = $nextCustPaySeq;
-        $paymentNumber = $serial->getNextNumber();
+        $createPaymentOnInvoice = function (Invoice $invoice, int $applyCents) use (
+            &$nextPaySeq, &$nextCustPaySeq, $paymentDate, $paymentMethodId,
+            $companyId, $customer, $creatorId, $validated
+        ) {
+            $exchangeRate = (float) ($invoice->exchange_rate ?: 1);
+            $currencyId   = (int) ($invoice->currency_id ?: (CompanySetting::getSetting('currency', $companyId) ?? 1));
 
-        $creatorId    = (int) (DB::table('users')->orderBy('id')->value('id') ?? 1);
-        $exchangeRate = (float) ($invoice->exchange_rate ?: 1);
-        $currencyId   = (int) ($invoice->currency_id ?: (CompanySetting::getSetting('currency', $companyId) ?? 1));
+            $paymentModel = new Payment();
+            $serial = (new SerialNumberFormatter())
+                ->setModel($paymentModel)
+                ->setCompany($companyId);
+            $serial->nextSequenceNumber         = $nextPaySeq;
+            $serial->nextCustomerSequenceNumber = $nextCustPaySeq;
+            $paymentNumber = $serial->getNextNumber();
 
-        $pay = Payment::create([
-            'payment_number'           => $paymentNumber,
-            'payment_date'             => $paymentDate,
-            'amount'                   => $amountCents,
-            'base_amount'              => (int) round($amountCents * $exchangeRate),
-            'notes'                    => $validated['notes'] ?? '',
-            'invoice_id'               => $invoice->id,
-            'customer_id'              => $customer->id,
-            'company_id'               => $companyId,
-            'creator_id'               => $creatorId,
-            'user_id'                  => $creatorId,
-            'payment_method_id'        => $paymentMethodId,
-            'currency_id'              => $currencyId,
-            'exchange_rate'            => $exchangeRate,
-            'sequence_number'          => $nextPaySeq,
-            'customer_sequence_number' => $nextCustPaySeq,
-        ]);
+            $pay = Payment::create([
+                'payment_number'           => $paymentNumber,
+                'payment_date'             => $paymentDate,
+                'amount'                   => $applyCents,
+                'base_amount'              => (int) round($applyCents * $exchangeRate),
+                'notes'                    => $validated['notes'] ?? '',
+                'invoice_id'               => $invoice->id,
+                'customer_id'              => $customer->id,
+                'company_id'               => $companyId,
+                'creator_id'               => $creatorId,
+                'user_id'                  => $creatorId,
+                'payment_method_id'        => $paymentMethodId,
+                'currency_id'              => $currencyId,
+                'exchange_rate'            => $exchangeRate,
+                'sequence_number'          => $nextPaySeq,
+                'customer_sequence_number' => $nextCustPaySeq,
+            ]);
 
-        $pay->unique_hash = Hashids::connection(Payment::class)->encode($pay->id);
-        $pay->save();
+            $pay->unique_hash = Hashids::connection(Payment::class)->encode($pay->id);
+            $pay->save();
 
-        $invoice->subtractInvoicePayment($amountCents);
+            $invoice->subtractInvoicePayment($applyCents);
 
-        return $pay;
+            $nextPaySeq++;
+            $nextCustPaySeq++;
+
+            return $pay;
+        };
+
+        $allocations = [];
+        $remaining   = $amountCents;
+
+        if (!empty($validated['invoice_id'])) {
+            $invoice = Invoice::where('company_id', $companyId)
+                ->where('customer_id', $customer->id)
+                ->where('id', $validated['invoice_id'])
+                ->lockForUpdate()
+                ->first();
+            if (!$invoice) {
+                return ['error' => 'Invoice not found for this customer', 'status' => 404];
+            }
+
+            $pay = $createPaymentOnInvoice($invoice, $remaining);
+            $allocations[] = [
+                'payment_id'     => $pay->id,
+                'payment_number' => $pay->payment_number,
+                'invoice_id'     => $invoice->id,
+                'invoice_number' => $invoice->invoice_number,
+                'amount'         => round($remaining / 100, 2),
+                'tally'          => TallyInvoice::isTally($invoice),
+            ];
+            $remaining = 0;
+        } else {
+            $fifoQueue = Invoice::where('company_id', $companyId)
+                ->where('customer_id', $customer->id)
+                ->whereIn('paid_status', [Invoice::STATUS_UNPAID, Invoice::STATUS_PARTIALLY_PAID])
+                ->where('due_amount', '>', 0)
+                ->orderBy('invoice_date')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->filter(fn (Invoice $inv) => ! TallyInvoice::isTally($inv));
+
+            foreach ($fifoQueue as $invoice) {
+                if ($remaining <= 0) {
+                    break;
+                }
+                $due   = (int) $invoice->due_amount;
+                $apply = min($remaining, $due);
+                if ($apply <= 0) {
+                    continue;
+                }
+
+                $pay = $createPaymentOnInvoice($invoice, $apply);
+                $allocations[] = [
+                    'payment_id'     => $pay->id,
+                    'payment_number' => $pay->payment_number,
+                    'invoice_id'     => $invoice->id,
+                    'invoice_number' => $invoice->invoice_number,
+                    'amount'         => round($apply / 100, 2),
+                    'tally'          => false,
+                ];
+                $remaining -= $apply;
+            }
+
+            if ($remaining > 0) {
+                $tally = TallyInvoice::findActiveForCustomer($companyId, $customer->id);
+
+                if ($tally) {
+                    $dueOnTally = (int) $tally->due_amount;
+                    if ($dueOnTally > 0) {
+                        $apply = min($remaining, $dueOnTally);
+                        $pay   = $createPaymentOnInvoice($tally, $apply);
+                        $allocations[] = [
+                            'payment_id'     => $pay->id,
+                            'payment_number' => $pay->payment_number,
+                            'invoice_id'     => $tally->id,
+                            'invoice_number' => $tally->invoice_number,
+                            'amount'         => round($apply / 100, 2),
+                            'tally'          => true,
+                        ];
+                        $remaining -= $apply;
+                        $tally = $tally->fresh();
+                    }
+                } else {
+                    $tally = TallyInvoice::createForPrepayment(
+                        $customer,
+                        $companyId,
+                        $remaining,
+                        $paymentDate,
+                        $validated['notes'] ?? ''
+                    );
+                    $tallyCreated   = true;
+                    $invoiceCreated = true;
+
+                    $pay = $createPaymentOnInvoice($tally, $remaining);
+                    $allocations[] = [
+                        'payment_id'     => $pay->id,
+                        'payment_number' => $pay->payment_number,
+                        'invoice_id'     => $tally->id,
+                        'invoice_number' => $tally->invoice_number,
+                        'amount'         => round($remaining / 100, 2),
+                        'tally'          => true,
+                    ];
+                    $remaining = 0;
+                }
+
+                if ($remaining > 0 && $tally) {
+                    TallyInvoice::addPrepaymentLine($tally, $remaining);
+                    $tally = $tally->fresh();
+                    $pay   = $createPaymentOnInvoice($tally, $remaining);
+                    $allocations[] = [
+                        'payment_id'     => $pay->id,
+                        'payment_number' => $pay->payment_number,
+                        'invoice_id'     => $tally->id,
+                        'invoice_number' => $tally->invoice_number,
+                        'amount'         => round($remaining / 100, 2),
+                        'tally'          => true,
+                    ];
+                    $remaining = 0;
+                }
+            }
+        }
+
+        return ['allocations' => $allocations];
     });
+
+    if (!empty($recordResult['error'])) {
+        return response()->json(['error' => $recordResult['error']], $recordResult['status']);
+    }
+
+    $allocations = $recordResult['allocations'];
+    if ($allocations === []) {
+        return response()->json(['error' => 'No payment could be recorded'], 422);
+    }
+
+    $primary = $allocations[0];
+    $primaryInvoice = Invoice::find($primary['invoice_id']);
 
     return response()->json([
         'success'           => true,
-        'payment_id'        => $payment->id,
-        'payment_number'    => $payment->payment_number,
+        'payment_id'        => $primary['payment_id'],
+        'payment_number'    => $primary['payment_number'],
         'amount'            => $validated['amount'],
         'payment_mode'      => $paymentMode,
-        'invoice_id'        => $invoice->id,
-        'invoice_number'    => $invoice->invoice_number,
+        'invoice_id'        => $primary['invoice_id'],
+        'invoice_number'    => $primary['invoice_number'],
         'invoice_created'   => $invoiceCreated,
+        'tally_created'     => $tallyCreated,
+        'allocations'       => $allocations,
         'customer_created'  => $customerCreated,
         'customer'          => ['id' => $customer->id, 'name' => $customer->name],
-        'admin_payment_url' => url("/admin/payments/{$payment->id}/view"),
-        'admin_invoice_url' => url("/admin/invoices/{$invoice->id}/view"),
+        'admin_payment_url' => url("/admin/payments/{$primary['payment_id']}/view"),
+        'admin_invoice_url' => url("/admin/invoices/{$primary['invoice_id']}/view"),
+        'reference_number'  => $primaryInvoice?->reference_number,
     ]);
 });
 
