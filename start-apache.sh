@@ -239,11 +239,49 @@ php artisan config:clear 2>/dev/null || true
 php artisan view:clear 2>/dev/null || true
 php artisan cache:clear 2>/dev/null || true
 
-# Auto-migrate if database is empty (AUTO_SETUP alias for start.sh parity)
+# Auto-migrate if database is empty
 if [ "$AUTO_MIGRATE" = "true" ] || [ "$AUTO_MIGRATE" = "1" ] || [ "$AUTO_SETUP" = "true" ] || [ "$AUTO_SETUP" = "1" ]; then
     echo "AUTO_MIGRATE enabled - running migrations and seeds..."
     php artisan migrate --seed --force 2>&1 || echo "Migration/seed failed"
     echo "Migrations complete."
+fi
+
+# Finish install (admin user, company, profile_complete) — matches start.sh AUTO_SETUP.
+if [ "$AUTO_SETUP" = "true" ] || [ "$AUTO_SETUP" = "1" ]; then
+    echo "AUTO_SETUP enabled - ensuring admin, company, and profile_complete..."
+    php artisan tinker --execute="
+            try {
+                \$user = \Crater\Models\User::where('role', 'super admin')->first();
+                if (!\$user) {
+                    \$user = \Crater\Models\User::create([
+                        'email' => env('ADMIN_EMAIL', 'admin@crater.app'),
+                        'name' => env('ADMIN_NAME', 'Admin'),
+                        'role' => 'super admin',
+                        'password' => env('ADMIN_PASSWORD', 'password123'),
+                    ]);
+                }
+                \$company = \Crater\Models\Company::first();
+                \$companyName = env('COMPANY_NAME', 'My Company');
+                if (!\$company) {
+                    \$company = \Crater\Models\Company::create([
+                        'name' => \$companyName,
+                        'owner_id' => \$user->id,
+                        'slug' => \Illuminate\Support\Str::slug(\$companyName),
+                    ]);
+                    \$company->unique_hash = \Vinkla\Hashids\Facades\Hashids::connection(\Crater\Models\Company::class)->encode(\$company->id);
+                    \$company->save();
+                    \$company->setupDefaultData();
+                    \$user->companies()->attach(\$company->id);
+                    \Silber\Bouncer\BouncerFacade::scope()->to(\$company->id);
+                    \$user->assign('super admin');
+                }
+                \Crater\Models\Setting::setSetting('profile_complete', 'COMPLETED');
+                \Illuminate\Support\Facades\Storage::disk('local')->put('database_created', 'database_created');
+                echo 'AUTO_SETUP complete\n';
+            } catch (\Exception \$e) {
+                echo 'AUTO_SETUP ERROR: ' . \$e->getMessage() . '\n';
+            }
+        " || echo "AUTO_SETUP tinker exited non-zero"
 fi
 
 # Recalculate stale next_invoice_at after cron logic fixes (metadata only — does not create invoices).
