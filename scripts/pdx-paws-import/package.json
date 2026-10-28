@@ -1,0 +1,12 @@
+{
+  "name": "pdx-paws-crater-import",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node import.js",
+    "import": "node import.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7"
+  }
+}

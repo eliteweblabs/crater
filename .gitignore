@@ -8,6 +8,9 @@
 Homestead.json
 Homestead.yaml
 .env
+scripts/pdx-paws-import/.env
+scripts/pdx-paws-import/import_log.json
+scripts/pdx-paws-import/PDXPaws_Payments.json
 .phpunit.result.cache
 .rnd
 /.expo
