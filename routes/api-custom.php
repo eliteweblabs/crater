@@ -2165,13 +2165,16 @@ Route::delete('/custom/payment/{id}', function (Illuminate\Http\Request $request
 
 // POST /api/custom/create-payment-mode — seed payment method labels (Reave admin agent).
 Route::post('/custom/create-payment-mode', function (Illuminate\Http\Request $request) {
-    $name = $request->input('name');
-    if (!$name) {
+    $name = trim((string) $request->input('name'));
+    if ($name === '') {
         return response()->json(['error' => 'name is required'], 422);
     }
 
+    $companyId = 1;
+
     $exists = DB::table('payment_methods')
-        ->where('name', $name)
+        ->where('company_id', $companyId)
+        ->whereRaw('LOWER(name) = ?', [strtolower($name)])
         ->exists();
 
     if ($exists) {
@@ -2180,6 +2183,7 @@ Route::post('/custom/create-payment-mode', function (Illuminate\Http\Request $re
 
     $id = DB::table('payment_methods')->insertGetId([
         'name'       => $name,
+        'company_id' => $companyId,
         'created_at' => now(),
         'updated_at' => now(),
     ]);
