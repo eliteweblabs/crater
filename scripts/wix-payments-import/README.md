@@ -4,7 +4,9 @@ Bulk-import Wix payment export JSON as Crater **invoices + payments** via the **
 
 ## Input JSON
 
-Array of objects:
+Either a **top-level array** or an object with a **`payments`** array (plus optional `summary` / `excluded` metadata).
+
+Each payment object:
 
 ```json
 {

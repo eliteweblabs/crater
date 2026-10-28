@@ -217,9 +217,19 @@ async function main() {
     process.exit(1);
   }
 
-  const payments = JSON.parse(fs.readFileSync(PAYMENTS_PATH, 'utf8'));
-  if (!Array.isArray(payments)) {
-    console.error('Payments JSON must be a top-level array.');
+  const parsed = JSON.parse(fs.readFileSync(PAYMENTS_PATH, 'utf8'));
+  let payments;
+  if (Array.isArray(parsed)) {
+    payments = parsed;
+  } else if (parsed && Array.isArray(parsed.payments)) {
+    payments = parsed.payments;
+    if (parsed.summary?.payments != null) {
+      console.log(
+        `File metadata: ${parsed.summary.payments} payments, total ${parsed.summary.total ?? '?'}`,
+      );
+    }
+  } else {
+    console.error('Payments JSON must be a top-level array or { "payments": [ … ] }.');
     process.exit(1);
   }
 
