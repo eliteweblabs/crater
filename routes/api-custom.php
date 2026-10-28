@@ -2162,3 +2162,27 @@ Route::delete('/custom/payment/{id}', function (Illuminate\Http\Request $request
         'invoice_id'     => $invoiceId,
     ]);
 });
+
+// POST /api/custom/create-payment-mode — seed payment method labels (Reave admin agent).
+Route::post('/custom/create-payment-mode', function (Illuminate\Http\Request $request) {
+    $name = $request->input('name');
+    if (!$name) {
+        return response()->json(['error' => 'name is required'], 422);
+    }
+
+    $exists = DB::table('payment_methods')
+        ->where('name', $name)
+        ->exists();
+
+    if ($exists) {
+        return response()->json(['status' => 'already_exists', 'name' => $name], 200);
+    }
+
+    $id = DB::table('payment_methods')->insertGetId([
+        'name'       => $name,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    return response()->json(['status' => 'created', 'id' => $id, 'name' => $name], 201);
+});
