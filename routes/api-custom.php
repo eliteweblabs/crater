@@ -16,6 +16,7 @@ use Crater\Models\PaymentMethod;
 use Crater\Models\RecurringInvoice;
 use Crater\Services\SerialNumberFormatter;
 use Vinkla\Hashids\Facades\Hashids;
+use Crater\Support\DbSequenceLock;
 use Crater\Support\ReaveBrandColors;
 use Crater\Support\InvoiceMailPayload;
 use Crater\Services\ReaveInvoiceMailDispatcher;
@@ -103,9 +104,10 @@ Route::post('/custom/create-invoice', function (Illuminate\Http\Request $request
         $validated, $customer, $subTotal, $uniqueHash, $companyId,
         $currencyId, $exchangeRate, $taxPerItem, $discountPerItem
     ) {
-        $rows = DB::table('invoices')
-            ->where('company_id', $companyId)
-            ->lockForUpdate()
+        DbSequenceLock::advisoryLockCompany($companyId);
+
+        $rows = DbSequenceLock::forUpdate(DB::table('invoices')
+            ->where('company_id', $companyId))
             ->get(['sequence_number', 'invoice_number']);
 
         $maxSeq = 0;
@@ -125,7 +127,6 @@ Route::post('/custom/create-invoice', function (Illuminate\Http\Request $request
         $maxCustSeq = (int) (DB::table('invoices')
             ->where('company_id', $companyId)
             ->where('customer_id', $customer->id)
-            ->lockForUpdate()
             ->max('customer_sequence_number') ?? 0);
         $nextCustSeq = $maxCustSeq + 1;
 
@@ -1257,9 +1258,10 @@ Route::post('/custom/record-payment', function (Illuminate\Http\Request $request
                 $creatorId         = (int) (DB::table('users')->orderBy('id')->value('id') ?? 1);
 
                 // Sequence numbers — same locking pattern as create-invoice
-                $rows = DB::table('invoices')
-                    ->where('company_id', $companyId)
-                    ->lockForUpdate()
+                DbSequenceLock::advisoryLockCompany($companyId);
+
+                $rows = DbSequenceLock::forUpdate(DB::table('invoices')
+                    ->where('company_id', $companyId))
                     ->get(['sequence_number', 'invoice_number']);
 
                 $maxSeq = 0;
@@ -1278,7 +1280,6 @@ Route::post('/custom/record-payment', function (Illuminate\Http\Request $request
                 $maxCustSeq = (int) (DB::table('invoices')
                     ->where('company_id', $companyId)
                     ->where('customer_id', $customer->id)
-                    ->lockForUpdate()
                     ->max('customer_sequence_number') ?? 0);
                 $nextCustSeq = $maxCustSeq + 1;
 
@@ -1356,9 +1357,10 @@ Route::post('/custom/record-payment', function (Illuminate\Http\Request $request
         $paymentMethodId, $companyId, $validated
     ) {
         // Sequence numbers for payment — same locking pattern as invoices
-        $payRows = DB::table('payments')
-            ->where('company_id', $companyId)
-            ->lockForUpdate()
+        DbSequenceLock::advisoryLockCompany($companyId);
+
+        $payRows = DbSequenceLock::forUpdate(DB::table('payments')
+            ->where('company_id', $companyId))
             ->get(['sequence_number', 'payment_number']);
 
         $maxPaySeq = 0;
@@ -1377,7 +1379,6 @@ Route::post('/custom/record-payment', function (Illuminate\Http\Request $request
         $maxCustPaySeq = (int) (DB::table('payments')
             ->where('company_id', $companyId)
             ->where('customer_id', $customer->id)
-            ->lockForUpdate()
             ->max('customer_sequence_number') ?? 0);
         $nextCustPaySeq = $maxCustPaySeq + 1;
 
