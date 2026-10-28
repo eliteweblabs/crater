@@ -1,5 +1,5 @@
 {
-  "name": "pdx-paws-crater-import",
+  "name": "crater-wix-payments-import",
   "private": true,
   "type": "module",
   "scripts": {

@@ -8,9 +8,10 @@
 Homestead.json
 Homestead.yaml
 .env
-scripts/pdx-paws-import/.env
-scripts/pdx-paws-import/import_log.json
-scripts/pdx-paws-import/PDXPaws_Payments.json
+scripts/wix-payments-import/.env
+scripts/wix-payments-import/import_log.json
+scripts/wix-payments-import/payments.json
+scripts/wix-payments-import/node_modules
 .phpunit.result.cache
 .rnd
 /.expo

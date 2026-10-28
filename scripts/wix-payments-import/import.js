@@ -1,10 +1,9 @@
 /**
- * PDX Paws — bulk Wix payments → Crater invoices + payments (v1 API).
+ * Wix payments export → Crater invoices + payments (v1 API).
  *
- * Usage:
- *   cp .env.example .env   # set CRATER_API_TOKEN (Sanctum Bearer) + base URL
+ *   cp .env.example .env
  *   npm install
- *   node import.js [path/to/PDXPaws_Payments.json]
+ *   node import.js [path/to/payments.json]
  */
 import 'dotenv/config';
 import fs from 'node:fs';
@@ -13,17 +12,13 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const BASE_URL = (process.env.CRATER_API_BASE_URL || 'https://crater-production-8a0e.up.railway.app').replace(
-  /\/+$/,
-  '',
-);
+const BASE_URL = process.env.CRATER_API_BASE_URL?.trim()?.replace(/\/+$/, '');
 const TOKEN = process.env.CRATER_API_TOKEN?.trim();
 const COMPANY_ID = String(process.env.CRATER_COMPANY_ID || '1').trim();
 const DELAY_MS = 150;
 const PROGRESS_EVERY = 50;
 const LOG_PATH = path.join(__dirname, 'import_log.json');
-const PAYMENTS_PATH =
-  process.argv[2] || path.join(__dirname, 'PDXPaws_Payments.json');
+const PAYMENTS_PATH = process.argv[2] || path.join(__dirname, 'payments.json');
 
 /** Wix method label → Crater payment method name */
 const METHOD_MAP = {
@@ -209,6 +204,10 @@ function buildPaymentBody(record, customerId, invoiceId, amountCents, paymentMet
 }
 
 async function main() {
+  if (!BASE_URL) {
+    console.error('Missing CRATER_API_BASE_URL in .env');
+    process.exit(1);
+  }
   if (!TOKEN) {
     console.error('Missing CRATER_API_TOKEN in .env (Sanctum Bearer token for /api/v1).');
     process.exit(1);
@@ -220,7 +219,7 @@ async function main() {
 
   const payments = JSON.parse(fs.readFileSync(PAYMENTS_PATH, 'utf8'));
   if (!Array.isArray(payments)) {
-    console.error('PDXPaws_Payments.json must be a JSON array.');
+    console.error('Payments JSON must be a top-level array.');
     process.exit(1);
   }
 
