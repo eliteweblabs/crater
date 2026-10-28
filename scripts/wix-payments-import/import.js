@@ -185,6 +185,11 @@ function buildInvoiceBody(record, customerId, amountCents) {
         description: `Wix invoice ${invoiceNumberLabel(record)}`,
         price: amountCents,
         quantity: 1,
+        total: amountCents,
+        discount_type: 'fixed',
+        discount_val: 0,
+        discount: 0,
+        tax: 0,
       },
     ],
   };
@@ -335,7 +340,9 @@ async function main() {
     );
 
     if ((i + 1) % PROGRESS_EVERY === 0) {
-      console.log(`Progress: ${i + 1}/${total} (${formatUsd(processedAmount)} processed)`);
+      console.log(
+        `Progress: ${i + 1}/${total} — ${success} ok, ${errors} errors (${formatUsd(processedAmount)} imported)`,
+      );
     }
 
     await sleep(DELAY_MS);
