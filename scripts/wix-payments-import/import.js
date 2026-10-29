@@ -296,8 +296,10 @@ async function main() {
     try {
       const email = customerLookupEmail(record);
       const customerId = customerByEmail.get(email);
-      if (!customerId) {
-        throw new Error(`No Crater customer for email ${record.customerEmail || '(empty)'}`);
+      if (customerId == null || customerId === '') {
+        throw new Error(
+          `Customer not found for email ${record.customerEmail || '(empty)'} (lookup: ${email})`,
+        );
       }
 
       const amountCents = dollarsToCents(record.amount);
@@ -305,10 +307,14 @@ async function main() {
         throw new Error(`Invalid amount: ${record.amount}`);
       }
 
-      const methodName = mapPaymentMethod(record.method);
+      const rawMethod = String(record.method ?? '').trim();
+      if (!rawMethod) {
+        throw new Error('Payment method is missing on Wix row');
+      }
+      const methodName = mapPaymentMethod(rawMethod);
       const paymentMethodId = methodByName.get(methodName);
-      if (record.method && paymentMethodId == null) {
-        throw new Error(`Unknown payment method "${record.method}" → "${methodName}"`);
+      if (paymentMethodId == null) {
+        throw new Error(`Payment method not found: "${rawMethod}" → "${methodName}"`);
       }
 
       const invoiceRes = await api('POST', '/invoices', buildInvoiceBody(record, customerId, amountCents));
@@ -332,6 +338,9 @@ async function main() {
       entry.status = 'ok';
       entry.invoiceId = invoiceId;
       entry.paymentId = paymentId;
+      entry.customerId = customerId;
+      entry.customerEmail = email;
+      entry.paymentMethod = methodName;
       entry.error = null;
       success += 1;
       processedAmount += Number(record.amount) || 0;
