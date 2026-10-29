@@ -20,6 +20,11 @@ const PROGRESS_EVERY = 50;
 const LOG_PATH = path.join(__dirname, 'import_log.json');
 const PAYMENTS_PATH = process.argv[2] || path.join(__dirname, 'payments.json');
 
+/** Fix typos in Wix export emails before Crater customer lookup (keys = normalized email). */
+const EMAIL_CORRECTIONS = {
+  'annlouise.blac@gmail.com': 'annlouise.blanc@gmail.com',
+};
+
 /** Wix method label → Crater payment method name */
 const METHOD_MAP = {
   'credit card': 'Credit Card',
@@ -42,6 +47,11 @@ function normalizeEmail(email) {
   return String(email || '')
     .trim()
     .toLowerCase();
+}
+
+function customerLookupEmail(record) {
+  const raw = normalizeEmail(record.customerEmail);
+  return normalizeEmail(EMAIL_CORRECTIONS[raw] ?? raw);
 }
 
 function mapPaymentMethod(raw) {
@@ -284,7 +294,7 @@ async function main() {
     };
 
     try {
-      const email = normalizeEmail(record.customerEmail);
+      const email = customerLookupEmail(record);
       const customerId = customerByEmail.get(email);
       if (!customerId) {
         throw new Error(`No Crater customer for email ${record.customerEmail || '(empty)'}`);
