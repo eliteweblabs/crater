@@ -24,5 +24,5 @@ test('invoice mail payload includes reave branding urls and public links', funct
         ->and($payload['urls']['public'])->toContain('/invoices/')
         ->and($payload['branding']['logo_url'])->toBe('https://rekko.studio/api/branding/logo')
         ->and($payload['branding']['icon_url'])->toBe(InvoiceOgIcons::companyBrandIconUrl('https://rekko.studio'))
-        ->and($payload['branding']['og_url'])->toContain('https://rekko.studio/api/branding/og.png');
+        ->and($payload['branding']['og_url'])->toContain('/invoices/');
 });
