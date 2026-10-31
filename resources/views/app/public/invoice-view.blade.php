@@ -188,38 +188,15 @@
         .pay-cta:disabled { opacity: 0.6; cursor: not-allowed; }
         .pay-cta.pay-cta--stuck {
             position: fixed;
-            left: 50%;
-            bottom: calc(8px + env(safe-area-inset-bottom, 0px));
-            transform: translateX(-50%);
-            z-index: 101;
-            width: auto;
-            max-width: calc(100vw - 40px);
-            margin: 0;
-            padding: 14px 36px;
-            border-radius: 999px;
-            white-space: nowrap;
-            box-shadow: var(--brand-shadow), 0 8px 32px rgba(0, 0, 0, 0.12);
-        }
-        .pay-cta.pay-cta--stuck::before {
-            content: '';
-            position: fixed;
             left: 0;
             right: 0;
-            bottom: 0;
-            height: calc(64px + env(safe-area-inset-bottom, 0px));
+            width: fit-content;
+            max-width: calc(100% - 32px);
+            margin-left: auto;
+            margin-right: auto;
+            bottom: max(12px, env(safe-area-inset-bottom, 0px));
             z-index: 100;
-            pointer-events: none;
-            background: linear-gradient(
-                to top,
-                rgba(255, 255, 255, 0.98) 0%,
-                rgba(255, 255, 255, 0.92) 45%,
-                rgba(255, 255, 255, 0) 100%
-            );
-        }
-        @media (min-width: 840px) {
-            .pay-cta.pay-cta--stuck {
-                bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-            }
+            white-space: nowrap;
         }
         #payment-element { margin-top: 16px; width: 100%; }
         #payment-element:empty { display: none; margin: 0; }
