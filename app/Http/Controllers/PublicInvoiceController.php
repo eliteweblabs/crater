@@ -15,6 +15,9 @@ class PublicInvoiceController extends Controller
 
     public const OG_HEIGHT = 630;
 
+    /** Bump when OG layout/colors change so link previews refresh. */
+    public const OG_CARD_REVISION = 'light-v2';
+
     public function show($uniqueHash)
     {
         $invoice = Invoice::with(['customer', 'company.owner', 'company.address', 'items'])
@@ -38,7 +41,7 @@ class PublicInvoiceController extends Controller
 
         $ogVersion = $invoice->customer?->contact_uid
             ?: ($invoice->updated_at?->timestamp ?? $invoice->id);
-        $ogImageUrl = url('/invoices/'.$invoice->unique_hash.'/og.png').'?v='.rawurlencode((string) $ogVersion);
+        $ogImageUrl = url('/invoices/'.$invoice->unique_hash.'/og.png').'?v='.rawurlencode((string) $ogVersion.'-'.self::OG_CARD_REVISION);
 
         // Get all non-draft invoices for the same customer
         $customerInvoices = Invoice::where('customer_id', $invoice->customer_id)
@@ -91,14 +94,20 @@ class PublicInvoiceController extends Controller
         imagealphablending($im, true);
         imagesavealpha($im, true);
 
-        $bg = imagecolorallocate($im, 10, 10, 10);
+        $bg = imagecolorallocate($im, 248, 248, 250);
         imagefilledrectangle($im, 0, 0, $w, $h, $bg);
 
         $company = $invoice->company->name ?? 'Invoice';
         $customer = $invoice->customer->name ?? '';
 
-        $iconSize = 280;
-        $iconGap = 56;
+        $iconGap = 40;
+        $marginY = 48;
+        $marginX = 72;
+        $maxTile = min(
+            (int) floor(($w - (2 * $marginX) - $iconGap) / 2),
+            $h - (2 * $marginY)
+        );
+        $iconSize = max(320, $maxTile);
         $pairWidth = ($iconSize * 2) + $iconGap;
         $iconX = (int) (($w - $pairWidth) / 2);
         $iconY = (int) (($h - $iconSize) / 2);
@@ -135,13 +144,24 @@ class PublicInvoiceController extends Controller
 
     private function paintIconTile($im, ?string $bytes, string $label, int $x, int $y, int $size): void
     {
-        $radius = (int) ($size * 0.22);
-        $tile = imagecolorallocatealpha($im, 36, 20, 52, 36);
-        $this->fillRoundRect($im, $x, $y, $size, $size, $radius, $tile);
+        $radius = (int) ($size * 0.14);
+        $border = imagecolorallocate($im, 220, 222, 228);
+        $tile = imagecolorallocate($im, 255, 255, 255);
+        $this->fillRoundRect($im, $x, $y, $size, $size, $radius, $border);
+        $inset = 2;
+        $this->fillRoundRect(
+            $im,
+            $x + $inset,
+            $y + $inset,
+            $size - ($inset * 2),
+            $size - ($inset * 2),
+            max(1, $radius - $inset),
+            $tile
+        );
 
         $src = $bytes ? @imagecreatefromstring($bytes) : false;
         if ($src) {
-            $pad = 16;
+            $pad = max(20, (int) round($size * 0.09));
             $this->pasteContain($im, $src, $x + $pad, $y + $pad, $size - ($pad * 2), $size - ($pad * 2));
             imagedestroy($src);
 
@@ -153,15 +173,15 @@ class PublicInvoiceController extends Controller
             return;
         }
 
-        $white = imagecolorallocate($im, 255, 255, 255);
+        $ink = imagecolorallocate($im, 38, 38, 42);
         $font = $this->fontPath(true) ?? $this->fontPath(false);
         if (!$font) {
-            imagestring($im, 5, $x + (int) ($size / 2) - 6, $y + (int) ($size / 2) - 8, $letter, $white);
+            imagestring($im, 5, $x + (int) ($size / 2) - 6, $y + (int) ($size / 2) - 8, $letter, $ink);
 
             return;
         }
 
-        $fontSize = 72;
+        $fontSize = max(72, (int) round($size * 0.3));
         $box = \imagettfbbox($fontSize, 0, $font, $letter);
         $tw = abs($box[2] - $box[0]);
         $th = abs($box[7] - $box[1]);
@@ -171,7 +191,7 @@ class PublicInvoiceController extends Controller
             0,
             $x + (int) (($size - $tw) / 2),
             $y + (int) (($size + $th) / 2),
-            $white,
+            $ink,
             $font,
             $letter
         );
@@ -352,10 +372,10 @@ class PublicInvoiceController extends Controller
     private function fallbackOgPng(Invoice $invoice): string
     {
         $im = imagecreatetruecolor(self::OG_WIDTH, self::OG_HEIGHT);
-        imagefilledrectangle($im, 0, 0, self::OG_WIDTH, self::OG_HEIGHT, imagecolorallocate($im, 12, 6, 20));
-        $white = imagecolorallocate($im, 255, 255, 255);
-        imagestring($im, 5, 72, 200, (string) ($invoice->invoice_number ?: 'Invoice'), $white);
-        imagestring($im, 5, 72, 240, '$'.number_format(((int) $invoice->total) / 100, 2), $white);
+        imagefilledrectangle($im, 0, 0, self::OG_WIDTH, self::OG_HEIGHT, imagecolorallocate($im, 248, 248, 250));
+        $ink = imagecolorallocate($im, 38, 38, 42);
+        imagestring($im, 5, 72, 280, (string) ($invoice->invoice_number ?: 'Invoice'), $ink);
+        imagestring($im, 5, 72, 320, '$'.number_format(((int) $invoice->total) / 100, 2), $ink);
         ob_start();
         imagepng($im);
         $png = (string) ob_get_clean();
