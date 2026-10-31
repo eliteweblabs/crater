@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
     @php
         $pageTitle = $invoice->sharePreviewTitle();
@@ -188,23 +188,37 @@
         .pay-cta:disabled { opacity: 0.6; cursor: not-allowed; }
         .pay-cta.pay-cta--stuck {
             position: fixed;
-            bottom: 0;
             left: 50%;
+            bottom: calc(8px + env(safe-area-inset-bottom, 0px));
             transform: translateX(-50%);
-            z-index: 100;
-            width: calc(100% - 32px);
-            max-width: 720px;
+            z-index: 101;
+            width: auto;
+            max-width: calc(100vw - 40px);
             margin: 0;
-            padding-top: 14px;
-            padding-bottom: max(14px, env(safe-area-inset-bottom));
-            border-radius: 999px 999px 0 0;
-            box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.14);
+            padding: 14px 36px;
+            border-radius: 999px;
+            white-space: nowrap;
+            box-shadow: var(--brand-shadow), 0 8px 32px rgba(0, 0, 0, 0.12);
+        }
+        .pay-cta.pay-cta--stuck::before {
+            content: '';
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: calc(64px + env(safe-area-inset-bottom, 0px));
+            z-index: 100;
+            pointer-events: none;
+            background: linear-gradient(
+                to top,
+                rgba(255, 255, 255, 0.98) 0%,
+                rgba(255, 255, 255, 0.92) 45%,
+                rgba(255, 255, 255, 0) 100%
+            );
         }
         @media (min-width: 840px) {
             .pay-cta.pay-cta--stuck {
-                border-radius: 999px;
-                bottom: 16px;
-                padding-bottom: 14px;
+                bottom: calc(20px + env(safe-area-inset-bottom, 0px));
             }
         }
         #payment-element { margin-top: 16px; width: 100%; }
