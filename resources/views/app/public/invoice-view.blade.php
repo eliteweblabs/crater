@@ -182,9 +182,31 @@
         .totals { margin-left: auto; width: 300px; margin-top: 20px; }
         .totals .row { display: flex; justify-content: space-between; padding: 8px 0; }
         .totals .row.total { font-size: 20px; font-weight: 600; }
-        .pay-cta { display: none; margin: 16px 0 0; width: 100%; padding: 14px 28px; border: none; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #ffffff; cursor: pointer; background: var(--brand-gradient); box-shadow: var(--brand-shadow); }
+        .pay-cta-anchor { width: 100%; margin-top: 16px; }
+        .pay-cta { display: none; margin: 0; width: 100%; padding: 14px 28px; border: none; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #ffffff; cursor: pointer; background: var(--brand-gradient); box-shadow: var(--brand-shadow); }
         .pay-cta.is-visible { display: block; }
         .pay-cta:disabled { opacity: 0.6; cursor: not-allowed; }
+        .pay-cta.pay-cta--stuck {
+            position: fixed;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            width: calc(100% - 32px);
+            max-width: 720px;
+            margin: 0;
+            padding-top: 14px;
+            padding-bottom: max(14px, env(safe-area-inset-bottom));
+            border-radius: 999px 999px 0 0;
+            box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.14);
+        }
+        @media (min-width: 840px) {
+            .pay-cta.pay-cta--stuck {
+                border-radius: 999px;
+                bottom: 16px;
+                padding-bottom: 14px;
+            }
+        }
         #payment-element { margin-top: 16px; width: 100%; }
         #payment-element:empty { display: none; margin: 0; }
         #express-checkout-element { margin-top: 24px; width: 100%; }
@@ -557,7 +579,9 @@
         <div id="express-checkout-element"></div>
         <div id="payment-element"></div>
         <p id="pay-error" class="pay-error" hidden></p>
-        <button type="button" id="pay-cta" class="pay-cta"></button>
+        <div class="pay-cta-anchor" id="pay-cta-anchor">
+            <button type="button" id="pay-cta" class="pay-cta"></button>
+        </div>
 
         @if(env('VENMO_HANDLE'))
         <div style="margin-top: 16px; text-align: center;">
@@ -643,6 +667,7 @@
                 let paymentReady = { type: null, complete: false };
                 let ignoreConfirmUntil = 0;
                 const payBtn = document.getElementById('pay-cta');
+                const payAnchor = document.getElementById('pay-cta-anchor');
                 const mountEl = document.getElementById('payment-element');
                 const expressMountEl = document.getElementById('express-checkout-element');
                 const errorEl = document.getElementById('pay-error');
@@ -664,7 +689,49 @@
                         payBtn.classList.add('is-visible');
                         payBtn.disabled = false;
                         payBtn.textContent = 'Pay ' + money(liveCents());
+                        syncPayCtaSticky();
                     }
+                };
+
+                const unstickPayCta = () => {
+                    if (!payBtn || !payAnchor) return;
+                    payBtn.classList.remove('pay-cta--stuck');
+                    payAnchor.style.minHeight = '';
+                };
+
+                const syncPayCtaSticky = () => {
+                    if (!payBtn || !payAnchor || !payBtn.classList.contains('is-visible')) {
+                        unstickPayCta();
+                        return;
+                    }
+                    const rect = payAnchor.getBoundingClientRect();
+                    const viewH = window.innerHeight || document.documentElement.clientHeight;
+                    const anchorVisible = rect.top < viewH && rect.bottom > 0;
+                    const anchorBelow = rect.top >= viewH;
+                    if (anchorVisible || !anchorBelow) {
+                        unstickPayCta();
+                        return;
+                    }
+                    if (!payBtn.classList.contains('pay-cta--stuck')) {
+                        payAnchor.style.minHeight = payBtn.offsetHeight + 'px';
+                        payBtn.classList.add('pay-cta--stuck');
+                    } else {
+                        payAnchor.style.minHeight = payBtn.offsetHeight + 'px';
+                    }
+                };
+
+                const initPayCtaSticky = () => {
+                    if (!payAnchor || !payBtn) return;
+                    if (typeof IntersectionObserver !== 'undefined') {
+                        const observer = new IntersectionObserver(
+                            () => syncPayCtaSticky(),
+                            { root: null, threshold: [0, 0.01, 1] }
+                        );
+                        observer.observe(payAnchor);
+                    }
+                    window.addEventListener('scroll', syncPayCtaSticky, { passive: true });
+                    window.addEventListener('resize', syncPayCtaSticky, { passive: true });
+                    syncPayCtaSticky();
                 };
 
                 const destroyCheckout = () => {
@@ -831,6 +898,7 @@
                     payBtn.addEventListener('click', confirmPay);
                 }
 
+                initPayCtaSticky();
                 mountCheckout();
             })();
         </script>
