@@ -17,9 +17,15 @@ use Crater\Http\Controllers\V1\PDF\DownloadReceiptController;
 use Crater\Http\Controllers\V1\PDF\EstimatePdfController;
 use Crater\Http\Controllers\V1\PDF\InvoicePdfController;
 use Crater\Http\Controllers\V1\PDF\PaymentPdfController;
+use Crater\Http\Controllers\ApplePayDomainAssociationController;
 use Crater\Http\Controllers\CompanyLogoController;
 use Crater\Models\Company;
 use Illuminate\Support\Facades\Route;
+
+Route::get(
+    '/.well-known/apple-developer-merchantid-domain-association',
+    ApplePayDomainAssociationController::class
+);
 
 // Module Asset Includes
 // ----------------------------------------------

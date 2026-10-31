@@ -48,6 +48,19 @@ STRIPE_WEBHOOK_SECRET=whsec_...your_webhook_secret  # Optional, for webhook veri
 - ✅ Cash App
 - ✅ ACH Bank Transfers (US)
 
+## Apple Pay on your invoice domain
+
+Embedded checkout shows Apple Pay in the **Express Checkout** row above the card form (not inside the Card accordion). If that row is empty on iPhone Safari, Stripe usually has not verified your domain yet.
+
+1. In [Stripe Dashboard](https://dashboard.stripe.com/) go to **Settings → Payment methods → Apple Pay** (or **Payment method domains**) and add your public invoice host (e.g. `ap.rekko.studio`).
+2. Download the **Apple Pay domain association** file Stripe provides.
+3. Host it at `https://your-domain/.well-known/apple-developer-merchantid-domain-association` using **one** of:
+   - `public/.well-known/apple-developer-merchantid-domain-association` in this repo, or
+   - `storage/app/stripe/apple-developer-merchantid-domain-association` on the server, or
+   - Railway/env: paste the file body into `STRIPE_APPLE_PAY_DOMAIN_ASSOCIATION` (no quotes; keep newlines).
+4. Confirm it returns **200** (not 404), then click **Verify** in Stripe.
+5. Open the invoice in **Safari** on a device with Apple Wallet set up.
+
 ## Troubleshooting
 
 ### "Can't get modules with API access"

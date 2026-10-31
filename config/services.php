@@ -38,6 +38,7 @@ return [
         'model' => \Crater\Models\User::class,
         'key' => env('STRIPE_KEY'),
         'secret' => env('STRIPE_SECRET'),
+        'apple_pay_domain_association' => env('STRIPE_APPLE_PAY_DOMAIN_ASSOCIATION'),
         'webhook' => [
             'secret' => env('STRIPE_WEBHOOK_SECRET'),
             'tolerance' => env('STRIPE_WEBHOOK_TOLERANCE', 300),
