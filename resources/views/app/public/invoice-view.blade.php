@@ -204,9 +204,23 @@
         .pay-cta.pay-cta--stuck {
             position: fixed;
             left: 50%;
-            bottom: max(12px, env(safe-area-inset-bottom, 0px));
             transform: translateX(-50%);
             z-index: 100;
+        }
+        .pay-cta-slot {
+            display: none;
+            width: 0;
+            overflow: hidden;
+            vertical-align: top;
+        }
+        #pay-safe-probe {
+            position: fixed;
+            left: 0;
+            bottom: 0;
+            width: 0;
+            height: env(safe-area-inset-bottom, 0px);
+            pointer-events: none;
+            visibility: hidden;
         }
         #payment-element { margin-top: 16px; width: 100%; }
         #payment-element:empty { display: none; margin: 0; }
@@ -580,7 +594,9 @@
         <div id="express-checkout-element"></div>
         <div id="payment-element"></div>
         <p id="pay-error" class="pay-error" hidden></p>
+        <div id="pay-safe-probe" aria-hidden="true"></div>
         <div class="pay-cta-anchor" id="pay-cta-anchor">
+            <span class="pay-cta-slot" id="pay-cta-slot" aria-hidden="true"></span>
             <button type="button" id="pay-cta" class="pay-cta">Pay</button>
         </div>
 
@@ -669,6 +685,9 @@
                 let ignoreConfirmUntil = 0;
                 const payBtn = document.getElementById('pay-cta');
                 const payAnchor = document.getElementById('pay-cta-anchor');
+                const paySlot = document.getElementById('pay-cta-slot');
+                const paySafeProbe = document.getElementById('pay-safe-probe');
+                const PAY_DOCK_GAP = 12;
                 const mountEl = document.getElementById('payment-element');
                 const expressMountEl = document.getElementById('express-checkout-element');
                 const errorEl = document.getElementById('pay-error');
@@ -694,9 +713,34 @@
                     }
                 };
 
+                const safeAreaBottom = () => (
+                    paySafeProbe ? paySafeProbe.getBoundingClientRect().height : 0
+                );
+
+                const viewMetrics = () => {
+                    const vv = window.visualViewport;
+                    if (!vv) {
+                        return {
+                            height: window.innerHeight || document.documentElement.clientHeight,
+                            offsetTop: 0,
+                        };
+                    }
+                    return { height: vv.height, offsetTop: vv.offsetTop };
+                };
+
+                const dockTopFor = (btnHeight) => {
+                    const { height, offsetTop } = viewMetrics();
+                    return offsetTop + height - safeAreaBottom() - PAY_DOCK_GAP - btnHeight;
+                };
+
                 const unstickPayCta = () => {
                     if (!payBtn || !payAnchor) return;
                     payBtn.classList.remove('pay-cta--stuck');
+                    payBtn.style.top = '';
+                    if (paySlot) {
+                        paySlot.style.display = 'none';
+                        paySlot.style.height = '0';
+                    }
                 };
 
                 const syncPayCtaSticky = () => {
@@ -704,28 +748,33 @@
                         unstickPayCta();
                         return;
                     }
-                    const rect = payAnchor.getBoundingClientRect();
-                    const viewH = window.innerHeight || document.documentElement.clientHeight;
-                    const anchorVisible = rect.top < viewH && rect.bottom > 0;
-                    const anchorBelow = rect.top >= viewH;
-                    if (anchorVisible || !anchorBelow) {
-                        unstickPayCta();
+                    const btnHeight = payBtn.offsetHeight;
+                    if (!btnHeight) return;
+
+                    const naturalTop = payAnchor.getBoundingClientRect().top;
+                    const dockTop = dockTopFor(btnHeight);
+                    const shouldStick = naturalTop > dockTop + 0.5;
+
+                    if (shouldStick) {
+                        if (paySlot) {
+                            paySlot.style.display = 'inline-block';
+                            paySlot.style.height = btnHeight + 'px';
+                        }
+                        payBtn.classList.add('pay-cta--stuck');
+                        payBtn.style.top = dockTop + 'px';
                         return;
                     }
-                    payBtn.classList.add('pay-cta--stuck');
+                    unstickPayCta();
                 };
 
                 const initPayCtaSticky = () => {
                     if (!payAnchor || !payBtn) return;
-                    if (typeof IntersectionObserver !== 'undefined') {
-                        const observer = new IntersectionObserver(
-                            () => syncPayCtaSticky(),
-                            { root: null, threshold: [0, 0.01, 1] }
-                        );
-                        observer.observe(payAnchor);
-                    }
                     window.addEventListener('scroll', syncPayCtaSticky, { passive: true });
                     window.addEventListener('resize', syncPayCtaSticky, { passive: true });
+                    if (window.visualViewport) {
+                        window.visualViewport.addEventListener('resize', syncPayCtaSticky);
+                        window.visualViewport.addEventListener('scroll', syncPayCtaSticky);
+                    }
                     syncPayCtaSticky();
                 };
 
