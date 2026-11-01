@@ -177,6 +177,24 @@ Headers:
 
 Returns customers with billing profile and invoice summary. Optional `q` filter.
 
+### List invoices (full export)
+
+```
+GET {CRATER_URL}/api/custom/invoices?company_id=1
+Headers:
+  X-Crater-Api-Token: <token>
+```
+
+Returns **every** invoice for the company (no pagination). Each row includes
+`invoice_date`, `total` / `total_cents` (dollars in JSON), `status`, `paid_status`,
+and `public_url`. Reave agent tool `list_recent_invoices` maps to this route with
+**no row cap** — for month/quarter questions, pass `from_date` / `to_date`
+(YYYY-MM-DD) on the tool call and sum `total_billed` from the response (filter on
+`invoice_date`). Do not treat a 20-invoice sample as the full month.
+
+If you call `/api/v1/invoices` directly instead, use `from_date` + `to_date` and
+paginate (`per_page=100`, increment `page` until empty).
+
 ### Get / update / add items
 
 ```
