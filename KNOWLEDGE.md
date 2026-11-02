@@ -127,7 +127,10 @@ Body: payload from mail-payload (event, customer, invoice, urls, branding, …)
 Crater falls back to local mail if REΛVE is unreachable unless
 `INVOICE_MAIL_REAVE_ONLY=true`.
 
-### Estimate e-sign (REΛVE Digital Signature)
+### Estimate e-sign (REΛVE Estimate Digital Signature)
+
+Requires install add-on **`billing_esign`** (plus **`billing`** / Crater Financial) — not
+document-template **Digital Signature** (`digital_signature`).
 
 Requires the Crater customer to have **`contact_uid`** (contact-api sync).
 REΛVE loads the estimate and hosts signing at
