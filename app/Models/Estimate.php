@@ -36,7 +36,8 @@ class Estimate extends Model implements HasMedia
         'updated_at',
         'deleted_at',
         'estimate_date',
-        'expiry_date'
+        'expiry_date',
+        'signed_at',
     ];
 
     protected $appends = [

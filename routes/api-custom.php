@@ -18,6 +18,7 @@ use Crater\Services\SerialNumberFormatter;
 use Vinkla\Hashids\Facades\Hashids;
 use Crater\Support\DbSequenceLock;
 use Crater\Support\ReaveBrandColors;
+use Crater\Support\EstimateMailPayload;
 use Crater\Support\InvoiceMailPayload;
 use Crater\Services\ReaveInvoiceMailDispatcher;
 
@@ -438,6 +439,131 @@ Route::get('/custom/estimates', function (Illuminate\Http\Request $request) {
         'company_id' => $companyId,
         'count' => $estimates->count(),
         'estimates' => $estimates,
+    ]);
+});
+
+// Estimate signing payload (REΛVE e-sign) — by unique_hash + contact_uid guard.
+// GET /api/custom/estimate/by-hash/{hash}?contact_uid=
+Route::get('/custom/estimate/by-hash/{hash}', function (Illuminate\Http\Request $request, $hash) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $hash = trim((string) $hash);
+    $contactUid = trim((string) $request->query('contact_uid', ''));
+    if ($hash === '' || $contactUid === '') {
+        return response()->json(['error' => 'hash and contact_uid are required'], 422);
+    }
+
+    $estimate = Estimate::with(['items', 'customer'])
+        ->where('unique_hash', $hash)
+        ->first();
+
+    if (! $estimate) {
+        return response()->json(['error' => 'Estimate not found'], 404);
+    }
+
+    $linkedUid = trim((string) ($estimate->customer?->contact_uid ?? ''));
+    if ($linkedUid === '' || $linkedUid !== $contactUid) {
+        return response()->json(['error' => 'Estimate not found'], 404);
+    }
+
+    if ($estimate->status === Estimate::STATUS_REJECTED || $estimate->status === Estimate::STATUS_EXPIRED) {
+        return response()->json(['error' => 'This estimate can no longer be signed'], 410);
+    }
+
+    return response()->json([
+        'payload' => EstimateMailPayload::fromEstimate($estimate),
+    ]);
+});
+
+// Mail/sign payload for integrations — same shape as by-hash, keyed by id.
+// GET /api/custom/estimate/{id}/mail-payload
+Route::get('/custom/estimate/{id}/mail-payload', function (Illuminate\Http\Request $request, $id) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $estimate = Estimate::with(['items', 'customer'])->find($id);
+    if (! $estimate) {
+        return response()->json(['error' => 'Estimate not found'], 404);
+    }
+
+    $companyId = (int) $estimate->company_id;
+    $sendData = [
+        'to' => $request->query('to', $estimate->customer?->email),
+        'from' => $request->query('from', CompanySetting::getSetting('from_mail', $companyId) ?: config('mail.from.address')),
+        'subject' => $request->query('subject', 'Estimate '.$estimate->estimate_number),
+        'body' => $request->query('body', CompanySetting::getSetting('estimate_mail_body', $companyId) ?: ''),
+    ];
+
+    return response()->json([
+        'payload' => EstimateMailPayload::fromEstimate($estimate, $sendData),
+    ]);
+});
+
+// Record REΛVE e-signature and mark estimate accepted (server-to-server).
+// POST /api/custom/estimate/{id}/accept-signed
+Route::post('/custom/estimate/{id}/accept-signed', function (Illuminate\Http\Request $request, $id) {
+    if ($request->header('X-Crater-Api-Token') !== env('CRATER_API_TOKEN')) {
+        return response()->json(['error' => 'Unauthorized'], 401);
+    }
+
+    $estimate = Estimate::with('customer')->find($id);
+    if (! $estimate) {
+        return response()->json(['error' => 'Estimate not found'], 404);
+    }
+
+    $validated = $request->validate([
+        'contact_uid' => 'required|string|max:128',
+        'signer_name' => 'required|string|min:2|max:200',
+        'signed_at' => 'required|date',
+        'signature_doc_id' => 'required|string|max:64',
+        'signature_view_url' => 'required|string|max:512',
+    ]);
+
+    $linkedUid = trim((string) ($estimate->customer?->contact_uid ?? ''));
+    if ($linkedUid === '' || $linkedUid !== trim($validated['contact_uid'])) {
+        return response()->json(['error' => 'contact_uid does not match estimate customer'], 403);
+    }
+
+    if ($estimate->status === Estimate::STATUS_REJECTED || $estimate->status === Estimate::STATUS_EXPIRED) {
+        return response()->json(['error' => 'This estimate can no longer be signed'], 410);
+    }
+
+    if ($estimate->status === Estimate::STATUS_ACCEPTED && $estimate->signature_doc_id) {
+        return response()->json([
+            'ok' => true,
+            'already_signed' => true,
+            'estimate' => [
+                'id' => $estimate->id,
+                'status' => $estimate->status,
+                'signed_at' => optional($estimate->signed_at)->toIso8601String(),
+                'signer_name' => $estimate->signer_name,
+                'signature_doc_id' => $estimate->signature_doc_id,
+                'signature_view_url' => $estimate->signature_view_url,
+            ],
+        ]);
+    }
+
+    $estimate->update([
+        'status' => Estimate::STATUS_ACCEPTED,
+        'signed_at' => $validated['signed_at'],
+        'signer_name' => $validated['signer_name'],
+        'signature_doc_id' => $validated['signature_doc_id'],
+        'signature_view_url' => $validated['signature_view_url'],
+    ]);
+
+    return response()->json([
+        'ok' => true,
+        'estimate' => [
+            'id' => $estimate->id,
+            'status' => $estimate->status,
+            'signed_at' => optional($estimate->signed_at)->toIso8601String(),
+            'signer_name' => $estimate->signer_name,
+            'signature_doc_id' => $estimate->signature_doc_id,
+            'signature_view_url' => $estimate->signature_view_url,
+        ],
     ]);
 });
 

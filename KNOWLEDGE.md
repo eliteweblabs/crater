@@ -127,6 +127,40 @@ Body: payload from mail-payload (event, customer, invoice, urls, branding, …)
 Crater falls back to local mail if REΛVE is unreachable unless
 `INVOICE_MAIL_REAVE_ONLY=true`.
 
+### Estimate e-sign (REΛVE Digital Signature)
+
+Requires the Crater customer to have **`contact_uid`** (contact-api sync).
+REΛVE loads the estimate and hosts signing at
+`{REAVE_APP_URL}/estimate/{contact_uid}/{unique_hash}`.
+
+Payload for integrations (no email sent):
+
+```
+GET {CRATER_URL}/api/custom/estimate/by-hash/{unique_hash}?contact_uid={uid}
+GET {CRATER_URL}/api/custom/estimate/{id}/mail-payload
+Headers:
+  X-Crater-Api-Token: <token>
+```
+
+After the client signs on REΛVE, the hub POSTs:
+
+```
+POST {CRATER_URL}/api/custom/estimate/{id}/accept-signed
+Headers:
+  X-Crater-Api-Token: <token>
+  Content-Type: application/json
+
+{
+  "contact_uid": "<same as customer.contact_uid>",
+  "signer_name": "Jane Client",
+  "signed_at": "2026-11-02T14:00:00Z",
+  "signature_doc_id": "<portal document uuid>",
+  "signature_view_url": "https://rekko.studio/doc/{uid}/view/{docId}"
+}
+```
+
+Sets estimate **ACCEPTED** and stores `signed_at`, `signer_name`, `signature_*` on the row.
+
 ### Create Invoice
 
 ```
