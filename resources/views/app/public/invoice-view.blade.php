@@ -198,9 +198,44 @@
             cursor: pointer;
             background: var(--brand-gradient);
             box-shadow: var(--brand-shadow);
+            align-items: center;
+            justify-content: center;
+            gap: 0.35em;
+            white-space: nowrap;
         }
-        .pay-cta.is-visible { display: inline-block; }
+        .pay-cta.is-visible { display: inline-flex; }
         .pay-cta:disabled { opacity: 0.6; cursor: not-allowed; }
+        .pay-cta-amount {
+            font-variant-numeric: tabular-nums;
+        }
+        .pay-cta-amount[hidden],
+        .pay-cta-spinner[hidden] {
+            display: none !important;
+        }
+        .pay-cta-spinner {
+            display: inline-block;
+            width: 1em;
+            height: 1em;
+            flex: none;
+            border: 2px solid rgba(255, 255, 255, 0.35);
+            border-top-color: #ffffff;
+            border-radius: 50%;
+            animation: pay-cta-spin 0.65s linear infinite;
+        }
+        @keyframes pay-cta-spin {
+            to { transform: rotate(360deg); }
+        }
+        .pay-cta .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
         .pay-cta.pay-cta--stuck {
             position: fixed;
             left: 50%;
@@ -597,7 +632,12 @@
         <div id="pay-safe-probe" aria-hidden="true"></div>
         <div class="pay-cta-anchor" id="pay-cta-anchor">
             <span class="pay-cta-slot" id="pay-cta-slot" aria-hidden="true"></span>
-            <button type="button" id="pay-cta" class="pay-cta">Pay</button>
+            <button type="button" id="pay-cta" class="pay-cta" aria-busy="false">
+                <span class="pay-cta-label">Pay</span>
+                <span class="pay-cta-amount"></span>
+                <span class="pay-cta-spinner" hidden aria-hidden="true"></span>
+                <span class="pay-cta-status sr-only" aria-live="polite"></span>
+            </button>
         </div>
 
         @if(env('VENMO_HANDLE'))
@@ -674,6 +714,9 @@
                     }
                     const zelleAmount = document.getElementById('zelle-amount');
                     if (zelleAmount) zelleAmount.textContent = money(total);
+                    if (typeof setPayAmount === 'function') {
+                        setPayAmount(total);
+                    }
                     return total;
                 };
 
@@ -684,6 +727,10 @@
                 let paymentReady = { type: null, complete: false };
                 let ignoreConfirmUntil = 0;
                 const payBtn = document.getElementById('pay-cta');
+                const payAmountEl = payBtn ? payBtn.querySelector('.pay-cta-amount') : null;
+                const paySpinnerEl = payBtn ? payBtn.querySelector('.pay-cta-spinner') : null;
+                const payStatusEl = payBtn ? payBtn.querySelector('.pay-cta-status') : null;
+                let payBtnMinWidth = 0;
                 const payAnchor = document.getElementById('pay-cta-anchor');
                 const paySlot = document.getElementById('pay-cta-slot');
                 const paySafeProbe = document.getElementById('pay-safe-probe');
@@ -704,11 +751,51 @@
                     }
                 };
 
+                const lockPayBtnWidth = () => {
+                    if (!payBtn) return;
+                    const w = payBtn.offsetWidth;
+                    if (w > payBtnMinWidth) {
+                        payBtnMinWidth = w;
+                        payBtn.style.minWidth = payBtnMinWidth + 'px';
+                    }
+                };
+
+                const setPayAmount = (cents) => {
+                    if (!payAmountEl || !payBtn) return;
+                    if (payBtn.classList.contains('pay-cta--busy')) return;
+                    payAmountEl.textContent = money(cents);
+                    if (payBtn.classList.contains('is-visible')) {
+                        lockPayBtnWidth();
+                    }
+                };
+
+                const setPayBusy = (busy, statusText) => {
+                    if (!payBtn || !payAmountEl || !paySpinnerEl) return;
+                    if (busy) {
+                        lockPayBtnWidth();
+                        payBtn.disabled = true;
+                        payBtn.classList.add('pay-cta--busy');
+                        payBtn.setAttribute('aria-busy', 'true');
+                        payAmountEl.hidden = true;
+                        paySpinnerEl.hidden = false;
+                    } else {
+                        payBtn.disabled = false;
+                        payBtn.classList.remove('pay-cta--busy');
+                        payBtn.setAttribute('aria-busy', 'false');
+                        payAmountEl.hidden = false;
+                        paySpinnerEl.hidden = true;
+                        payAmountEl.textContent = money(liveCents());
+                        lockPayBtnWidth();
+                    }
+                    if (payStatusEl) {
+                        payStatusEl.textContent = statusText || '';
+                    }
+                };
+
                 const labelPay = () => {
                     if (payBtn) {
                         payBtn.classList.add('is-visible');
-                        payBtn.disabled = false;
-                        payBtn.textContent = 'Pay';
+                        setPayBusy(false);
                         syncPayCtaSticky();
                     }
                 };
@@ -807,9 +894,12 @@
                     if (expressMountEl) expressMountEl.innerHTML = '';
                     mountEl.innerHTML = '';
                     showError('');
-                    if (payBtn) {
-                        payBtn.disabled = true;
-                        payBtn.textContent = 'Loading payment…';
+                    if (payBtn && payAmountEl) {
+                        payBtn.classList.add('is-visible');
+                        if (!payAmountEl.textContent) {
+                            payAmountEl.textContent = money(liveCents());
+                        }
+                        setPayBusy(true, 'Loading payment');
                     }
                     const res = await fetch('/api/invoices/' + invoiceHash + '/payment-intent', {
                         method: 'POST',
@@ -896,8 +986,7 @@
                     }
                     showError('');
                     if (payBtn) {
-                        payBtn.disabled = true;
-                        payBtn.textContent = 'Processing…';
+                        setPayBusy(true, 'Processing payment');
                     }
                     const { error } = await stripe.confirmPayment({
                         elements,

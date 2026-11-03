@@ -200,6 +200,12 @@ Route::prefix('/v1')->group(function () {
             'config_db_database' => config('database.connections.mysql.database'),
             'env_db_host' => env('DB_HOST'),
             'env_db_port' => env('DB_PORT'),
+            'apple_pay_domain' => [
+                'public_file' => is_readable(public_path('.well-known/apple-developer-merchantid-domain-association')),
+                'storage_file' => is_readable(storage_path('app/stripe/apple-developer-merchantid-domain-association')),
+                'env_configured' => is_string(config('services.stripe.apple_pay_domain_association'))
+                    && config('services.stripe.apple_pay_domain_association') !== '',
+            ],
         ];
 
         try {
